@@ -1,0 +1,25 @@
+{
+  "sandbox": {
+    "enabled": true,
+    "allowUnsandboxedCommands": false,
+    "filesystem": {
+      "denyWrite": ["./research/lessons.md", "./research/profile.md", "./CLAUDE.md"]
+    },
+    "network": {
+      "allowedDomains": [
+        "arxiv.org",
+        "export.arxiv.org",
+        "api.semanticscholar.org"
+      ],
+      "deniedDomains": [
+        "github.com",
+        "api.github.com",
+        "*.github.com",
+        "huggingface.co",
+        "*.huggingface.co",
+        "hf.co",
+        "*.hf.co"
+      ]
+    }
+  }
+}

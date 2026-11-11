@@ -1,0 +1,36 @@
+# Development configuration only. The plugin has no runtime dependencies.
+
+[tool.ruff]
+line-length = 120
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "UP", "I", "SIM", "C90"]
+ignore = ["SIM117"]  # nested `with` blocks read more clearly in the tests
+
+[tool.ruff.lint.mccabe]
+# Cyclomatic complexity. Cognitive complexity is checked by complexipy, with a limit of 10.
+max-complexity = 6
+
+[tool.ruff.lint.per-file-ignores]
+"skills/arxiv/scripts/test_arxiv.py" = ["E501"]  # a sample HTML page kept on one line
+
+[tool.ruff.lint.isort]
+known-first-party = ["graph", "recap", "s2", "arxiv", "init"]
+
+[tool.mypy]
+python_version = "3.10"  # the oldest mypy checks; the scripts still run on 3.9
+check_untyped_defs = true
+warn_unused_ignores = true
+ignore_missing_imports = true
+mypy_path = "skills/graph/scripts"
+
+[tool.coverage.run]
+branch = true
+
+[tool.coverage.report]
+fail_under = 100
+show_missing = true
+# The lock helpers have a Windows and a POSIX version. CI measures coverage on Linux, so the Windows
+# version is left out there. Run the tests on Windows too, which CI does, to exercise it.
+exclude_also = ['if sys\.platform == "win32":']

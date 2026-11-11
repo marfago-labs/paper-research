@@ -1,0 +1,13 @@
+#!/bin/sh
+# Stop a commit that adds a secret. Turn it on once per clone with:
+#   git config core.hooksPath tools/hooks
+# Skip it for one commit with: git commit --no-verify
+cd "$(git rev-parse --show-toplevel)" || exit 2
+for python in python3 python; do
+    # The check that it runs skips the Microsoft Store placeholder for python3 on Windows.
+    if "$python" -c "" 2>/dev/null; then
+        exec "$python" tools/gitleaks.py --staged
+    fi
+done
+echo "pre-commit: no Python found, so the secret scan didn't run" >&2
+exit 1

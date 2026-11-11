@@ -1,0 +1,16 @@
+{
+  "name": "paper-research",
+  "owner": {
+    "name": "Marco Fago"
+  },
+  "metadata": {
+    "description": "The paper-research plugin for Claude Code: find, read, and discuss research papers, and keep what matters."
+  },
+  "plugins": [
+    {
+      "name": "paper-research",
+      "source": "./",
+      "description": "Find, read, and discuss research papers with Claude, and keep what matters."
+    }
+  ]
+}

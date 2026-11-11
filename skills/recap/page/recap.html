@@ -1,0 +1,450 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paper Research Recap</title>
+<!--
+  Fixed page from the paper-research package. It shows the research folder's data and never
+  needs editing: the recap skill copies it into research/recap/ and writes recap-data.js beside it.
+-->
+<style>
+  :root {
+    --bg: #fbfaf7; --fg: #1f2328; --muted: #656d76; --card: #ffffff; --line: #e3e1db;
+    --accent: #2f6fb3; --code: #f0eee8; --warn: #a8650f;
+    --g-bg: #f7f7f5; --g-panel: #ffffff; --g-text: #22252a; --g-muted: #62676f;
+    --g-line: #d9dbdf; --g-accent: #2f5fb3; --g-edge: #a7abb3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16181c; --fg: #e6e6e6; --muted: #9aa3ad; --card: #1e2126; --line: #2e333a;
+      --accent: #7fb2ea; --code: #2a2e35; --warn: #e2a95b;
+      --g-bg: #17191d; --g-panel: #20232a; --g-text: #e8e9ec; --g-muted: #a3a8b1;
+      --g-line: #383c45; --g-accent: #8db1ef; --g-edge: #666b76;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--bg); color: var(--fg); font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  [hidden] { display: none !important; }
+
+  /* Top bar shared by both views */
+  .topbar {
+    position: sticky; top: 0; z-index: 10; height: 48px; display: flex; align-items: center; gap: 6px;
+    padding: 0 16px; background: var(--card); border-bottom: 1px solid var(--line);
+  }
+  .topbar strong { margin-right: 12px; white-space: nowrap; }
+  .tabs { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; }
+  .tabs a { padding: 4px 12px; border-radius: 999px; color: var(--fg); white-space: nowrap; }
+  .tabs a:hover { text-decoration: none; background: var(--code); }
+  .tabs a.active { background: var(--code); color: var(--accent); font-weight: 600; }
+  .tabs .n { color: var(--muted); font-weight: 400; font-size: .85em; }
+  .topbar .generated { margin-left: auto; padding-left: 12px; color: var(--muted); font-size: .8rem; white-space: nowrap; }
+
+  /* Recap view */
+  .recap { max-width: 900px; margin: 0 auto; padding: 20px 16px 64px; }
+  .recap nav { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+  .recap nav a { padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-top: 8px; }
+  .stat:hover { border-color: var(--accent); text-decoration: none; }
+  a.stat { color: inherit; }
+  .stat { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+  .stat b { display: block; font-size: 1.4rem; }
+  .stat span { color: var(--muted); font-size: .85rem; }
+  .recap section { margin-top: 32px; scroll-margin-top: 60px; }
+  .recap h2 { font-size: 1.2rem; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+  .recap h2 .count { color: var(--muted); font-weight: 400; }
+  .recap h3 { font-size: 1rem; margin: 0 0 4px; }
+  .recap h3.group { margin: 20px 0 8px; text-transform: capitalize; color: var(--muted); }
+  .recap article {
+    background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+    padding: 12px 14px; margin-bottom: 10px; scroll-margin-top: 60px;
+  }
+  .recap article:target { outline: 2px solid var(--accent); }
+  .recap .meta { color: var(--muted); font-size: .85rem; margin: 0 0 6px; }
+  .recap article p { margin: 0; }
+  .recap code { background: var(--code); padding: 1px 4px; border-radius: 4px; font-size: .88em; }
+  .recap details { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; margin-bottom: 8px; }
+  .recap summary { cursor: pointer; }
+  .recap ul { padding-left: 20px; margin: 8px 0 0; }
+  .recap li { margin: 4px 0; }
+  .recap ul.linked { list-style: none; padding: 0; }
+  .tag { display: inline-block; font-size: .75rem; padding: 0 6px; border-radius: 4px; background: var(--code); color: var(--muted); font-weight: 400; }
+  .recap dl { margin: 8px 0 0; display: grid; grid-template-columns: 110px 1fr; gap: 4px 12px; }
+  .recap dt { color: var(--muted); }
+  .recap dd { margin: 0; }
+  .empty { color: var(--muted); }
+  .tag.warn { color: var(--warn); }
+  .gaps { margin-top: 20px; background: var(--card); border: 1px solid var(--line); border-left: 3px solid var(--warn); border-radius: 8px; padding: 10px 14px; }
+  .gaps h3 { margin: 0; }
+  .gaps .meta { margin: 8px 0 0; }
+  .warning { color: var(--warn); }
+  @media (max-width: 600px) {
+    .recap dl { grid-template-columns: 1fr; }
+    .recap dt { margin-top: 6px; }
+    .topbar .generated, .topbar strong { display: none; }
+    .topbar { padding: 0 8px; }
+  }
+
+  /* Graph view */
+  #graph-view {
+    display: flex; flex-direction: column; height: calc(100vh - 48px); background: var(--g-bg); color: var(--g-text);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  #graph-view .bar {
+    display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center;
+    padding: 10px 16px; background: var(--g-panel); border-bottom: 1px solid var(--g-line);
+  }
+  #counts { color: var(--g-muted); }
+  #graph-view .search-box { position: relative; }
+  #graph-view input[type=search] {
+    width: 240px; max-width: 100%; padding: 5px 8px; font: inherit; color: var(--g-text);
+    background: var(--g-bg); border: 1px solid var(--g-line); border-radius: 4px;
+  }
+  #results {
+    position: absolute; z-index: 5; top: 100%; left: 0; width: 320px; max-height: 320px;
+    overflow: auto; margin: 2px 0 0; padding: 0; list-style: none;
+    background: var(--g-panel); border: 1px solid var(--g-line); border-radius: 4px;
+  }
+  #results:empty { display: none; }
+  #graph-view select { padding: 4px; font: inherit; color: var(--g-text); background: var(--g-bg); border: 1px solid var(--g-line); border-radius: 4px; }
+  #filters { display: flex; flex-wrap: wrap; gap: 2px 10px; }
+  #filters label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+  #graph-view .swatch { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  #graph-view .body { flex: 1; display: flex; min-height: 0; }
+  #cy { flex: 1; min-width: 0; }
+  #details { width: 340px; overflow: auto; padding: 14px 16px; background: var(--g-panel); border-left: 1px solid var(--g-line); }
+  #details h2 { font-size: 16px; margin: 0 0 2px; overflow-wrap: anywhere; }
+  #details h3 { font-size: 12px; margin: 16px 0 6px; color: var(--g-muted); text-transform: uppercase; letter-spacing: .04em; }
+  #graph-view .meta { color: var(--g-muted); overflow-wrap: anywhere; }
+  #graph-view a { color: var(--g-accent); overflow-wrap: anywhere; }
+  #graph-view button.link {
+    display: block; width: 100%; padding: 6px 8px; text-align: left; font: inherit; color: var(--g-text);
+    background: none; border: 0; border-radius: 4px; cursor: pointer;
+  }
+  #graph-view button.link:hover, #graph-view button.link:focus-visible { background: var(--g-bg); }
+  #graph-view .connection { border-top: 1px solid var(--g-line); }
+  #graph-view .relation { color: var(--g-muted); font-size: 12px; }
+  #graph-view .evidence { display: block; color: var(--g-muted); font-size: 12px; overflow-wrap: anywhere; }
+  #graph-view .inferred { color: var(--warn); }
+  @media (max-width: 720px) {
+    #graph-view { height: auto; }
+    #graph-view .body { flex-direction: column; }
+    #cy { min-height: 55vh; }
+    #details { width: auto; border-left: 0; border-top: 1px solid var(--g-line); }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <strong>Paper research</strong>
+  <nav class="tabs" aria-label="Sections">
+    <a href="#activity" data-tab="activity">Activity</a>
+    <a href="#papers" data-tab="papers">Papers <span class="n" id="n-papers"></span></a>
+    <a href="#insights" data-tab="insights">Insights <span class="n" id="n-insights"></span></a>
+    <a href="#pins" data-tab="pins">Pins <span class="n" id="n-pins"></span></a>
+    <a href="#graph" data-tab="graph">Graph <span class="n" id="n-graph"></span></a>
+  </nav>
+  <span class="generated" id="generated"></span>
+</div>
+
+<div id="recap-views"></div>
+
+<div id="graph-view" data-view="graph" hidden>
+  <div class="bar">
+    <span id="counts"></span>
+    <div class="search-box">
+      <input id="search" type="search" placeholder="Search names and aliases" aria-label="Search entities" autocomplete="off">
+      <ul id="results"></ul>
+    </div>
+    <label>Show
+      <select id="focus" aria-label="How much of the graph to show">
+        <option value="0">everything</option>
+        <option value="1">1 step from selection</option>
+        <option value="2">2 steps from selection</option>
+      </select>
+    </label>
+    <div id="filters"></div>
+  </div>
+  <div class="body">
+    <div id="cy" role="img" aria-label="Graph of entities and their connections"></div>
+    <div id="details"></div>
+  </div>
+</div>
+
+<script src="cytoscape-3.30.4.min.js"></script>
+<script src="recap-lib.js"></script>
+<script src="recap-data.js"></script>
+<script>
+// Draws the knowledge graph. Called the first time the graph view is shown,
+// because a hidden container has no size to lay out in.
+function initGraph(GRAPH) {
+  const COLOURS = {
+    paper: "#2f5fb3", author: "#8a8f98", concept: "#8b4fb8", method: "#c2571a",
+    model: "#b8326e", dataset: "#1f8a70", tool: "#a8820f", organisation: "#4d6470",
+    insight: "#c23b3b"
+  };
+  const css = getComputedStyle(document.getElementById("graph-view"));
+  const byId = new Map(GRAPH.entities.map(entity => [entity.id, entity]));
+  const types = [...new Set(GRAPH.entities.map(entity => entity.type))].sort();
+  const hiddenTypes = new Set();
+  let selected = null;
+
+  const cy = cytoscape({
+    container: document.getElementById("cy"),
+    elements: [
+      ...GRAPH.entities.map(entity => ({
+        data: { id: entity.id, label: entity.aliases && entity.aliases[0] && entity.type === "paper" && !entity.aliases[0].startsWith("ARXIV:") ? entity.aliases[0] : entity.name, type: entity.type }
+      })),
+      ...GRAPH.relations.map((relation, index) => ({
+        data: { id: "r" + index, source: relation.from, target: relation.to, rel: relation.rel }
+      }))
+    ],
+    minZoom: 0.1,
+    maxZoom: 3,
+    style: [
+      { selector: "node", style: {
+        "background-color": node => COLOURS[node.data("type")] || "#888",
+        "label": "data(label)", "color": css.getPropertyValue("--g-text").trim(),
+        "font-size": 10, "width": 18, "height": 18, "text-valign": "bottom", "text-margin-y": 3,
+        "text-wrap": "wrap", "text-max-width": 130
+      }},
+      { selector: "edge", style: {
+        "width": 1, "line-color": css.getPropertyValue("--g-edge").trim(),
+        "target-arrow-color": css.getPropertyValue("--g-edge").trim(),
+        "target-arrow-shape": "triangle", "arrow-scale": 0.7, "curve-style": "bezier"
+      }},
+      { selector: "node.selected", style: {
+        "width": 28, "height": 28, "border-width": 3,
+        "border-color": css.getPropertyValue("--g-accent").trim(), "font-weight": "bold"
+      }},
+      { selector: "edge.active", style: {
+        "width": 2, "line-color": css.getPropertyValue("--g-accent").trim(),
+        "target-arrow-color": css.getPropertyValue("--g-accent").trim(),
+        "label": "data(rel)", "font-size": 9, "color": css.getPropertyValue("--g-muted").trim(),
+        "text-rotation": "autorotate", "text-background-color": css.getPropertyValue("--g-bg").trim(),
+        "text-background-opacity": 0.85, "text-background-padding": 2
+      }},
+      { selector: ".hidden", style: { "display": "none" } }
+    ]
+  });
+
+  function element(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+
+  function runLayout() {
+    const visible = cy.elements().not(".hidden");
+    const capZoom = () => {
+      if (cy.zoom() > 1.2) {
+        cy.zoom(1.2);
+        cy.center(visible);
+      }
+    };
+    const focused = selected && Number(document.getElementById("focus").value) > 0;
+    if (focused) {
+      const centre = cy.getElementById(selected);
+      const inner = centre.closedNeighborhood().nodes();
+      visible.layout({
+        name: "concentric", animate: false, padding: 40, fit: true, avoidOverlap: true, minNodeSpacing: 70,
+        concentric: node => node.same(centre) ? 3 : inner.has(node) ? 2 : 1,
+        levelWidth: () => 1, stop: capZoom
+      }).run();
+    } else {
+      visible.layout({
+        name: "cose", animate: false, padding: 30, fit: true, randomize: true, numIter: 2500,
+        nodeRepulsion: () => 600000, nodeOverlap: 40, idealEdgeLength: () => 110, edgeElasticity: () => 60,
+        gravity: 0.2, stop: capZoom
+      }).run();
+    }
+  }
+
+  function refresh(relayout) {
+    const depth = Number(document.getElementById("focus").value);
+    let nodes = cy.nodes().filter(node => !hiddenTypes.has(node.data("type")));
+    if (selected && depth > 0) {
+      let area = cy.getElementById(selected);
+      for (let step = 0; step < depth; step++) area = area.closedNeighborhood().nodes();
+      nodes = nodes.intersection(area);
+    }
+    if (selected) nodes = nodes.union(cy.getElementById(selected));
+    cy.elements().addClass("hidden");
+    nodes.removeClass("hidden");
+    nodes.edgesWith(nodes).removeClass("hidden");
+    cy.nodes().removeClass("selected");
+    cy.edges().removeClass("active");
+    if (selected) {
+      const node = cy.getElementById(selected);
+      node.addClass("selected");
+      node.connectedEdges().addClass("active");
+    }
+    if (relayout) runLayout();
+  }
+
+  function select(id) {
+    selected = id;
+    document.getElementById("results").textContent = "";
+    document.getElementById("search").value = "";
+    refresh(Number(document.getElementById("focus").value) > 0);
+    renderDetails();
+    if (Number(document.getElementById("focus").value) === 0) {
+      cy.animate({ center: { eles: cy.getElementById(id) }, duration: 150 });
+    }
+  }
+
+  function connection(relation, otherId, arrow) {
+    const other = byId.get(otherId);
+    const item = element("div", "connection");
+    const button = element("button", "link");
+    button.type = "button";
+    button.append(
+      element("span", "relation", arrow + " " + relation.rel + " "),
+      element("span", "", other.name),
+      element("span", "evidence" + (relation.status === "inferred" ? " inferred" : ""), relation.source + " · " + relation.status)
+    );
+    button.addEventListener("click", () => select(otherId));
+    item.append(button);
+    return item;
+  }
+
+  function renderDetails() {
+    const panel = document.getElementById("details");
+    panel.textContent = "";
+    if (!selected) {
+      panel.append(
+        element("h2", "", "Select an entity"),
+        element("p", "meta", "Click an entity or search for one to see its details, sources, and connections. Set Show to 1 or 2 steps to focus on what's around it.")
+      );
+      return;
+    }
+    const entity = byId.get(selected);
+    panel.append(element("h2", "", entity.name), element("div", "meta", entity.type + " · " + entity.id));
+    if (entity.aliases && entity.aliases.length) panel.append(element("div", "meta", "Also: " + entity.aliases.join(", ")));
+    if (entity.note) panel.append(element("p", "", entity.note));
+    if (entity.url && /^https?:\/\//.test(entity.url)) {
+      const link = element("a", "", entity.url);
+      link.href = entity.url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      panel.append(link);
+    }
+    const outgoing = GRAPH.relations.filter(relation => relation.from === selected);
+    const incoming = GRAPH.relations.filter(relation => relation.to === selected);
+    panel.append(element("h3", "", "Connections (" + (outgoing.length + incoming.length) + ")"));
+    outgoing.forEach(relation => panel.append(connection(relation, relation.to, "→")));
+    incoming.forEach(relation => panel.append(connection(relation, relation.from, "←")));
+  }
+
+  function normalise(text) {
+    return String(text).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+  }
+
+  function renderResults() {
+    const list = document.getElementById("results");
+    list.textContent = "";
+    const query = normalise(document.getElementById("search").value);
+    if (!query) return;
+    const matches = GRAPH.entities.filter(entity =>
+      [entity.name, entity.id, ...(entity.aliases || [])].some(value => normalise(value).includes(query))
+    ).slice(0, 20);
+    if (!matches.length) list.append(element("li", "meta", "No matches"));
+    matches.forEach(entity => {
+      const item = element("li");
+      const button = element("button", "link");
+      button.type = "button";
+      button.append(element("span", "", entity.name), element("span", "evidence", entity.type));
+      button.addEventListener("click", () => select(entity.id));
+      item.append(button);
+      list.append(item);
+    });
+  }
+
+  function renderFilters() {
+    const box = document.getElementById("filters");
+    types.forEach(type => {
+      const label = element("label");
+      const input = element("input");
+      input.type = "checkbox";
+      input.checked = true;
+      input.addEventListener("change", () => {
+        if (input.checked) hiddenTypes.delete(type); else hiddenTypes.add(type);
+        refresh(true);
+      });
+      const swatch = element("span", "swatch");
+      swatch.style.background = COLOURS[type] || "#888";
+      label.append(input, swatch, document.createTextNode(type));
+      box.append(label);
+    });
+  }
+
+  cy.on("tap", "node", event => select(event.target.id()));
+  document.getElementById("search").addEventListener("input", renderResults);
+  document.getElementById("focus").addEventListener("change", () => refresh(true));
+  document.getElementById("counts").textContent = GRAPH.entities.length + " entities · " + GRAPH.relations.length + " connections";
+
+  renderFilters();
+  renderDetails();
+  refresh(true);
+  return cy;
+}
+
+// Recap view, built by recap-lib.js.
+const DATA = window.RECAP_DATA;
+const { esc, hashName, buildRecap } = window.RecapLib;
+
+function renderRecap() {
+  const views = document.getElementById("recap-views");
+  if (!DATA) {
+    views.innerHTML = '<div class="recap view" data-view="activity" id="activity"><p class="warning">No data found. Ask Claude to refresh the recap, then reload this page.</p></div>';
+    return;
+  }
+  const recap = buildRecap(DATA);
+  document.getElementById("generated").textContent = "Data from " + DATA.generated;
+  for (const [name, count] of Object.entries(recap.counts)) {
+    document.getElementById("n-" + name).textContent = count;
+  }
+  views.innerHTML = recap.html;
+}
+
+// One view at a time. The address picks it: a view's own name, or the id of
+// something inside a view, such as a paper or an insight. Anything else shows Activity.
+let cy = null;
+
+function showGraph() {
+  if (cy) {
+    cy.resize();
+    return;
+  }
+  const details = document.getElementById("details");
+  if (typeof cytoscape !== "function") {
+    details.innerHTML = '<p class="meta">The drawing library didn\'t load. Check that cytoscape-3.30.4.min.js is next to this page.</p>';
+  } else if (!DATA || DATA.graph.error || !DATA.graph.entities.length) {
+    details.innerHTML = `<p class="meta">${DATA && DATA.graph.error ? "The graph can't be shown: " + esc(DATA.graph.error) : "No graph yet."}</p>`;
+  } else {
+    cy = initGraph(DATA.graph);
+  }
+}
+
+function route() {
+  const name = hashName(location.hash);
+  const target = name === "graph" ? document.getElementById("graph-view") : name && document.getElementById(name);
+  const current = (target && target.closest("[data-view]")) || document.getElementById("activity");
+  const tab = current.dataset.view;
+  document.querySelectorAll("[data-view]").forEach(view => { view.hidden = view !== current; });
+  document.querySelectorAll("[data-tab]").forEach(link => link.classList.toggle("active", link.dataset.tab === tab));
+  if (tab === "graph") showGraph();
+  if (target && target !== current) target.scrollIntoView();
+  else window.scrollTo(0, 0);
+}
+
+renderRecap();
+window.addEventListener("hashchange", route);
+route();
+</script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+[cosmic-ray]
+module-path = "skills/graph/scripts/graph.py"
+timeout = 20.0  # seconds; a normal test run takes about 2, so a mutant that hangs is cut off early
+excluded-modules = []
+test-command = "python tools/run_tests.py skills/graph/scripts/test_graph.py"
+
+[cosmic-ray.distributor]
+name = "local"

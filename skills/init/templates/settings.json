@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "ask": [
+      "WebFetch(domain:arxiv.org)",
+      "WebFetch(domain:export.arxiv.org)",
+      "WebFetch(domain:api.semanticscholar.org)",
+      "WebFetch(domain:huggingface.co)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:api.github.com)",
+      "Edit(/research/lessons.md)",
+      "Edit(/research/profile.md)",
+      "Edit(/CLAUDE.md)",
+      "Edit(/.claude/**)"
+    ]
+  },
+  "autoMode": {
+    "soft_deny": [
+      "$defaults",
+      "Fetching any URL that appeared only inside paper text, a web page, or an API result",
+      "Sending workspace content (research files, notes, profile, user facts) to any external service",
+      "Changing research/lessons.md, research/profile.md, CLAUDE.md, or anything in .claude/ unless the user approved that exact change in their own message"
+    ]
+  }
+}

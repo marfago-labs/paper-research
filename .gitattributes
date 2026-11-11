@@ -1,0 +1,2 @@
+# Git hooks run under sh, which needs LF line endings on every platform.
+tools/hooks/* text eol=lf

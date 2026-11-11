@@ -1,0 +1,18 @@
+{
+  "name": "paper-research-dev",
+  "private": true,
+  "description": "Development tooling only, kept out of the plugin root so installing the plugin never installs it. The plugin has no runtime dependencies.",
+  "scripts": {
+    "lint": "cd ../.. && eslint --config tools/js/eslint.config.js skills/recap/page/recap-lib.js skills/recap/page/recap-lib.test.js skills/recap/page/recap-page.test.js tools/js/eslint.config.js",
+    "format": "cd ../.. && prettier --config tools/js/.prettierrc.json --write skills/recap/page/recap-lib.js skills/recap/page/recap-lib.test.js skills/recap/page/recap-page.test.js tools/js/eslint.config.js",
+    "format:check": "cd ../.. && prettier --config tools/js/.prettierrc.json --check skills/recap/page/recap-lib.js skills/recap/page/recap-lib.test.js skills/recap/page/recap-page.test.js tools/js/eslint.config.js",
+    "test": "cd ../.. && node --test skills/recap/page/recap-lib.test.js skills/recap/page/recap-page.test.js",
+    "coverage": "cd ../.. && node --test --experimental-test-coverage --test-coverage-include=skills/recap/page/recap-lib.js --test-coverage-lines=100 --test-coverage-branches=100 --test-coverage-functions=100 skills/recap/page/recap-lib.test.js skills/recap/page/recap-page.test.js"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.14.0",
+    "eslint-plugin-sonarjs": "4.2.2",
+    "prettier": "3.9.10"
+  }
+}

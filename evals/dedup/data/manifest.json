@@ -1,0 +1,367 @@
+{
+  "built": "2026-11-10",
+  "seed": 20261108,
+  "scale": 1.0,
+  "pairs": {
+    "dev": 1908,
+    "test": 1910
+  },
+  "pairs by stratum and type": {
+    "dev": {
+      "alias collision": {
+        "author": 4
+      },
+      "dissimilar name": {
+        "author": 21,
+        "dataset": 111,
+        "method": 111,
+        "model": 3,
+        "tool": 54
+      },
+      "known alias": {
+        "author": 45,
+        "dataset": 53,
+        "method": 45,
+        "model": 15,
+        "tool": 42
+      },
+      "look-alike": {
+        "author": 114,
+        "dataset": 129,
+        "method": 115,
+        "model": 116,
+        "tool": 26
+      },
+      "messy: case": {
+        "author": 5,
+        "dataset": 4,
+        "method": 3,
+        "model": 6,
+        "tool": 2
+      },
+      "messy: citation": {
+        "author": 5,
+        "dataset": 6,
+        "method": 2,
+        "model": 4,
+        "tool": 3
+      },
+      "messy: dash": {
+        "author": 2,
+        "dataset": 5,
+        "method": 3,
+        "model": 7,
+        "tool": 3
+      },
+      "messy: decomposed": {
+        "author": 17,
+        "dataset": 1,
+        "model": 1,
+        "tool": 1
+      },
+      "messy: footnote": {
+        "author": 4,
+        "dataset": 6,
+        "method": 2,
+        "model": 4,
+        "tool": 4
+      },
+      "messy: invisible": {
+        "author": 5,
+        "dataset": 3,
+        "method": 3,
+        "model": 5,
+        "tool": 4
+      },
+      "messy: ligature": {
+        "author": 4,
+        "dataset": 5,
+        "method": 2,
+        "model": 4,
+        "tool": 5
+      },
+      "messy: line-break": {
+        "author": 4,
+        "dataset": 5,
+        "method": 2,
+        "model": 6,
+        "tool": 3
+      },
+      "messy: parenthetical": {
+        "author": 2,
+        "dataset": 4,
+        "method": 4,
+        "model": 4,
+        "tool": 6
+      },
+      "messy: possessive": {
+        "author": 5,
+        "dataset": 5,
+        "method": 4,
+        "model": 3,
+        "tool": 3
+      },
+      "messy: punctuation": {
+        "author": 5,
+        "dataset": 3,
+        "method": 2,
+        "model": 5,
+        "tool": 5
+      },
+      "messy: quotes": {
+        "author": 3,
+        "dataset": 6,
+        "method": 2,
+        "model": 4,
+        "tool": 4
+      },
+      "same name": {
+        "author": 165
+      },
+      "similar name": {
+        "author": 188,
+        "dataset": 189,
+        "method": 35,
+        "model": 13,
+        "tool": 75
+      }
+    },
+    "test": {
+      "alias collision": {
+        "author": 4,
+        "tool": 1
+      },
+      "dissimilar name": {
+        "author": 30,
+        "dataset": 98,
+        "method": 98,
+        "model": 10,
+        "tool": 64
+      },
+      "known alias": {
+        "author": 47,
+        "dataset": 39,
+        "method": 47,
+        "model": 18,
+        "tool": 49
+      },
+      "look-alike": {
+        "author": 126,
+        "dataset": 111,
+        "method": 95,
+        "model": 124,
+        "tool": 44
+      },
+      "messy: case": {
+        "author": 3,
+        "dataset": 4,
+        "method": 5,
+        "model": 2,
+        "tool": 6
+      },
+      "messy: citation": {
+        "author": 3,
+        "dataset": 2,
+        "method": 6,
+        "model": 4,
+        "tool": 5
+      },
+      "messy: dash": {
+        "author": 6,
+        "dataset": 3,
+        "method": 5,
+        "model": 1,
+        "tool": 5
+      },
+      "messy: decomposed": {
+        "author": 14,
+        "method": 3,
+        "tool": 3
+      },
+      "messy: footnote": {
+        "author": 4,
+        "dataset": 2,
+        "method": 6,
+        "model": 4,
+        "tool": 4
+      },
+      "messy: invisible": {
+        "author": 3,
+        "dataset": 5,
+        "method": 5,
+        "model": 3,
+        "tool": 4
+      },
+      "messy: ligature": {
+        "author": 4,
+        "dataset": 3,
+        "method": 6,
+        "model": 4,
+        "tool": 3
+      },
+      "messy: line-break": {
+        "author": 4,
+        "dataset": 3,
+        "method": 6,
+        "model": 2,
+        "tool": 5
+      },
+      "messy: parenthetical": {
+        "author": 6,
+        "dataset": 4,
+        "method": 4,
+        "model": 4,
+        "tool": 2
+      },
+      "messy: possessive": {
+        "author": 3,
+        "dataset": 3,
+        "method": 4,
+        "model": 5,
+        "tool": 5
+      },
+      "messy: punctuation": {
+        "author": 3,
+        "dataset": 5,
+        "method": 6,
+        "model": 3,
+        "tool": 3
+      },
+      "messy: quotes": {
+        "author": 5,
+        "dataset": 2,
+        "method": 6,
+        "model": 4,
+        "tool": 4
+      },
+      "same name": {
+        "author": 163,
+        "tool": 1
+      },
+      "similar name": {
+        "author": 183,
+        "dataset": 182,
+        "method": 38,
+        "model": 12,
+        "tool": 85
+      }
+    }
+  },
+  "pool": {
+    "author": {
+      "dblp": 22789,
+      "several names": 0.038
+    },
+    "dataset": {
+      "pwc": 7072,
+      "several names": 0.316
+    },
+    "method": {
+      "pwc": 1342,
+      "several names": 0.351
+    },
+    "model": {
+      "hf": 2000,
+      "wikidata": 133,
+      "several names": 0.015
+    },
+    "tool": {
+      "wikidata": 921,
+      "several names": 0.275
+    }
+  },
+  "parameters": {
+    "targets per split": {
+      "similar name": 500,
+      "known alias": 200,
+      "dissimilar name": 300,
+      "look-alike": 500,
+      "same name": 300,
+      "alias collision": 300
+    },
+    "messy per change and split": 20,
+    "similar ratio": 0.6,
+    "distinct sources": [
+      "dblp",
+      "wikidata"
+    ],
+    "hub pages": 2,
+    "dblp slices": [
+      "17",
+      "27"
+    ]
+  },
+  "licences": {
+    "wikidata": "CC0 1.0 (https://creativecommons.org/publicdomain/zero/1.0/)",
+    "dblp": "CC0 1.0 (https://creativecommons.org/publicdomain/zero/1.0/), dblp computer science bibliography",
+    "hf": "Hugging Face Hub API metadata: repository ids only, no model content",
+    "pwc": "CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/), Papers with Code archive of 2025-07-28"
+  },
+  "queries": {
+    "authors": "PREFIX dblp: <https://dblp.org/rdf/schema#> PREFIX owl: <http://www.w3.org/2002/07/owl#>\nPREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>\nSELECT ?item ?label ?alias ?orcid WHERE {{ ?item rdf:type dblp:Person ; dblp:primaryCreatorName ?label .\n  FILTER NOT EXISTS {{ ?item rdf:type dblp:AmbiguousCreator }}\n  OPTIONAL {{ ?item dblp:creatorName ?alias }}\n  OPTIONAL {{ ?item owl:sameAs ?orcid . FILTER(STRSTARTS(STR(?orcid), \"https://orcid.org/\")) }}\n  FILTER(STRSTARTS(STR(?item), \"https://dblp.org/pid/{slice}/\")) }}",
+    "homonyms": "PREFIX dblp: <https://dblp.org/rdf/schema#> PREFIX owl: <http://www.w3.org/2002/07/owl#>\nPREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>\nSELECT ?item (SAMPLE(?namesake) AS ?other) WHERE {{\n  ?item rdf:type dblp:Person ; dblp:primaryCreatorName ?name . FILTER(STRSTARTS(STR(?item), \"https://dblp.org/pid/{slice}/\"))\n  FILTER NOT EXISTS {{ ?item rdf:type dblp:AmbiguousCreator }}\n  ?namesake rdf:type dblp:Person ; dblp:primaryCreatorName ?name . FILTER(?namesake != ?item)\n  FILTER NOT EXISTS {{ ?namesake rdf:type dblp:AmbiguousCreator }} }} GROUP BY ?item",
+    "items": "SELECT ?item ?label ?alias ?repo WHERE {{\n  ?item wdt:P31 ?class {extra} ; rdfs:label ?label . VALUES ?class {{ {classes} }} FILTER(LANG(?label) = \"en\")\n  OPTIONAL {{ ?item skos:altLabel ?alias . FILTER(LANG(?alias) = \"en\") }}\n  OPTIONAL {{ ?item wdt:P1324 ?repo }} }}",
+    "hub": "https://huggingface.co/api/models?sort=downloads&direction=-1&limit=1000"
+  },
+  "second names by the audit": {
+    "model": "typesafe/jev-1.14",
+    "removed when P(same thing) is at most": 0.2,
+    "by source and type": {
+      "dblp author": {
+        "removed": 0,
+        "unaudited": 0,
+        "kept": 998
+      },
+      "hf model": {
+        "removed": 0,
+        "unaudited": 0,
+        "kept": 0
+      },
+      "pwc dataset": {
+        "removed": 158,
+        "unaudited": 0,
+        "kept": 2233
+      },
+      "pwc method": {
+        "removed": 31,
+        "unaudited": 0,
+        "kept": 471
+      },
+      "wikidata model": {
+        "removed": 11,
+        "unaudited": 0,
+        "kept": 70
+      },
+      "wikidata tool": {
+        "removed": 51,
+        "unaudited": 0,
+        "kept": 356
+      }
+    },
+    "spent, by snapshot": {
+      "typesafe/jev-1.14-20261014": {
+        "calls": 3382,
+        "without tokens": 3381,
+        "input_tokens": 466,
+        "output_tokens": 46,
+        "cost": 0.067064,
+        "mean cost": 1.983e-05
+      }
+    }
+  },
+  "label check by hand": "done: hand-check.csv, scored by hand_check.py score; see the notebook, section 3",
+  "sources snapshot": {
+    "214adac545cf2acc.json": "c181274d7970d295",
+    "2b0a25c6b382e98f.json": "3c79045b5316159c",
+    "3c2e65c4ead0d609.json": "d1caa6cb3c0fc70a",
+    "5165973d0ca3978e.json": "c4696dded09eaae1",
+    "7445b5a3e5c21848.json": "ab2b09ee74a5d779",
+    "79dad2bda7f962b6.json": "20fcb9c7ab639ae0",
+    "9fd724361088dfbc.json": "95de805e5cec1808",
+    "f3a708b8a9116152.json": "f62964a22b92dd43",
+    "jul-28-datasets.json.gz": "6ef923aaf24ff62c",
+    "jul-28-methods.json.gz": "fc5a66d3274d8e39"
+  },
+  "reproducible": "from the snapshot: with the same cache and seed the builder gives the same pairs. The sources change, so without the cache it does not. The pairs are frozen",
+  "pairs file sha256": "8ff91030ae9fec12131612b8ec6a1fd4cf416ead13659b7840c74e320d8b7f7f"
+}

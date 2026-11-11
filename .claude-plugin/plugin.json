@@ -1,0 +1,8 @@
+{
+  "name": "paper-research",
+  "version": "0.1.0",
+  "description": "Find, read, and discuss research papers with Claude, and keep what matters: pins, insights, a knowledge graph, and a recap page. Standard-library Python, no MCP servers required.",
+  "author": { "name": "Marco Fago" },
+  "license": "MIT",
+  "keywords": ["research", "papers", "arxiv", "semantic-scholar", "knowledge-graph"]
+}

@@ -1,0 +1,202 @@
+﻿id,type,first_name,second_name,claude_verdict,your_verdict,notes
+1,dataset,CURIE,CURIE: Evaluating LLMs On Multitask Scientific Long Context Understanding and Reasoning,different,ok,Claude: not a name (paper title)
+2,dataset,ETTh1 (96),ETT (Electricity Transformer Temperature),different,ok,Claude: ETTh1 is one subset of ETT
+3,dataset,REDS,"REalistic and Diverse Scenes dataset
+realistic and dynamic scenes",same,ok,"Claude: a malformed name, two expansions joined by a line break"
+4,tool,SENTINEL,grooming detection,different,ok,Claude: not a name (a description)
+5,dataset,MUSE,MuSe-CaR,different,ok,
+6,tool,Newt Syrup,newt,unsure,ok,
+7,dataset,Dynamic OLAT Dataset,ShanghaiTech MARS Dynamic OLAT Dataset,same,ok,
+8,method,TABPFN,tabular data Prior-data Fitted Network,same,ok,
+9,method,Transformer,Compressive Transformer,different,ok,
+10,dataset,Visual Affordance Learning,Deep Learning for Symbolic Mathematics,different,ok,
+11,tool,Cognee,Cognee AI memory,same,ok,
+12,dataset,highD Dataset,The Highway Drone Dataset Naturalistic Trajectories of 110 500 Vehicles Recorded at German Highways,different,ok,Claude: not a name (paper title)
+13,dataset,VOICES,Voices Obscured In Complex Environmental Settings,same,ok,
+14,method,TD3,Twin Delayed Deep Deterministic,same,ok,
+15,method,KP,Kollen-Pollack Learning,same,ok,
+16,author,Ungku Azmi Iskandar Ungku Chulan,Ungku Chulan,same,ok,
+17,dataset,WMT 2018 News,WMT 2018 News Translation Task,same,ok,
+18,author,Sen Feng,Shaoji Feng,different,ok,
+19,dataset,NIR2RGB VCIP Challange Dataset,VCIP2020 Grand Challenge on the NIR image colorization dataset,same,ok,
+20,method,CBNet,Composite Backbone Network,same,ok,
+21,dataset,YCB-Slide,YCB-Slide: A tactile interaction dataset,different,ok,Claude: not a name (paper title)
+22,dataset,KOHTD,Kazakh Offline Handwritten Text Dataset,same,ok,
+23,method,Inception-v3,Inception-A,different,ok,"Claude: a block of Inception, not v3"
+24,dataset,LegalNERo,Romanian Named Entity Recognition in the Legal domain,same,ok,
+25,tool,Generate Your Projects,GYP,same,ok,
+26,dataset,TIME,\textsc{TimE}: A Multi-level Benchmark for Temporal Reasoning of LLMs in Real-World Scenario,different,ok,Claude: not a name (paper title)
+27,tool,pmaw,Pushshift Multithread API Wrapper,same,ok,
+28,dataset,CASIA V2,CASIA (OSN-transmitted - Weibo),different,ok,
+29,dataset,A2D,Actor-Action Dataset,same,ok,
+30,dataset,PASS,Pictures without humAns for Self-Supervision,same,ok,
+31,dataset,WHAMR!,WHAM! with synthetic reverberated sources,same,ok,
+32,dataset,CDCP,Cornell eRulemaking Corpus,same,ok,
+33,model,GPT-4.5,GPT-4.5 Preview,same,ok,
+34,author,Md. Atiqul Islam,M. N. Islam,different,ok,
+35,tool,Argüman,Arguman,same,ok,
+36,model,Claude Instant,Claude Instant 1.2,different,ok,Claude: a version
+37,dataset,SDF Shader Dataset,A Dataset and Explorer for 3D Signed Distance Functions,different,ok,Claude: not a name (paper title)
+38,method,ABCNet,Adaptive Bezier-Curve Network,same,ok,
+39,tool,APBS,Adaptive Poisson-Boltzmann Solver,same,ok,
+40,dataset,MAWPS,MAth Word ProblemS,same,ok,
+41,dataset,Moon Phases,moon phases and derived,unsure,ok,
+42,author,Guido Horst Bruck,Guido Bruck,same,ok,
+43,method,UNITER,UNiversal Image-TExt Representation Learning,same,ok,
+44,method,FLIP,Random Horizontal Flip,unsure,ok,
+45,tool,Daty,wikidaty,unsure,ok,
+46,dataset,SONICS,Synthetic Or Not - Identifying Counterfeit Songs,same,ok,
+47,dataset,MIPE,Improving Paratope and Epitope Prediction by Multi-Modal Contrastive Learning and Interaction Informativeness Estimation,different,ok,Claude: not a name (paper title)
+48,dataset,MOT15,Multiple Object Tracking 15,same,ok,
+49,model,table-transformer-structure-recognition,table-transformer-structure-recognition-v1.1-all,different,ok,Claude: a version
+50,model,Claude Mythos,Anthropic Claude Mythos,same,ok,
+51,author,Ali A. Alesheikh,Ali Asghar Alesheikh,same,ok,
+52,author,Gregory Shakhnarovich,Greg Shakhnarovich,same,ok,
+53,dataset,WikiANN,PAN-X,same,ok,
+54,dataset,CareCall,CareCall for Seniors,same,ok,
+55,author,Maria Luísa Morgado,Maria Luísa Ribeiro dos Santos Morgado,same,ok,
+56,dataset,AGAR,Annotated Germs for Automated Recognition,same,ok,
+57,tool,DeepFaceLab,DFL,same,ok,
+58,author,Víctor A. Villagrá,Víctor A. Villagrá González,same,ok,
+59,dataset,Crello,Crello dataset,same,ok,
+60,tool,OntoGPT,SPIRES,different,ok,Claude: SPIRES is a method inside OntoGPT
+61,dataset,Kvasir-VQA,A Text-Image Pair GI Tract Dataset,different,ok,Claude: not a name (a description)
+62,tool,gogdl,heroic-gogdl,same,ok,
+63,method,MoCo v3,MoCo v2,different,ok,
+64,dataset,I-RAVEN,Impartial-RAVEN,same,ok,
+65,dataset,IfAct,Identifying Human Actions Visible in Online Vlogs,different,ok,Claude: not a name (paper title)
+66,method,DTW,Dynamic Time Warping,same,ok,
+67,model,faster-whisper-small,mobilenetv4_conv_small.e2400_r224_in1k,different,ok,
+68,tool,root,BLUE,different,ok,
+69,dataset,DOLPHINS,Dataset for Collaborative Perception enabled Harmonious and Interconnected Self-driving,same,ok,
+70,dataset,HUME-VB,The Hume Vocal Bursts Dataset,same,ok,
+71,method,LDA,Linear Discriminant Analysis,same,ok,
+72,tool,Apache Ambari,Apache Beam,different,ok,
+73,method,Virtual Data Augmentation,Image Scale Augmentation,different,ok,
+74,tool,Ethereum,ETH Mainnet,different,ok,"Claude: the main network, a part of Ethereum"
+75,author,José Navarrete Cortés,John Cortes,unsure,ok,
+76,method,Lion,Evolved Sign Momentum,same,ok,
+77,method,GCA,Graph Contrastive learning with Adaptive augmentation,same,ok,
+78,method,Multiscale Dilated Convolution Block,Res2Net Block,different,ok,
+79,dataset,FM2,FoolMeTwice,same,ok,
+80,dataset,FoCus,Call for Customized Conversation: Customized Conversation Grounding Persona and Knowledge,different,ok,Claude: not a name (paper title)
+81,dataset,DroneVehicle,VisDrone-DroneVehicle,same,ok,
+82,author,A. P. Thakoor,Anilkumar P. Thakoor,same,ok,
+83,dataset,AM2iCo,Adversarial and Multilingual Meaning in Context,same,ok,
+84,dataset,ESC50,ESC: Dataset for Environmental Sound Classification,different,ok,Claude: not a name (paper title)
+85,dataset,WNUT 2020,WNUT-2020 Task 1 Overview: Extracting Entities and Relations from Wet Lab Protocols,different,ok,Claude: not a name (paper title)
+86,dataset,Open Radar Datasets,Open Radar Datasets: Outdoor Moving Object Dataset,different,ok,Claude: a sub-dataset
+87,dataset,ARAUS,Affective Responses to Augmented Urban Soundscapes,same,ok,
+88,tool,SFTPPlus,SFTPPlus MFT,same,ok,
+89,method,Patching,Activation Patching,same,ok,
+90,author,Nicole Schneider,Nicole R. Schneider,same,ok,
+91,author,Peter Rosina,Peter Christian Rosina,same,ok,
+92,author,Julián Fernández-Navajas,Julián Fernández,same,ok,
+93,dataset,Emilia Dataset,"An Extensive, Multilingual, and Diverse Speech Dataset for Large-Scale Speech Generation",different,ok,Claude: not a name (a description)
+94,dataset,BRACS,BReAst Carcinoma Subtyping,same,ok,
+95,dataset,BVI-LOWLIGHT,BVI-LOWLIGHT: FULLY REGISTERED DATASETS FOR LOW-LIGHT IMAGE AND VIDEO ENHANCEMENT,different,ok,Claude: not a name (paper title)
+96,author,Hansoo Kim,Hyun Sook Kim,different,ok,
+97,author,M. Faisal Amjad,Muhammad Faisal Amjad,same,ok,
+98,dataset,COCO-Noisy,Microsoft Common Objects in Context with 20% of Noisy Correspondence and 1K test data,different,ok,Claude: not a name (a description)
+99,dataset,RGBD1K,A Large-scale Dataset and Benchmark for RGB-D Object Tracking,different,ok,Claude: not a name (paper title)
+100,dataset,R2R,Room-to-Room,same,ok,
+101,method,SABL,Side-Aware Boundary Localization,same,ok,
+102,dataset,VGG-Face2,Vggface2: A dataset for recognising faces  across pose and age,different,ok,Claude: not a name (paper title)
+103,method,ZeRO-Infinity,ZeRO-Offload,different,ok,
+104,dataset,ONCE,One Million Scenes,same,ok,
+105,dataset,Violin,VIdeO-and-Language INference,same,ok,
+106,dataset,FEWS,"FEWS: Large-Scale, Low-Shot Word Sense Disambiguation with the Dictionary",different,ok,Claude: not a name (paper title)
+107,tool,Renardo,Foxdot,different,ok,Claude: a fork of FoxDot
+108,dataset,ViHOS,Hate Speech Spans Detection for Vietnamese,same,ok,
+109,dataset,ICDAR 2019,cTDaR,different,ok,Claude: one competition of ICDAR 2019
+110,method,SIRM,Skim and Intensive Reading Model,same,ok,
+111,method,DDPG,Deep Deterministic Policy Gradient,same,ok,
+112,dataset,TREC-10,TREC-10 Question Classification,same,ok,
+113,dataset,ROBUST-MIS,Robust Medical Instrument Segmentation Challenge 2019,same,ok,
+114,dataset,BGP,Border Gateway Protocol (BGP) Network,same,ok,
+115,author,Julie S. Fant,Julie Street Fant,same,ok,
+116,dataset,IBM-Rank-30k,IBM-ArgQ-Rank-30kArgs,same,ok,
+117,dataset,Taillard Instances,Taillard Instances for Job Shop Scheduling,same,ok,
+118,dataset,DroneSURF,DroneSURF: Benchmark Dataset for Drone-based Face Recognition,different,ok,Claude: not a name (paper title)
+119,dataset,BRUSH,Brown University Stylus Handwriting,same,ok,
+120,dataset,SV-Ident,Survey Variable Identification,same,ok,
+121,method,SPEED,SPEED: Separable Pyramidal Pooling EncodEr-Decoder for Real-Time Monocular Depth Estimation on Low-Resource Settings,different,ok,Claude: not a name (paper title)
+122,method,ECANet,efficient channel attention,same,ok,
+123,tool,CPython,Python,different,ok,Claude: an implementation vs the language
+124,dataset,PoPArt,Poses of People in Art: A Data Set for Human Pose Estimation in Digital Art History,different,ok,Claude: not a name (paper title)
+125,dataset,Zhou2016 MOABB,Motor Imagery dataset from Zhou et al 2016.,same,ok,
+126,dataset,IPM NEL,Derczynski IPM Named Entity Linking,same,ok,
+127,model,Gemini 2.0 Flash Experimental,gemini-2.0-flash-exp,same,ok,
+128,tool,fire (python package),fire,same,ok,
+129,dataset,Digits,Optical Recognition of Handwritten Digits,same,ok,
+130,author,Alisdair R. Fernie,Alisdair R. Sterling,different,ok,
+131,dataset,Sparrow,Sparrow-V0: A Reinforcement Learning Friendly Simulator for Mobile Robot,different,ok,Claude: not a name (paper title)
+132,dataset,CTC,COCO-Text Captioned,same,ok,
+133,tool,scikit-learn,scikits.learn,same,ok,
+134,dataset,InVar-100,Industrial Objects in Varied Contexts,same,ok,
+135,dataset,REFLACX,Reports and eye-tracking data for localization of abnormalities in chest x-rays,same,ok,
+136,dataset,SKU110K,SKU110K-R,different,ok,Claude: a rotated variant
+137,tool,mintUpdate,Update Manager,same,ok,
+138,method,NeuralRecon,NeuralRecon: Real-Time Coherent 3D Reconstruction from Monocular Video,different,ok,Claude: not a name (paper title)
+139,tool,BorgBackup,Borg,same,ok,
+140,author,S. Joe Qin,Si-Zhao Joe Qin,same,ok,
+141,dataset,WebSRC,WebSRC: A Dataset for Web-Based Structural Reading Comprehension,different,ok,Claude: not a name (paper title)
+142,dataset,OFDIW,OnFocus Detection In the Wild,same,ok,
+143,dataset,CHOCOLATE,Captions Have Often ChOsen Lies About The Evidence,same,ok,
+144,dataset,NILoc,Neural Inertial Localizatio,same,ok,
+145,tool,scikit-image,scikit-learn,different,ok,
+146,method,Cascade Corner Pooling,Cascade R-CNN,different,ok,
+147,dataset,GTSinger,GTSinger: A Global Multi-Technique Singing Corpus with Realistic Music Scores for All Singing Tasks,different,ok,Claude: not a name (paper title)
+148,dataset,Arxiv GR-QC,General Relativity and Quantum Cosmology collaboration network,same,ok,
+149,dataset,AFLW,Annotated Facial Landmarks in the Wild,same,ok,
+150,method,CARLA,CARLA: An Open Urban Driving Simulator,different,ok,Claude: not a name (paper title)
+151,dataset,PPG  Dalia,PPG Field Study Dataset,unsure,ok,
+152,tool,Evals,OpenAI Evals,same,ok,
+153,method,Activation Regularization,R1 Regularization,different,ok,
+154,dataset,WNLaMPro,WordNet Language Model Probing,same,ok,
+155,method,DFA,Direct Feedback Alignment,same,ok,
+156,tool,GNU LIMS,GNU Health/Laboratory Management,same,ok,
+157,dataset,FFHQ,Flickr-Faces-HQ,same,ok,
+158,tool,Uncomplicated Firewall,ufw,same,ok,
+159,dataset,BN-HTRd,BN-HTRd: A Benchmark Dataset for Document Level Offline Bangla Handwritten Text Recognition (HTR),different,ok,Claude: not a name (paper title)
+160,method,HGS,Hunger Games Search,same,ok,
+161,tool,Orange,Oz,different,ok,
+162,dataset,CIFAR-10N,Real-World Human Annotations,different,ok,Claude: not a name (a description)
+163,author,Auzuir Ripardo de Alexandria,Auzuir R. de Alexandria,same,ok,
+164,author,Aleardo Manacero,Aleardo Manacero Jr.,same,ok,
+165,dataset,xMIND,A Multilingual Dataset for Cross-lingual News Recommendation,different,ok,Claude: not a name (a description)
+166,dataset,IoT Traffic Traces,IoT Traffic Traces - Data Collected for IEEE TMC 2018,same,ok,
+167,author,Sanghyuck Park,Sungchun Park,different,ok,
+168,dataset,MetaLWOz,Meta-Learning Wizard-of-Oz,same,ok,
+169,dataset,NERDS 360,"NeRF for Reconstruction, Decomposition and Scene Synthesis of 360° outdoor scenes",different,ok,Claude: not a name (paper title)
+170,dataset,Tasty Videos,SAMM Long Videos,different,ok,
+171,method,MFF,Multimodal Fuzzy Fusion Framework,same,ok,
+172,dataset,Jam-ALT,JamALT: A Formatting-Aware Lyrics Transcription Benchmark,different,ok,Claude: not a name (paper title)
+173,dataset,UESTC-MMEA-CL,A multi-modal egocentric activity dataset for continual learning,different,ok,Claude: not a name (a description)
+174,method,Step-DPO,Step-wise Direct Preference Optimization,same,ok,
+175,dataset,LFPW,Labeled Face Parts in the Wild,same,ok,
+176,method,GBO,Gradient-based optimization,same,ok,
+177,tool,Home Assistant,Hass.io,different,ok,"Claude: Hass.io became Home Assistant OS, a part"
+178,dataset,FOR-instance,FOR-instance: a UAV laser scanning benchmark dataset for semantic and instance segmentation of individual trees,different,ok,Claude: not a name (paper title)
+179,author,Shuai Lü,Shuai Lv,same,ok,
+180,dataset,AdobeVFR real,Adobe Visual Font Recognition real-world images dataset,same,ok,
+181,dataset,MultiDoc2Dial,MultiDoc2Dial: Modeling Dialogues Grounded in Multiple Documents,different,ok,Claude: not a name (paper title)
+182,tool,seeker,seeker tool,same,ok,
+183,dataset,SOD4SB,Small Object Detection for Spotting Birds,same,ok,
+184,dataset,SpCQL,Text-to-CQL,different,ok,"Claude: the task, not the dataset"
+185,dataset,CBSD68,Color BSD68,same,ok,
+186,dataset,ASQP,Aspect Sentiment Quad Prediction,same,ok,
+187,dataset,MS-CXR,Making the Most of Text Semantics to Improve Biomedical Vision-Language Processing,different,ok,Claude: not a name (paper title)
+188,method,bilayer decoupling,bilayer convolutional neural network,different,ok,
+189,dataset,VQA-VS,a new VQA benchmark considering Varying Shortcuts,different,ok,Claude: not a name (a description)
+190,dataset,ART Dataset,Abductive Reasoning in narrative Text,same,ok,
+191,author,Jie Li,Jianan Li,different,ok,
+192,dataset,VRAI,Vehicle Re-identification for Aerial Image,same,ok,
+193,dataset,SMILE-UHURA,Small Vessel Segmentation at Mesoscopic Scale from Ultra-High Resolution 7T Magnetic Resonance Angiogram,same,ok,
+194,method,GNNCL,Graph Neural Networks with Continual Learning,same,ok,
+195,author,Manuel Jorge Cardoso,M. Jorge Cardoso,same,ok,
+196,author,Francesc Moll,Francesc Moll Echeto,same,ok,
+197,dataset,SDSD-indoor,Seeing Dynamic Scene in the Dark: High-Quality Video Dataset with Mechatronic Alignment,different,ok,Claude: not a name (paper title)
+198,author,Shu-ling Zhao,Sufang Zhao,different,ok,
+199,dataset,DIBCO and H_DIBCO,(Handwritten) Document Image Binarization Competition (DIBCO),same,ok,
+200,dataset,AFEW-VA,AFEW-VA Database for Valence and Arousal Estimation In-The-Wild,different,ok,Claude: not a name (paper title)

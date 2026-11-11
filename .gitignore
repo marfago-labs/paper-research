@@ -1,0 +1,10 @@
+__pycache__/
+.coverage
+htmlcov/
+mutants/
+.mutmut-cache
+node_modules/
+.mypy_cache/
+.ruff_cache/
+.cache/
+.complexipy_cache/

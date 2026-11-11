@@ -1,0 +1,151 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+
+# Billing rounds each job up to a whole minute, and bills Windows at 2x and macOS at 10x in private
+# repos, so the quick checks share one Linux job and macOS isn't tested on every push. The scripts
+# use only the standard library and pathlib, and Windows covers the non-POSIX lock code.
+# Actions are pinned to commit SHAs, with the release they point to in the comment. Dependabot updates both.
+jobs:
+  checks:
+    name: Lint, static analysis, and coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0 # gitleaks scans every commit, not just the last one
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tools/js/package-lock.json
+      - name: Install the development tools
+        id: install
+        run: pip install --require-hashes -r requirements-dev.txt && npm ci --prefix tools/js
+
+      # Each check runs even if an earlier check failed, so one run reports every problem, and the job
+      # still fails if any of them did. If the install failed, the checks are skipped instead.
+      - name: ruff
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: ruff check skills tools features evals && ruff format --check skills tools features evals
+      - name: ESLint (includes cyclomatic complexity 6 and cognitive complexity 10)
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run lint --prefix tools/js
+      - name: Prettier
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run format:check --prefix tools/js
+      # ruff checks cyclomatic complexity (C901, at most 6); complexipy checks cognitive complexity.
+      - name: Cognitive complexity of the Python code (at most 10)
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: complexipy skills tools features evals --max-complexity-allowed 10 --failed --plain --color no
+      - name: mypy
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: >
+          mypy skills/graph/scripts/graph.py skills/recap/scripts/recap.py skills/arxiv/scripts/arxiv.py
+          skills/scholar/scripts/s2.py skills/init/scripts/init.py tools
+          evals/dedup/build_dataset.py evals/dedup/audit_labels.py evals/dedup/evaluate.py evals/dedup/hand_check.py
+      - name: bandit (shipped code only)
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: bandit -q -r skills -x "*/test_*.py"
+      - name: actionlint
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: actionlint
+      # Not the gitleaks GitHub Action, which needs a paid licence for organisations: the same pinned,
+      # checksum-verified binary that the pre-commit hook uses.
+      - name: gitleaks (every commit)
+        if: ${{ !cancelled() }}
+        run: python tools/gitleaks.py
+      - name: Coverage of every script must be 100%
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: |
+          status=0
+          for pair in graph:skills/graph/scripts/test_graph.py recap:skills/recap/scripts/test_recap.py \
+                      arxiv:skills/arxiv/scripts/test_arxiv.py s2:skills/scholar/scripts/test_s2.py \
+                      init:skills/init/scripts/test_init.py \
+                      build_dataset:evals/dedup/test_build_dataset.py audit_labels:evals/dedup/test_audit_labels.py \
+                      evaluate:evals/dedup/test_evaluate.py hand_check:evals/dedup/test_hand_check.py; do
+            module=${pair%%:*}
+            echo "== $module"
+            rm -f .coverage
+            if coverage run --branch --include="*/$module.py" "${pair#*:}"; then
+              coverage report --fail-under=100 --show-missing || status=1
+            else
+              status=1
+            fi
+          done
+          exit "$status"
+      # Replays the dev pairs through graph.py's duplicate check and writes the rates to the job summary.
+      # It reports only: the decision rule of evals/dedup/SPEC.md is applied when a change is proposed.
+      - name: Duplicate-detection evaluation (dev pairs)
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: python evals/dedup/evaluate.py --split dev --summary "$GITHUB_STEP_SUMMARY"
+      - name: Page tests and coverage (Node)
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm test --prefix tools/js && npm run coverage --prefix tools/js
+
+  unit-python:
+    name: Unit tests (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # ubuntu-latest (26.04) has no Python 3.9 build, so 3.9 runs on the last Ubuntu that has one.
+          - {os: ubuntu-24.04, python: "3.9"}
+          - {os: ubuntu-latest, python: "3.12"}
+          - {os: ubuntu-latest, python: "3.13"}
+          - {os: windows-latest, python: "3.13"}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Run every test file
+        shell: bash
+        run: |
+          set -e
+          for test in skills/*/scripts/test_*.py evals/*/test_*.py; do
+            echo "== $test"
+            python "$test"
+          done
+
+  bdd:
+    name: Behaviour scenarios (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - run: pip install --require-hashes -r requirements-dev.txt
+      - run: behave --no-capture-stderr --format progress features
