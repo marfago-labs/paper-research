@@ -148,6 +148,12 @@ def untrusted_warning(context):
     assert "untrusted" in printed(context)["warning"]
 
 
+@then("the output says to follow the read skill for the paper")
+def read_next(context):
+    # Without it, a paper fetched outside the read skill never reaches the graph or papers.md.
+    assert "follow the read skill" in printed(context)["next"]
+
+
 @then('the result for {ident} says "{text}"')
 def result_says(context, ident, text):
     found = [p for p in printed(context) if ident in (p.get("id"), p.get("requestedId"))]
