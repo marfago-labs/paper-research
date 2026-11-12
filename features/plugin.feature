@@ -25,8 +25,28 @@ Feature: A plugin that installs cleanly and keeps its promises
     And the arxiv skill routes reading a paper through the read skill
     And the init skill loads the new rules into the session that ran it
 
+  Scenario: The skills keep each paper's citation counts and links up to date without being asked
+    Then the read skill says "s2.py batch <ID> --with-references"
+    And the read skill says "run `graph.py standing <file>`"
+    And the add skill says "--with-references"
+    And the add skill says "run `graph.py standing <file>`"
+    And the next skill says "run `graph.py standing <file>`, so the counts are kept"
+    And the recap skill says "graph.py standing-due ids.txt"
+    And the recap skill says "s2.py batch --ids-file ids.txt --with-references"
+    And the recap skill says "Run `graph.py standing counts.json` whether or not step 2 succeeded"
+    And the recap skill says "without reading the ids yourself"
+
+  Scenario: A failed citation step is reported, not dropped
+    Then the read skill says "say so in this reply"
+    And the read skill says "Carry on with the other papers"
+    And the read skill says "offer to retry the ones that failed"
+    And the read skill says "links only connect papers that are already in the graph"
+
   Scenario: Questions about what the user has are answered from the graph too
     Then the rules written by init send questions about existing notes to the graph
+
+  Scenario: The documentation agrees with init on when the new rules load
+    Then the documentation says the new rules load in the session that ran init
 
   Scenario: Claude never writes its own permissions
     Then the init skill has the user run the write step

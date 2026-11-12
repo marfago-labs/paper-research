@@ -106,7 +106,7 @@ Short lessons about how Claude should work with you, each with the date and what
 `research/recap/recap.html` shows what's in your workspace, in tabs:
 
 - **Activity:** summary counts, papers that still need graph extraction, and your history by day.
-- **Papers:** grouped by status, with links to arXiv and to the insights drawn from each.
+- **Papers:** grouped by status, with links to arXiv and to the insights drawn from each. Each paper shows its citations from Semantic Scholar with the date they were checked, "too early to judge" for a paper from this year, or "no citation data" for one Semantic Scholar doesn't know yet, and how often it comes up in your collection: cited by your other papers, and in your insights and pins. Sort by reading status, most cited, most cited per year, or most connected in your collection.
 - **Insights** and **Pins:** everything you've saved, with source links that jump to the paper.
 - **Graph:** an interactive map. Search by name, filter by type, click an entity to see its connections and sources, and focus on one or two steps around it.
 

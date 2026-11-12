@@ -804,6 +804,207 @@ class Citations(CommandLineBase):
         self.assertIn("s2 id 'known' is already used by", err)
         self.assertEqual(graph.read_jsonl(self.folder / "relations.jsonl"), [])
 
+    def papers(self):
+        return {e["id"]: e for e in graph.read_jsonl(self.folder / "entities.jsonl")}
+
+    def test_cites_saves_the_papers_standing(self):
+        record = {"paperId": "MAIN", "citationCount": 12, "influentialCitationCount": 3, "venue": "", "year": 2024}
+        with mock.patch.object(graph, "today", return_value="2026-11-11"):
+            code, out, _ = self.run_main("cites", "Main", self.record({**record, "references": []}))
+        self.assertEqual(code, 0)
+        self.assertIn("standing: paper:2401.00001: 12 citations, checked 2026-11-11", out)
+        expected = {"citations": 12, "influential": 3, "year": 2024, "checked": "2026-11-11"}
+        self.assertEqual(self.papers()["paper:2401.00001"]["standing"], expected)
+        code, out, _ = self.run_main("cites", "Cited", self.record({"paperId": "C", "references": []}))
+        self.assertNotIn("standing", out)
+        self.assertNotIn("standing", self.papers()["paper:2401.00002"])
+
+    def test_standing_updates_every_matched_paper_from_a_batch(self):
+        batch = [
+            {"requestedId": "ARXIV:2401.00002", "paperId": "C2", "externalIds": {"ArXiv": "2401.00002"},
+             "citationCount": 5, "venue": "NeurIPS", "year": True},
+            {"requestedId": "known", "paperId": "known", "citationCount": 0, "influentialCitationCount": None},
+            {"requestedId": "ARXIV:2499.00001", "error": "not found"},
+            {"paperId": "known", "citationCount": "many"},
+        ]  # fmt: skip
+        with mock.patch.object(graph, "today", return_value="2026-11-11"):
+            code, out, _ = self.run_main("standing", self.record(batch))
+        self.assertEqual(code, 0)
+        self.assertEqual(
+            out.strip(), "2 papers updated, 1 without citation data, 1 record matched no paper in the graph"
+        )
+        papers = self.papers()
+        cited, known = papers["paper:2401.00002"], papers["paper:y"]
+        self.assertEqual(cited["standing"], {"citations": 5, "venue": "NeurIPS", "checked": "2026-11-11"})
+        self.assertEqual(cited["ids"], {"s2": "C2"})
+        self.assertEqual(known["standing"], {"citations": 0, "checked": "2026-11-11"})
+        code, out, _ = self.run_main("standing", self.record({"paperId": "known", "citationCount": 1}))
+        self.assertEqual((code, out.strip()), (0, "1 paper updated, 0 records matched no paper in the graph"))
+        self.assertEqual(self.papers()["paper:y"]["standing"]["citations"], 1)
+        for bad in ([1], "text"):
+            code, _, err = self.run_main("standing", self.record(bad))
+            self.assertEqual(code, 1)
+            self.assertIn("expected the output of: s2.py batch", err)
+        code, _, err = self.run_main("standing", str(self.folder / "missing.json"))
+        self.assertEqual(code, 1)
+        self.assertIn("can't read", err)
+
+    def test_standing_due_lists_papers_never_checked_or_checked_long_ago(self):
+        def checked(day):
+            return {"citations": 1, "checked": day}
+
+        self.write(
+            [
+                entity("paper:2401.00001", "Arxiv slug"),
+                entity("paper:s", "S2", ids={"s2": "S2ID", "doi": "10.1/x"}, standing=checked("2026-11-01")),
+                entity("paper:d", "Doi", aliases=["DOI:10.1/D"], standing=checked("2026-01-01")),
+                entity("paper:blog", "Blog"),
+                entity("tool:t", "Tool"),
+            ],
+            [],
+        )
+        due = self.folder / "due.txt"
+        with mock.patch.object(graph.datetime, "date", wraps=graph.datetime.date) as date:
+            date.today.return_value = graph.datetime.date(2026, 11, 11)
+            code, out, _ = self.run_main("standing-due", str(due))
+            self.assertEqual((code, out.strip()), (0, "2 papers due"))
+            self.assertEqual(due.read_text(encoding="utf-8"), "ARXIV:2401.00001\nDOI:10.1/d\n")
+            self.assertEqual(self.run_main("standing-due", str(due), "--days", "5")[1].strip(), "3 papers due")
+            self.assertEqual(due.read_text(encoding="utf-8").split(), ["ARXIV:2401.00001", "s2id", "DOI:10.1/d"])
+            self.write([entity("paper:2401.00001", "Arxiv slug")], [])
+            self.assertEqual(self.run_main("standing-due", str(due))[1].strip(), "1 paper due")
+            self.write([entity("paper:blog", "Blog")], [])
+            self.assertEqual(self.run_main("standing-due", str(due))[1].strip(), "no papers due")
+            self.assertEqual(due.read_text(encoding="utf-8"), "")
+        code, _, err = self.run_main("standing-due", str(self.folder / "no-such-folder" / "due.txt"))
+        self.assertEqual(code, 1)
+        self.assertIn("can't write", err)
+
+    def test_merge_keeps_the_newer_standing(self):
+        self.write(
+            [
+                entity("paper:a", "A", standing={"citations": 1, "checked": "2026-01-01"}),
+                entity("paper:b", "B", standing={"citations": 9, "checked": "2026-06-01"}),
+                entity("paper:c", "C"),
+            ],
+            [],
+        )
+        self.run_main("merge", "paper:a", "paper:b")
+        self.assertEqual(self.papers()["paper:a"]["standing"]["citations"], 9)
+        self.run_main("merge", "paper:a", "paper:c")
+        self.assertEqual(self.papers()["paper:a"]["standing"]["citations"], 9)
+        self.write(
+            [entity("paper:c", "C"), entity("paper:a", "A", standing={"citations": 1, "checked": "2026-01-01"})], []
+        )
+        self.run_main("merge", "paper:c", "paper:a")
+        self.assertEqual(self.papers()["paper:c"]["standing"]["citations"], 1)
+
+    def test_a_bad_standing_is_invalid(self):
+        good = {"citations": 1, "checked": "2026-01-01"}
+        cases = [
+            (entity("tool:t", standing=good), "only papers have a standing"),
+            (entity("paper:p", standing={"citations": 1}), "standing has bad or missing checked"),
+            (entity("paper:p", standing={**good, "citations": -1}), "standing has bad or missing citations"),
+            (entity("paper:p", standing={**good, "citations": True}), "standing has bad or missing citations"),
+            (entity("paper:p", standing={**good, "year": "2024"}), "standing has bad or missing year"),
+            (entity("paper:p", standing={**good, "venue": 5}), "standing has bad or missing venue"),
+            (entity("paper:p", standing={**good, "rank": 1}), "standing has bad or missing rank"),
+            (entity("paper:p", standing={**good, "checked": "soon"}), "standing has bad or missing checked"),
+            (entity("paper:p", standing={"citations": "x", "year": "y"}), "bad or missing checked, citations, year"),
+            (entity("paper:p", standing=[1]), "standing must be an object"),
+        ]
+        for item, expected in cases:
+            with self.subTest(item=item):
+                self.assertTrue(any(expected in e for e in graph.validate([item], [])), graph.validate([item], []))
+        self.assertEqual(graph.validate([entity("paper:p", standing={**good, "venue": "X", "year": 2024})], []), [])
+        self.assertEqual(graph.validate([entity("paper:p", standing={"checked": "2026-01-01"})], []), [])
+
+    def test_standing_also_links_papers_from_the_reference_lists_in_a_batch(self):
+        batch = [
+            {
+                "requestedId": "ARXIV:2401.00001",
+                "paperId": "MAIN",
+                "citationCount": 4,
+                "references": [
+                    {"paperId": "r1", "externalIds": {"ArXiv": "2401.00002"}},
+                    {"paperId": "known"},
+                    {"paperId": "elsewhere", "externalIds": None},
+                    {"paperId": "self", "externalIds": {"ArXiv": "2401.00001"}},
+                ],
+            },
+            {"requestedId": "known", "paperId": "known", "citationCount": 1, "references": None},
+            {"requestedId": "ARXIV:2499.00001", "error": "not found"},
+        ]
+        with mock.patch.object(graph, "today", return_value="2026-11-11"):
+            code, out, _ = self.run_main("standing", self.record(batch))
+        self.assertEqual(code, 0)
+        self.assertEqual(
+            out.strip(), "2 papers updated, 2 citation links added, 1 record matched no paper in the graph"
+        )
+        links = [(r["from"], r["rel"], r["to"], r["source"]) for r in graph.read_jsonl(self.folder / "relations.jsonl")]
+        self.assertEqual(
+            links,
+            [
+                ("paper:2401.00001", "cites", "paper:2401.00002", "Semantic Scholar references"),
+                ("paper:2401.00001", "cites", "paper:y", "Semantic Scholar references"),
+            ],
+        )
+        self.assertEqual(self.papers()["paper:2401.00001"]["standing"]["citations"], 4)
+        code, out, _ = self.run_main("standing", self.record(batch))
+        self.assertEqual(code, 0)
+        self.assertIn("0 citation links added", out)
+
+    def test_references_link_a_paper_even_when_semantic_scholar_has_no_counts_for_it(self):
+        batch = [
+            {
+                "requestedId": "ARXIV:2401.00001",
+                "paperId": "MAIN",
+                "references": [{"paperId": "r1", "externalIds": {"ArXiv": "2401.00002"}}],
+            }
+        ]
+        code, out, _ = self.run_main("standing", self.record(batch))
+        self.assertEqual(code, 0)
+        self.assertEqual(
+            out.strip(),
+            "0 papers updated, 1 without citation data, 1 citation link added, 0 records matched no paper in the graph",
+        )
+        self.assertEqual(len(graph.read_jsonl(self.folder / "relations.jsonl")), 1)
+
+    def test_papers_semantic_scholar_does_not_know_are_marked_checked_not_asked_again(self):
+        old = {"citations": 5, "checked": "2025-01-01"}
+        self.write(
+            [
+                entity("paper:2401.00001", "New arXiv paper"),
+                entity("paper:y", "Known before", ids={"s2": "known"}, standing=old),
+                entity("paper:x", "No count", ids={"doi": "10.1/C"}),
+                entity("paper:z", "Fine", ids={"s2": "fine"}),
+            ],
+            [],
+        )
+        batch = [
+            {"requestedId": "ARXIV:2401.00001", "error": "not found"},
+            {"requestedId": "known", "error": "not found"},
+            {"requestedId": "DOI:10.1/c", "paperId": "X", "externalIds": {"DOI": "10.1/C"}},
+            {"requestedId": "fine", "paperId": "fine", "citationCount": 2},
+            {"requestedId": "ARXIV:2499.00001", "error": "not found"},
+        ]
+        with mock.patch.object(graph, "today", return_value="2026-11-11"):
+            code, out, _ = self.run_main("standing", self.record(batch))
+        self.assertEqual(code, 0)
+        self.assertEqual(
+            out.strip(), "1 paper updated, 3 without citation data, 1 record matched no paper in the graph"
+        )
+        papers = self.papers()
+        self.assertEqual(papers["paper:2401.00001"]["standing"], {"checked": "2026-11-11"})
+        self.assertEqual(papers["paper:x"]["standing"], {"checked": "2026-11-11"})
+        self.assertEqual(papers["paper:y"]["standing"], old)
+        self.assertEqual(self.run_main("validate")[0], 0)
+        due = self.folder / "due.txt"
+        with mock.patch.object(graph.datetime, "date", wraps=graph.datetime.date) as date:
+            date.today.return_value = graph.datetime.date(2026, 11, 12)
+            self.run_main("standing-due", str(due))
+        self.assertEqual(due.read_text(encoding="utf-8").split(), ["known"])
+
     def test_refuses_bad_input(self):
         cases = [
             (("tool:t", self.record({"references": []})), "is not a paper"),

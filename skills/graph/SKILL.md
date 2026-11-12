@@ -12,6 +12,7 @@ Run from the workspace root. `<skills>` is the folder that contains this skill's
 ## Data
 
 - **Entity:** `id` (`type:slug`, using the arXiv ID as the slug for arXiv papers), `type`, `name`, `aliases`, and optional `url`, `note`, `ids`, and `distinct_from`. Types: paper, author, concept, method, model, dataset, tool, organisation, insight.
+- **Standing:** a paper can have `standing`: its `citations`, `influential` citations, `venue`, and `year` from Semantic Scholar, and the date they were `checked`. Only `cites` and `standing` write it, from Semantic Scholar output, so never make the numbers up. A paper Semantic Scholar has no data for gets only `checked`, so it isn't asked about again for a month.
 - **External ids:** `ids` maps `s2`, `arxiv`, `doi`, `hf`, `github`, or `orcid` to an identifier. Two entities of the same type with the same external id are the same thing. Add ids whenever you know them, especially Semantic Scholar ids for authors, because names alone can't tell two people apart.
 - **Distinct:** `distinct_from` lists entities that look alike but were checked to be different, so the duplicate checks stop flagging them.
 - **Relation:** `from`, `rel`, `to`, `source`, `status`. Relations: uses, evaluates-on, builds-on, proposes, cites, authored-by, contradicts, related-to, derived-from.
@@ -20,7 +21,8 @@ Run from the workspace root. `<skills>` is the folder that contains this skill's
 ## Commands
 
 - **Read:** `validate`, `stats`, `search <text>`, `neighbours <entity>`, `path <a> <b>`, `dupes`, `islands`.
-- **Write:** `add`, `update`, `link`, `unlink`, `merge`, `remove`, and `cites`. Run any of them with `--help` for its options.
+- **Write:** `add`, `update`, `link`, `unlink`, `merge`, `remove`, `cites`, and `standing`. Run any of them with `--help` for its options.
+- **Citation counts and links:** `standing <file>` reads saved `s2.py batch` output. It saves each paper's counts and, if the output was made with `--with-references`, adds a `cites` link from each paper to every paper in the graph that it cites. `standing-due <file>` writes the ids of papers whose counts are missing or old to a file, for `s2.py batch --ids-file`. It changes nothing in the graph. Links only join papers that are already in the graph, so run `standing` again after the graph grows.
 
 ```bash
 python <skills>/graph/scripts/graph.py add --type dataset --name "Terminal-Bench 2.1" --alias TB-2.1 --url https://arxiv.org/abs/2601.11868

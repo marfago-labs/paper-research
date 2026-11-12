@@ -18,7 +18,7 @@ python <skills>/scholar/scripts/s2.py authors 145965455 2824500
 ## Rules
 
 - **IDs:** use an arXiv ID or link, a Hugging Face paper link, a DOI or DOI link, or a Semantic Scholar ID. Other links are sent as `URL:` IDs, which Semantic Scholar only resolves for sites it recognises.
-- **Several papers:** use one `batch` call instead of repeated `paper` calls. Each result has a `requestedId`, and a missing paper has `"error": "not found"`.
+- **Several papers:** use one `batch` call instead of repeated `paper` calls. Each result has a `requestedId`, and a missing paper has `"error": "not found"`. For a long list, put the ids in a file, one per line, and pass `--ids-file <file>`: it asks for 500 at a time, so the ids never pass through the command line or your context. Add `--with-references` to also get each paper's reference list, 100 papers at a time, which the `graph` skill's `standing` command turns into citation links. That is one request for many papers, where `paper --references --citations` takes three requests for one.
 - **Authors:** take `authorId` values from `paper` or `batch` results and pass them to `authors` in one call. Author profiles can merge or split real people, so treat h-index as approximate.
 - **Exit codes:** 0 is success, 1 is an API or network failure, and 2 is invalid input. Report failures instead of filling gaps from memory.
 - **Rate limits:** the script spaces and retries requests itself, so don't add a retry loop. The `SEMANTIC_SCHOLAR_API_KEY` environment variable is optional, and its value must never be printed or written to a file.

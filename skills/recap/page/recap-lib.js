@@ -7,7 +7,7 @@
   const STATUS_ORDER = ["read", "skim", "unread-link", "archive", "done", "dropped"];
   const GRAPH_GAPS = new Map([
     ["missing", "not in graph"],
-    ["unextracted", "only authors or citations in graph"],
+    ["unextracted", "nothing extracted yet"],
   ]);
   const PAPER_ID = /ARXIV:\d{4}\.\d{4,5}|DOI:10\.\d{4,9}\/[^\s`,;)<&]*[^\s`,;)<&.]/g;
   const ENTITIES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
@@ -117,24 +117,123 @@
     return items ? `<ul class="linked">${items}</ul>` : "";
   }
 
-  function renderPaper(p, insights) {
+  // Whether the paper has citation counts. A paper Semantic Scholar doesn't know has only the date it was checked.
+  function hasCounts(p) {
+    return Boolean(p.standing) && typeof p.standing.citations === "number";
+  }
+
+  // Years since publication, at least 1, counted from the year the data was generated.
+  function age(p, year) {
+    const published = p.standing && p.standing.year;
+    return published && year ? Math.max(1, year - published) : 1;
+  }
+
+  function plural(n, word) {
+    return `${n} ${word}${n === 1 ? "" : "s"}`;
+  }
+
+  // Citation counts from Semantic Scholar, with the date they were checked, since they change.
+  function standingLine(p, year) {
+    const s = p.standing;
+    if (!s) return "citations not checked yet";
+    if (!hasCounts(p)) return `no citation data · checked ${esc(s.checked)}`;
+    const influential = s.influential ? ` (${s.influential} influential)` : "";
+    const parts = [plural(s.citations, "citation") + influential, s.venue, s.year, `checked ${s.checked}`];
+    return parts.filter(Boolean).map(esc).join(" · ") + earlyTag(s, year);
+  }
+
+  // Citations mean little in a paper's first months, so a paper from this year is marked as too early to judge.
+  function earlyTag(s, year) {
+    return s.year && year && year - s.year < 1 ? ' <span class="tag">new: too early to judge</span>' : "";
+  }
+
+  // How often the paper comes up in the user's own collection: cited by their papers, and in their notes.
+  function collectionLine(p) {
+    const c = p.collection || {};
+    const parts = [
+      c.cited_by ? `cited by ${c.cited_by} of your papers` : "",
+      c.insights ? plural(c.insights, "insight") : "",
+      c.pins ? plural(c.pins, "pin") : "",
+    ].filter(Boolean);
+    return parts.length ? ` · in your collection: ${parts.join(", ")}` : "";
+  }
+
+  function renderPaper(p, insights, year) {
     const label = p.id.startsWith("http") ? "link" : p.id;
     return (
       `<article id="${anchor(p.id)}"><h3>${paperTitle(p)}</h3>` +
       `<p class="meta">${esc(label)} · added ${esc(p.added)} · rating ${esc(p.rating || "-")} · ${esc(p.tags)}</p>` +
+      `<p class="meta">${standingLine(p, year)}${collectionLine(p)}</p>` +
       `<p>${inline(p.summary)}${paperGap(p)}</p>${linkedInsights(insights)}</article>`
     );
   }
 
-  function renderPapers(data, insightsByPaper) {
+  // Ways to sort the papers. Papers without the number sort last.
+  const PAPER_ORDERS = new Map([
+    ["status", ["by reading status", null]],
+    ["cited", ["most cited", (p) => (hasCounts(p) ? p.standing.citations : -1)]],
+    // Without a year there is nothing to divide by, so the paper sorts with those that have no counts.
+    [
+      "per-year",
+      [
+        "most cited per year",
+        (p, year) => (hasCounts(p) && p.standing.year ? p.standing.citations / age(p, year) : -1),
+      ],
+    ],
+    [
+      "collection",
+      [
+        "most connected in your collection",
+        (p) => {
+          const c = p.collection || {};
+          return (c.cited_by || 0) + (c.insights || 0) + (c.pins || 0);
+        },
+      ],
+    ],
+  ]);
+
+  function insightIndex(data) {
+    const byPaper = new Map();
+    data.insights.forEach((i) =>
+      i.papers.forEach((id) => {
+        if (!byPaper.has(id)) byPaper.set(id, []);
+        byPaper.get(id).push(i);
+      }),
+    );
+    return byPaper;
+  }
+
+  // The list of paper cards in one of the PAPER_ORDERS. An unknown order falls back to reading status.
+  function renderPaperList(data, order) {
     if (!data.papers.length) return '<p class="empty">No papers yet.</p>';
+    const year = parseInt(String(data.generated || ""), 10) || 0;
+    const insightsByPaper = insightIndex(data);
+    const card = (p) => renderPaper(p, insightsByPaper.get(p.id) || [], year);
+    const score = PAPER_ORDERS.has(order) && PAPER_ORDERS.get(order)[1];
+    if (!score) return renderByStatus(data, card);
+    const newest = (a, b) => (b.added || "").localeCompare(a.added || "");
+    return [...data.papers]
+      .sort((a, b) => score(b, year) - score(a, year) || newest(a, b))
+      .map(card)
+      .join("");
+  }
+
+  function renderPapers(data) {
+    const options = [...PAPER_ORDERS].map(([value, [label]]) => `<option value="${value}">${label}</option>`).join("");
+    const control = data.papers.length
+      ? `<label class="order">Sort <select id="paper-order" aria-label="Sort papers">${options}</select></label>`
+      : "";
+    return `${control}<div id="paper-list">${renderPaperList(data, "status")}</div>`;
+  }
+
+  function renderByStatus(data, card) {
     const groups = groupBy(data.papers, (p) => p.status || "");
     const order = [...STATUS_ORDER, ...[...groups.keys()].filter((s) => !STATUS_ORDER.includes(s)).sort()];
     return order
       .filter((status) => groups.has(status))
       .map((status) => {
         const papers = [...groups.get(status)].sort((a, b) => (b.added || "").localeCompare(a.added || ""));
-        const cards = papers.map((p) => renderPaper(p, insightsByPaper.get(p.id) || [])).join("");
+        const cards = papers.map(card).join("");
         return `<h3 class="group">${esc(status || "no status")} (${papers.length})</h3>${cards}`;
       })
       .join("");
@@ -171,13 +270,6 @@
   // The HTML for the four recap views, and the counts shown in the tabs.
   function buildRecap(data) {
     const known = new Set(data.papers.map((p) => p.id));
-    const insightsByPaper = new Map();
-    data.insights.forEach((i) =>
-      i.papers.forEach((id) => {
-        if (!insightsByPaper.has(id)) insightsByPaper.set(id, []);
-        insightsByPaper.get(id).push(i);
-      }),
-    );
     const stats = [
       [data.papers.length, "papers", "papers"],
       [data.papers.filter((p) => p.status === "read").length, "to read", "papers"],
@@ -211,7 +303,7 @@
           "Activity",
           `<div class="stats">${stats}</div>${graphNote}${gaps}<section>${renderActivity(data, known)}</section>`,
         ) +
-        view("papers", "Papers", renderPapers(data, insightsByPaper)) +
+        view("papers", "Papers", renderPapers(data)) +
         view("insights", "Insights", renderInsights(data, known)) +
         view("pins", "Pins", renderPins(data, known)),
       counts: {
@@ -223,5 +315,5 @@
     };
   }
 
-  Object.assign(lib, { esc, anchor, inline, safeUrl, gapLabel, hashName, groupBy, buildRecap });
+  Object.assign(lib, { esc, anchor, inline, safeUrl, gapLabel, hashName, groupBy, buildRecap, renderPaperList });
 })(typeof module === "object" && module.exports ? module.exports : (window.RecapLib = {}));

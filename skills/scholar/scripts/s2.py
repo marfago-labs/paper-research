@@ -28,9 +28,14 @@ PAPER_FIELDS = (
 )
 DETAIL_FIELDS = PAPER_FIELDS + ",tldr"
 LINK_FIELDS = "isInfluential,paperId,externalIds,title,year,citationCount,authors"
+# Only the ids of the papers a paper cites: enough to link it to the papers already in the graph.
+REFERENCE_FIELDS = "references.paperId,references.externalIds"
 
 AUTHOR_FIELDS = "name,hIndex,citationCount,paperCount"
 
+MAX_BATCH = 500  # the most IDs the batch endpoint takes in one request
+# With reference lists a response is far larger, and the endpoint answers at most 10 MB, so ask for fewer papers.
+REFERENCE_BATCH = 100
 MIN_INTERVAL = 1.1  # seconds between requests; a new API key allows 1 per second
 MAX_ATTEMPTS = 5
 TIMEOUT = 30
@@ -44,6 +49,14 @@ LOCK_WAIT = 60
 
 class ApiError(Exception):
     pass
+
+
+class PartialBatch(ApiError):
+    """A later request of a long batch failed. The papers fetched before it are kept, so they aren't lost."""
+
+    def __init__(self, message, results):
+        super().__init__(message)
+        self.results = results
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -292,17 +305,42 @@ def cmd_paper(args):
     return result
 
 
-def cmd_batch(args):
-    ids = [normalize_id(value) for value in args.ids]
-    if len(ids) > 500:
-        raise ValueError("batch accepts at most 500 IDs")
-    papers = request("POST", f"{GRAPH}/paper/batch", {"fields": PAPER_FIELDS}, {"ids": ids})
+def read_ids(file):
+    """The ids in a file, separated by whitespace, so a long list never has to pass through the command line."""
+    try:
+        return Path(file).read_text(encoding="utf-8").split()
+    except OSError as err:
+        raise ValueError(f"can't read {file}: {err}") from None
+
+
+def batch_request(ids, with_references=False):
+    """One request for a batch of ids, as a record for each, with their reference lists if asked."""
+    fields = f"{PAPER_FIELDS},{REFERENCE_FIELDS}" if with_references else PAPER_FIELDS
+    papers = request("POST", f"{GRAPH}/paper/batch", {"fields": fields}, {"ids": ids})
     if not isinstance(papers, list):
         raise ApiError("unexpected response from the batch endpoint")
     return [
         {"requestedId": requested, **paper} if paper else {"requestedId": requested, "error": "not found"}
         for requested, paper in zip(ids, papers)
     ]
+
+
+def cmd_batch(args):
+    if len(args.ids) > MAX_BATCH:
+        raise ValueError(f"batch accepts at most {MAX_BATCH} IDs on the command line; use --ids-file for more")
+    ids = [normalize_id(value) for value in [*args.ids, *(read_ids(args.ids_file) if args.ids_file else [])]]
+    if not ids:
+        raise ValueError("give at least one ID, or a file of them with --ids-file")
+    size = REFERENCE_BATCH if args.with_references else MAX_BATCH
+    papers: list[dict] = []
+    for start in range(0, len(ids), size):
+        try:
+            papers += batch_request(ids[start : start + size], args.with_references)
+        except ApiError as err:
+            if not papers:
+                raise
+            raise PartialBatch(f"{err} ({len(papers)} of {len(ids)} papers were fetched first)", papers) from None
+    return papers
 
 
 def cmd_recommend(args):
@@ -347,8 +385,14 @@ def build_parser():
     paper.add_argument("--limit", type=int, default=20, help="maximum per citation list")
     paper.set_defaults(func=cmd_paper)
 
-    batch = commands.add_parser("batch", help="details for many papers in one request")
-    batch.add_argument("ids", nargs="+")
+    batch = commands.add_parser("batch", help="details for many papers, 500 to a request")
+    batch.add_argument("ids", nargs="*")
+    batch.add_argument("--ids-file", help="file of IDs separated by whitespace, for more than fit on the command line")
+    batch.add_argument(
+        "--with-references",
+        action="store_true",
+        help=f"also fetch each paper's reference list, {REFERENCE_BATCH} papers to a request",
+    )
     batch.set_defaults(func=cmd_batch)
 
     recommend = commands.add_parser("recommend", help="recommendations from example papers")
@@ -374,6 +418,8 @@ def main(argv=None):
         return 2
     except ApiError as err:
         print(f"error: {err}", file=sys.stderr)
+        if isinstance(err, PartialBatch):
+            print(json.dumps(err.results, ensure_ascii=False, indent=2))
         return 1
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0

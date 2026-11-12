@@ -49,6 +49,39 @@ def graph_only_author(context, ident):
     (folder / "relations.jsonl").write_text(json.dumps(relation) + "\n", encoding="utf-8")
 
 
+@given('the graph has the paper "{ident}" with {count:d} citations, cited by the paper "{other}"')
+def graph_standing(context, ident, count, other):
+    folder = research(context) / "graph"
+    folder.mkdir(parents=True, exist_ok=True)
+    standing = {"citations": count, "checked": "2026-11-01"}
+    entities = [
+        {"id": f"paper:{ident}", "type": "paper", "name": "Cited", "aliases": [], "standing": standing},
+        {"id": f"paper:{other}", "type": "paper", "name": "Citing", "aliases": []},
+    ]
+    relation = {"from": f"paper:{other}", "rel": "cites", "to": f"paper:{ident}", "source": "s", "status": "verified"}
+    (folder / "entities.jsonl").write_text("".join(json.dumps(e) + "\n" for e in entities), encoding="utf-8")
+    (folder / "relations.jsonl").write_text(json.dumps(relation) + "\n", encoding="utf-8")
+
+
+@then("the recap data gives {ident} {count:d} citations")
+def recap_citations(context, ident, count):
+    papers = {p["id"]: p for p in recap_data(context)["papers"]}
+    assert papers[ident]["standing"]["citations"] == count, papers[ident]
+
+
+@then("the recap data has no citation counts for {ident}")
+def recap_no_citations(context, ident):
+    papers = {p["id"]: p for p in recap_data(context)["papers"]}
+    assert "standing" not in papers[ident], papers[ident]
+
+
+@then("the recap data says {ident} is cited by {cited:d} of my papers, in {insights:d} insight, and in {pins:d} pins")
+def recap_collection(context, ident, cited, insights, pins):
+    papers = {p["id"]: p for p in recap_data(context)["papers"]}
+    expected = {"cited_by": cited, "insights": insights, "pins": pins}
+    assert papers[ident]["collection"] == expected, papers[ident]
+
+
 @given('the graph has the paper "{ident}" with a dataset it evaluates on')
 def graph_extracted(context, ident):
     graph_only_author(context, ident)
@@ -240,6 +273,12 @@ def no_old_layout(context):
             assert old not in text, f"{folder.name} mentions {old}"
 
 
+@then('the {skill} skill says "{text}"')
+def skill_says(context, skill, text):
+    path = context.repo / "skills" / skill / "SKILL.md"
+    assert text in path.read_text(encoding="utf-8"), f"{skill} lost the instruction: {text}"
+
+
 @then("the arxiv skill routes reading a paper through the read skill")
 def arxiv_routes_reading(context):
     text = (context.repo / "skills" / "arxiv" / "SKILL.md").read_text(encoding="utf-8")
@@ -274,6 +313,16 @@ def rules_ask_the_graph(context):
     assert "`graph` skill" in rule, "a question about existing notes must also query the graph"
     for command in ("search", "neighbours", "path"):
         assert f"`{command}`" in rule, f"the rule must name the graph command {command}"
+
+
+@then("the documentation says the new rules load in the session that ran init")
+def docs_rules_load_now(context):
+    for name in ("README.md", "docs/getting-started.md"):
+        text = (context.repo / name).read_text(encoding="utf-8")
+        assert "only apply to the next one" not in text, f"{name} says the rules wait for a new session"
+        assert "Start a new session afterwards so Claude Code loads the new rules" not in text, name
+    started = (context.repo / "docs" / "getting-started.md").read_text(encoding="utf-8")
+    assert "Carry on in the same session" in started, "getting started must say Claude loads the rules itself"
 
 
 @then("the init skill has the user run the write step")

@@ -143,6 +143,87 @@ Feature: A knowledge graph that stays trustworthy as it grows
     Then the output mentions "paper:waiting"
     And the output does not mention "paper:read"
 
+  Scenario: A paper's citation counts are saved with the date they were checked
+    Given the graph holds a paper "Paper A" with id "paper:2611.00001"
+    And Semantic Scholar's batch output in "s2.json" gives ARXIV:2611.00001 42 citations
+    When I run graph standing s2.json
+    Then the command succeeds
+    And the paper "paper:2611.00001" has 42 citations checked today
+    When I run graph standing-due due.txt
+    Then the output mentions "no papers due"
+    And the file "due.txt" does not contain "2611.00001"
+
+  Scenario: Papers whose citations were never checked are due, if they can be looked up
+    Given the graph holds a paper "Paper A" with id "paper:2611.00001"
+    And the graph holds a paper "A blog post" with id "paper:blog"
+    When I run graph standing-due due.txt
+    Then the output mentions "1 paper due"
+    And the file "due.txt" contains "ARXIV:2611.00001"
+    And the file "due.txt" does not contain "blog"
+
+  Scenario: A batch with reference lists links the papers that cite each other
+    Given the graph holds a paper "Newer" with id "paper:2611.00002"
+    And the graph holds a paper "Older" with id "paper:2511.00001"
+    And Semantic Scholar's batch output in "s2.json" gives ARXIV:2611.00002 3 citations, citing ARXIV:2511.00001
+    When I run graph standing s2.json
+    Then the command succeeds
+    And the output mentions "1 citation link added"
+    And the graph has the relation "paper:2611.00002" cites "paper:2511.00001"
+    When I run graph standing s2.json
+    Then the output mentions "0 citation links added"
+
+  Scenario: A paper Semantic Scholar does not know is not asked about again for a month
+    Given the graph holds a paper "New paper" with id "paper:2611.00001"
+    And Semantic Scholar's batch output in "s2.json" says it does not know ARXIV:2611.00001
+    When I run graph standing s2.json
+    Then the output mentions "1 without citation data"
+    And the paper "paper:2611.00001" was checked today but has no citation counts
+    When I run graph standing-due due.txt
+    Then the output mentions "no papers due"
+
+  Scenario: Saving many papers' citation counts takes one line of output
+    Given the graph holds a paper "Paper A" with id "paper:2611.00001"
+    And the graph holds a paper "Paper B" with id "paper:2611.00002"
+    And Semantic Scholar's batch output in "s2.json" gives ARXIV:2611.00001 42 citations
+    When I run graph standing s2.json
+    Then the output mentions "1 paper updated, 0 records matched no paper in the graph"
+    And the output does not mention "paper:2611.00001"
+
+  Scenario: Fetching a paper's citation links also saves its citation counts
+    Given the graph holds a paper "Paper A" with id "paper:2611.00001"
+    And Semantic Scholar's record in "s2.json" gives ARXIV:2611.00001 7 citations and no links
+    When I run graph cites paper:2611.00001 s2.json
+    Then the command succeeds
+    And the output mentions "standing: paper:2611.00001: 7 citations"
+    And the paper "paper:2611.00001" has 7 citations checked today
+
+  Scenario: Only papers checked long enough ago are due again
+    Given the graph holds a paper "Old check" with id "paper:2611.00001"
+    And the graph holds a paper "Recent check" with id "paper:2611.00002"
+    And the paper "paper:2611.00001" was checked 40 days ago with 3 citations
+    And the paper "paper:2611.00002" was checked 2 days ago with 5 citations
+    When I run graph standing-due due.txt
+    Then the file "due.txt" contains "ARXIV:2611.00001"
+    And the file "due.txt" does not contain "2611.00002"
+    When I run graph standing-due due.txt --days 1
+    Then the file "due.txt" contains "ARXIV:2611.00002"
+
+  Scenario: Merging two copies of a paper keeps the newer citation counts
+    Given the graph holds a paper "Paper A" with id "paper:a"
+    And the graph holds a paper "Paper A copy" with id "paper:b"
+    And the paper "paper:a" was checked 40 days ago with 3 citations
+    And the paper "paper:b" was checked 2 days ago with 9 citations
+    When I run graph merge paper:a paper:b
+    Then the command succeeds
+    And the paper "paper:a" has 9 citations
+
+  Scenario: Made-up citation counts are refused
+    Given the graph holds a paper "Paper A" with id "paper:2611.00001"
+    And the paper "paper:2611.00001" has a standing with no checked date
+    When I run graph validate
+    Then the command fails
+    And the error mentions "standing has bad or missing checked"
+
   Scenario: An invalid graph is refused instead of silently repaired
     Given the graph files contain an invalid entity
     When I run graph validate

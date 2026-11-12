@@ -119,7 +119,7 @@ test("safeUrl only allows http and https", () => {
 
 test("gapLabel ignores object built-ins", () => {
   assert.equal(lib.gapLabel("missing"), "not in graph");
-  assert.equal(lib.gapLabel("unextracted"), "only authors or citations in graph");
+  assert.equal(lib.gapLabel("unextracted"), "nothing extracted yet");
   for (const other of ["extracted", "__proto__", "constructor", "toString", undefined])
     assert.equal(lib.gapLabel(other), "");
 });
@@ -154,7 +154,7 @@ test("buildRecap renders every view with escaped text", () => {
   assert.match(html, /href="https:\/\/arxiv.org\/abs\/2601.00001" target="_blank" rel="noopener noreferrer"/);
   assert.match(html, /Needs graph extraction \(2\)/);
   assert.match(html, /<span class="tag warn">not in graph<\/span>/);
-  assert.match(html, /<span class="tag warn">only authors or citations in graph<\/span>/);
+  assert.match(html, /<span class="tag warn">nothing extracted yet<\/span>/);
   assert.ok(!html.includes("[object Object]"));
   assert.match(html, /<details open><summary><strong>2026-01-03<\/strong> · 1 paper<\/summary>/);
   assert.match(html, /1 insight, 1 paper, 2 pins, 2 questions/);
@@ -173,6 +173,67 @@ test("buildRecap renders every view with escaped text", () => {
   assert.match(html, /<code><a href="#p-ARXIV-2601-00001">ARXIV:2601.00001<\/a><\/code>/);
   assert.match(html, /<summary><strong>dataset<\/strong> \(1\)<\/summary>/);
   assert.ok(html.indexOf("<strong>dataset</strong>") < html.indexOf("<strong>tool</strong>"));
+});
+
+test("papers show their standing and their place in the collection", () => {
+  const { html } = lib.buildRecap({
+    ...DATA,
+    papers: [
+      {
+        ...DATA.papers[0],
+        standing: { citations: 1, influential: 1, venue: "<NeurIPS>", year: 2025, checked: "2026-01-03" },
+        collection: { cited_by: 2, insights: 1, pins: 0 },
+      },
+      { ...DATA.papers[2], standing: { citations: 0, year: 2026, checked: "2026-01-03" } },
+      { ...DATA.papers[1], standing: { checked: "2026-01-04" } },
+      DATA.papers[3],
+    ],
+  });
+  assert.match(html, /<p class="meta">no citation data · checked 2026-01-04<\/p>/);
+  assert.ok(!html.includes("undefined"), "a missing count must not be printed");
+  assert.match(
+    html,
+    /1 citation \(1 influential\) · &lt;NeurIPS&gt; · 2025 · checked 2026-01-03 · in your collection: cited by 2 of your papers, 1 insight</,
+  );
+  assert.match(html, /0 citations · 2026 · checked 2026-01-03 <span class="tag">new: too early to judge<\/span><\/p>/);
+  assert.match(html, /<p class="meta">citations not checked yet<\/p>/);
+  assert.match(html, /<select id="paper-order" aria-label="Sort papers"><option value="status">by reading status/);
+  assert.ok(!lib.buildRecap({ ...DATA, papers: [] }).html.includes("paper-order"));
+});
+
+test("renderPaperList sorts by citations, citations per year, or the collection", () => {
+  const paper = (id, added, standing, collection) => ({ id, title: id, added, status: "read", standing, collection });
+  const data = {
+    generated: "2026-06-01 10:00",
+    insights: [],
+    papers: [
+      paper("old", "2026-01-01", { citations: 100, year: 2016, checked: "x" }, { cited_by: 1 }),
+      paper("recent", "2026-01-02", { citations: 30, year: 2025, checked: "x" }, { insights: 2, pins: 2 }),
+      paper("none", "2026-01-03", undefined, undefined),
+      paper("tied", "2026-01-04", undefined, { cited_by: 1 }),
+      // Semantic Scholar doesn't know this one, and the other has counts but no year to divide them by.
+      paper("unknown", "2026-01-05", { checked: "x" }, undefined),
+      paper("noyear", "2026-01-06", { citations: 500, checked: "x" }, undefined),
+    ],
+  };
+  const order = (name, source = data) =>
+    [...lib.renderPaperList(source, name).matchAll(/<article id="p-(\w+)"/g)].map((m) => m[1]);
+  assert.deepEqual(order("cited"), ["noyear", "old", "recent", "unknown", "tied", "none"]);
+  assert.deepEqual(order("per-year"), ["recent", "old", "noyear", "unknown", "tied", "none"]);
+  assert.deepEqual(order("collection"), ["recent", "tied", "old", "noyear", "unknown", "none"]);
+  assert.deepEqual(order("status"), ["noyear", "unknown", "tied", "none", "recent", "old"]);
+  assert.deepEqual(order("toString"), order("status"));
+  assert.deepEqual(order("per-year", { ...data, generated: undefined }), [
+    "old",
+    "recent",
+    "noyear",
+    "unknown",
+    "tied",
+    "none",
+  ]);
+  assert.equal(lib.renderPaperList({ ...data, papers: [] }, "cited"), '<p class="empty">No papers yet.</p>');
+  const noDates = { ...data, papers: [paper("first"), paper("second", "2026-01-01"), paper("third")] };
+  assert.match(lib.renderPaperList(noDates, "cited"), /p-second[\s\S]*p-first[\s\S]*p-third/);
 });
 
 test("buildRecap handles an empty research folder and a broken graph", () => {

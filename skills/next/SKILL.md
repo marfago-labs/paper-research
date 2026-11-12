@@ -19,6 +19,7 @@ argument-hint: "[topic]"
    - **Rating:** `High`, `Medium`, `Low`, or `Too early`. It's your judgement from that evidence, so don't present it as a calculated score.
    - **New papers:** citations mean little in the first few months, so rate from the authors and venue, or use `Too early` if they don't settle it.
    - **Keep it separate:** this measures attention and standing, not whether the paper is correct or fits the user. If the data isn't available, say so rather than estimating.
+   - **Picks from the list:** for a pick already in the graph, use its saved standing if it was checked in the last 30 days. Otherwise save the `batch` output to a file and run `graph.py standing <file>`, so the counts are kept.
 6. For each pick, give the title, publication date, link, why it matches this user, its academic rating with the evidence, and one reason to be cautious if there is one. Say whether it is on their list or newly found.
 7. About 1 in 5 recommendations should be outside the usual topics. Label it `outside your usual topics`, and keep the other pick on target.
 
