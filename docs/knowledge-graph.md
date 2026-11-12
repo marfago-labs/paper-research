@@ -38,7 +38,9 @@ A relation connects two entities and says where it comes from.
 
 - **`add` saves a paper and its authors** with their Semantic Scholar ids, and adds `authored-by` links and any citation links to papers you already have.
 - **`read` extracts the rest, immediately,** without waiting for you to ask: the datasets, models, methods, tools, and concepts the paper uses, evaluates on, builds on, or proposes. It links each one to an existing entity when there is one, and adds a new entity when there isn't.
-- **Citation links come from Semantic Scholar.** For each paper it fetches the references and the citing papers, and adds a `cites` link wherever the other paper is also in your graph. These are marked `verified`.
+- **Citation links come from Semantic Scholar.** One batch request fetches the reference lists of many papers, and a `cites` link is added from each paper to every paper it cites that is also in your graph. These are marked `verified`. A link joins two papers only if both are already in the graph, so the links grow with it. The `recap` skill repeats the request for papers that were last checked more than 30 days ago, and that picks up links to papers added since.
+
+- **Each paper's standing is saved with it.** `standing` holds its citations, influential citations, venue, and year from Semantic Scholar, and the date they were checked. `add` and `read` save it from the requests they already make, and the `recap` skill checks again any paper whose counts are more than 30 days old, in one batch request. A paper Semantic Scholar has no data for yet, such as a brand-new one, keeps only the date it was checked and is tried again after 30 days.
 
 A paper with only its authors and citations in the graph hasn't been extracted yet. The recap page lists those under **Needs graph extraction**, and `graph.py islands` prints them. The page also lists any paper whose full text is saved in `research/fulltext/` but that `papers.md` doesn't list, because Claude read it without running `read`.
 

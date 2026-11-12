@@ -31,6 +31,18 @@ Feature: A recap page that shows what has been done so far
     Then the recap data marks ARXIV:2611.00001 as "unextracted"
     And the recap data marks ARXIV:2611.00002 as "missing"
 
+  Scenario: Each paper shows its citations and how often it comes up in my collection
+    Given a research folder with these papers
+      | added      | title     | id               | status |
+      | 2026-11-05 | Cited     | ARXIV:2611.00001 | read   |
+      | 2026-11-06 | Citing    | ARXIV:2611.00002 | read   |
+    And the graph has the paper "2611.00001" with 42 citations, cited by the paper "2611.00002"
+    And an insight "Keep reviewers read-only" drawn from ARXIV:2611.00001
+    When I refresh the recap
+    Then the recap data gives ARXIV:2611.00001 42 citations
+    And the recap data says ARXIV:2611.00001 is cited by 1 of my papers, in 1 insight, and in 0 pins
+    And the recap data has no citation counts for ARXIV:2611.00002
+
   Scenario: A paper with extracted entities is not flagged
     Given a research folder with these papers
       | added      | title     | id               | status |

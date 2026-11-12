@@ -77,8 +77,8 @@ Not an error. The new entity looks like an existing one, and Claude decides whet
 **`"..." matches more than one entity, so use an id`.**
 Two entities share that name. Claude uses an id. If you're running a command yourself, copy an id from the message.
 
-**A paper shows `only authors or citations in graph` on the recap page.**
-It hasn't been extracted. Ask Claude to extract it, or discuss it with `read`.
+**A paper shows `nothing extracted yet` on the recap page.**
+It is in the graph with only its authors and citation links, because it was saved with `add` but never read. Ask Claude to extract it, or discuss it with `read`.
 
 ## The recap page
 

@@ -81,6 +81,8 @@
   .gaps h3 { margin: 0; }
   .gaps .meta { margin: 8px 0 0; }
   .warning { color: var(--warn); }
+  .recap label.order { display: block; margin: 8px 0 4px; color: var(--muted); }
+  .recap label.order select { margin-left: 6px; padding: 3px 4px; font: inherit; color: var(--fg); background: var(--card); border: 1px solid var(--line); border-radius: 4px; }
   @media (max-width: 600px) {
     .recap dl { grid-template-columns: 1fr; }
     .recap dt { margin-top: 6px; }
@@ -395,7 +397,7 @@ function initGraph(GRAPH) {
 
 // Recap view, built by recap-lib.js.
 const DATA = window.RECAP_DATA;
-const { esc, hashName, buildRecap } = window.RecapLib;
+const { esc, hashName, buildRecap, renderPaperList } = window.RecapLib;
 
 function renderRecap() {
   const views = document.getElementById("recap-views");
@@ -409,6 +411,12 @@ function renderRecap() {
     document.getElementById("n-" + name).textContent = count;
   }
   views.innerHTML = recap.html;
+  const order = document.getElementById("paper-order");
+  if (order) {
+    order.addEventListener("change", () => {
+      document.getElementById("paper-list").innerHTML = renderPaperList(DATA, order.value);
+    });
+  }
 }
 
 // One view at a time. The address picks it: a view's own name, or the id of

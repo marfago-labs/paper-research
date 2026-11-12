@@ -11,6 +11,7 @@ import argparse
 import json
 import re
 import sys
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
@@ -112,17 +113,40 @@ def load_graph(directory):
 
 
 def graph_status(papers, graph_data):
-    """Mark each listed paper as extracted, unextracted (only author or citation links), or missing."""
+    """Mark each listed paper as extracted, unextracted (only author or citation links), or missing.
+
+    A paper in the graph also gets its saved standing, and how many papers in the graph cite it.
+    """
     if graph_data["error"]:
         return
-    index = paper_index(graph_data["entities"])
-    waiting = {e["id"] for e in graph.islands(graph_data["entities"], graph_data["relations"])}
+    entities, relations = graph_data["entities"], graph_data["relations"]
+    index = paper_index(entities)
+    by_id = {e["id"]: e for e in entities}
+    waiting = {e["id"] for e in graph.islands(entities, relations)}
+    cited_by = Counter(r["to"] for r in relations if r["rel"] == "cites")
     for paper in papers:
         found = index.get(paper_key(paper["id"]))
         if not found:
             paper["graph"] = "missing"
         else:
-            paper["graph"] = "unextracted" if found in waiting else "extracted"
+            paper["collection"]["cited_by"] = cited_by[found]
+            paper.update(graph_facts(by_id[found], found in waiting))
+
+
+def graph_facts(entity, waiting):
+    """What the graph says about a paper in it: whether anything was extracted, and its saved standing."""
+    facts = {"graph": "unextracted" if waiting else "extracted"}
+    if "standing" in entity:
+        facts["standing"] = entity["standing"]
+    return facts
+
+
+def collection_counts(papers, pins, insights):
+    """How often each paper comes up in the user's own notes: insights and pins that cite it."""
+    in_pins = Counter(paper_id for pin in pins for paper_id in set(PAPER_ID.findall(pin["body"])))
+    in_insights = Counter(paper_id for insight in insights for paper_id in insight["papers"])
+    for paper in papers:
+        paper["collection"] = {"cited_by": 0, "insights": in_insights[paper["id"]], "pins": in_pins[paper["id"]]}
 
 
 def paper_index(entities):
@@ -168,13 +192,16 @@ def unlisted_fulltext(research, papers):
 def build_data(research, now=None):
     papers = parse_papers(read_text(research / "papers.md"))
     papers += unlisted_fulltext(research, papers)
+    pins = parse_pins(read_text(research / "pins.md"))
+    insights = parse_insights(read_text(research / "insights.md"))
+    collection_counts(papers, pins, insights)
     graph_data = load_graph(research / "graph")
     graph_status(papers, graph_data)
     return {
         "generated": now or datetime.now().strftime("%Y-%m-%d %H:%M"),
         "papers": papers,
-        "pins": parse_pins(read_text(research / "pins.md")),
-        "insights": parse_insights(read_text(research / "insights.md")),
+        "pins": pins,
+        "insights": insights,
         "questions": parse_questions(read_text(research / "user-facts.md")),
         "graph": graph_data,
     }

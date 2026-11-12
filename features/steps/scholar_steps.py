@@ -6,6 +6,7 @@ import json
 import shlex
 import tempfile
 import urllib.error
+import urllib.parse
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -64,15 +65,51 @@ def scholar_odd(context):
     context.s2_answers.append({"error": "surprise"})
 
 
-@when("I run scholar {command}")
-def run_scholar(context, command):
+@given('a file "{name}" of {count:d} arXiv ids')
+def scholar_ids_file(context, name, count):
+    ids = "".join(f"2401.{n:05d}\n" for n in range(1, count + 1))
+    (context.workspace / name).write_text(ids, encoding="utf-8")
+
+
+@given("Semantic Scholar then answers with {count:d} unknown papers")
+def scholar_unknown_many(context, count):
+    context.s2_answers.append([None] * count)
+
+
+def run_s2(context, argv):
     out = io.TextIOWrapper(io.BytesIO(), encoding="utf-8")
     err = io.TextIOWrapper(io.BytesIO(), encoding="utf-8")
     with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-        code = s2.main(shlex.split(command))
+        code = s2.main(argv)
     out.seek(0)
     err.seek(0)
     context.result = SimpleNamespace(code=code, out=out.read(), err=err.read())
+
+
+@when("I run scholar {command}")
+def run_scholar(context, command):
+    run_s2(context, shlex.split(command))
+
+
+@when('I look up the papers listed in "{name}"')
+def run_scholar_batch_file(context, name):
+    run_s2(context, ["batch", "--ids-file", str(context.workspace / name)])
+
+
+@when('I look up the papers listed in "{name}" with their references')
+def run_scholar_batch_references(context, name):
+    run_s2(context, ["batch", "--ids-file", str(context.workspace / name), "--with-references"])
+
+
+@then("every request asked for the reference lists")
+def scholar_asked_references(context):
+    asked = [urllib.parse.unquote(request.full_url) for request in context.s2_calls]
+    assert asked and all("references.paperId" in url for url in asked), asked
+
+
+@then("{count:d} results are printed")
+def scholar_result_count(context, count):
+    assert len(json.loads(context.result.out)) == count, context.result.out[:200]
 
 
 @then("Semantic Scholar was asked {count:d} times")

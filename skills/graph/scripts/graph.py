@@ -2,7 +2,8 @@
 """Query and change the workspace knowledge graph. Standard library only.
 
 Read: validate, stats, search, neighbours, path, dupes, islands.
-Write: add, update, link, unlink, merge, remove, cites. Every write checks for duplicates and
+standing-due writes the ids of the papers whose citation counts need checking again to a file.
+Write: add, update, link, unlink, merge, remove, cites, standing. Every write checks for duplicates and
 validates the whole graph before saving, so never edit the JSONL files by hand.
 Run from the workspace root. The graph is drawn by the recap skill's page.
 Exit codes: 0 success, 1 error or nothing found, 2 usage error,
@@ -13,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import datetime
 import itertools
 import json
 import os
@@ -65,7 +67,12 @@ FIELD_TYPES = {
     "note": str,
     "ids": dict,
     "distinct_from": list,
+    "standing": dict,
 }
+# A paper's standing in the research community, copied from Semantic Scholar with the date it was checked,
+# because citation counts change. Only checked is required: a record may lack the venue or year.
+STANDING_FIELDS = {"citations": int, "influential": int, "venue": str, "year": int, "checked": str}
+DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 RELATION_FIELDS = ("from", "rel", "to", "source", "status")
 TYPE_NAMES = {str: "text", list: "a list of text", dict: "an object"}
 # dupes compares only entities that share a key. A character trigram shared by more than this many entities of
@@ -331,7 +338,37 @@ def field_errors(entity):
         errors.append(f"{entity_id}: id must start with '{entity_type}:'")
     if url and not re.match(r"https?://", url):
         errors.append(f"{entity_id}: url must start with http:// or https://")
-    return errors
+    return errors + standing_errors(entity)
+
+
+def valid_standing_field(field, value):
+    """Whether one field of a standing is known and of the right type: a count is a whole number, not negative,
+    and checked is a date."""
+    kind = STANDING_FIELDS.get(field)
+    right_type = kind is not None and type(value) is kind
+    if not right_type:
+        return False
+    if kind is int:
+        return value >= 0
+    return field != "checked" or bool(DATE.fullmatch(value))
+
+
+def standing_errors(entity):
+    """Problems with a paper's standing: only papers have one, and it names the fields that are wrong."""
+    if "standing" not in entity:
+        return []
+    standing, entity_id = entity["standing"], entity["id"]
+    if entity.get("type") != "paper":
+        return [f"{entity_id}: only papers have a standing"]
+    bad = [field for field, value in standing.items() if not valid_standing_field(field, value)]
+    if "checked" not in standing:
+        bad.append("checked")
+    if not bad:
+        return []
+    return [
+        f"{entity_id}: standing has bad or missing {', '.join(sorted(bad))}"
+        " (counts are whole numbers, venue is text, checked is a date like 2026-01-31)"
+    ]
 
 
 def name_errors(entity, names):
@@ -841,6 +878,8 @@ def absorb(keep, drop):
     for field in ("url", "note"):
         if field in drop and field not in keep:
             keep[field] = drop[field]
+    if "standing" in drop and drop["standing"]["checked"] > keep.get("standing", {}).get("checked", ""):
+        keep["standing"] = drop["standing"]
 
 
 def repoint_distinct(entity, keep_id, drop_id):
@@ -955,6 +994,31 @@ def adopt_s2_id(paper, record):
         merge_ids(paper, {"s2": record["paperId"]})
 
 
+def today():
+    return datetime.date.today().isoformat()
+
+
+def set_standing(paper, record):
+    """Copy the paper's citation counts, venue, and year from a Semantic Scholar record. True if it had counts."""
+    if type(record.get("citationCount")) is not int:
+        return False
+    standing = {"citations": record["citationCount"]}
+    for field, key, kind in (
+        ("influential", "influentialCitationCount", int),
+        ("venue", "venue", str),
+        ("year", "year", int),
+    ):
+        if type(record.get(key)) is kind and record[key] != "":
+            standing[field] = record[key]
+    paper["standing"] = {**standing, "checked": today()}
+    return True
+
+
+def describe_standing(paper):
+    standing = paper["standing"]
+    return f"{paper['id']}: {standing['citations']} citations, checked {standing['checked']}"
+
+
 def cmd_cites(args):
     entities, relations = checked_load(args.data)
     paper = resolve(entities, args.paper)
@@ -963,10 +1027,120 @@ def cmd_cites(args):
     record = read_citations(args.file)
     adopt_s2_id(paper, record)
     added = cites(entities, relations, paper["id"], record)
+    has_standing = set_standing(paper, record)
     save(args.data, entities, relations)
     for start, end in added:
         print(f"linked {start} cites {end}")
     print(f"{len(added)} citation links added")
+    if has_standing:
+        print(f"standing: {describe_standing(paper)}")
+    return 0
+
+
+def read_batch(file):
+    """The saved output of s2.py batch, or of s2.py paper, as a list of paper records."""
+    try:
+        records = json.loads(Path(file).read_text(encoding="utf-8"))
+    except (OSError, ValueError) as err:
+        raise GraphError(f"can't read {file}: {err}") from None
+    records = [records] if isinstance(records, dict) else records
+    if not isinstance(records, list) or not all(isinstance(record, dict) for record in records):
+        raise GraphError("expected the output of: s2.py batch ID...")
+    return records
+
+
+def count(number, word):
+    return f"{number} {word}{'' if number == 1 else 's'}"
+
+
+def requested_keys(record):
+    """The key of the id that was asked about. A paper Semantic Scholar doesn't know comes back with nothing else."""
+    asked = str(record.get("requestedId") or "")
+    kind, _, value = asked.partition(":")
+    if kind in ("ARXIV", "DOI") and value:
+        return {(kind.lower(), id_key(value))}
+    return {("s2", id_key(asked))} if asked else set()
+
+
+def mark_checked(paper):
+    """Note that Semantic Scholar had no counts for the paper, so it isn't asked again until the check is old.
+    Counts saved earlier are kept."""
+    if "citations" not in paper.get("standing", {}):
+        paper["standing"] = {"checked": today()}
+
+
+def find_paper(index, record):
+    """The graph paper a Semantic Scholar record describes, or None if it isn't in the graph."""
+    return next((index[key] for key in s2_keys(record) | requested_keys(record) if key in index), None)
+
+
+def save_counts(paper, record):
+    """Save the record's counts on the paper. Returns "updated", or "no counts" if the record had none."""
+    if set_standing(paper, record):
+        adopt_s2_id(paper, record)
+        return "updated"
+    mark_checked(paper)
+    return "no counts"
+
+
+def apply_standing(entities, relations, records):
+    """Save each record's counts, and link the paper to the graph papers in its reference list. Returns how many
+    papers were updated, had no counts, or matched no paper in the graph, how many records came with a reference
+    list, and how many citation links they added."""
+    index = {key: e for e in entities if e["type"] == "paper" for key in external_keys(e)}
+    results: Counter[str] = Counter()
+    for record in records:
+        paper = find_paper(index, record)
+        if paper is None:
+            results["unmatched"] += 1
+            continue
+        results[save_counts(paper, record)] += 1
+        if isinstance(record.get("references"), list):
+            results["with references"] += 1
+            results["links"] += len(cites(entities, relations, paper["id"], record))
+    return results
+
+
+def standing_summary(results):
+    summary = [f"{count(results['updated'], 'paper')} updated"]
+    if results["no counts"]:
+        summary.append(f"{results['no counts']} without citation data")
+    if results["with references"]:
+        summary.append(f"{count(results['links'], 'citation link')} added")
+    summary.append(f"{count(results['unmatched'], 'record')} matched no paper in the graph")
+    return ", ".join(summary)
+
+
+def cmd_standing(args):
+    entities, relations = checked_load(args.data)
+    results = apply_standing(entities, relations, read_batch(args.file))
+    save(args.data, entities, relations)
+    print(standing_summary(results))
+    return 0
+
+
+def lookup_id(paper):
+    """The id to look the paper up by on Semantic Scholar, or None if it has none."""
+    keys = dict(external_keys(paper))
+    for kind, prefix in (("s2", ""), ("arxiv", "ARXIV:"), ("doi", "DOI:")):
+        if kind in keys:
+            return prefix + keys[kind]
+    return None
+
+
+def cmd_standing_due(args):
+    entities, _ = checked_load(args.data)
+    cutoff = (datetime.date.today() - datetime.timedelta(days=args.days)).isoformat()
+    due = [
+        lookup_id(e)
+        for e in entities
+        if e["type"] == "paper" and e.get("standing", {}).get("checked", "") <= cutoff and lookup_id(e)
+    ]
+    try:
+        Path(args.file).write_text("".join(f"{paper_id}\n" for paper_id in due), encoding="utf-8")
+    except OSError as err:
+        raise GraphError(f"can't write {args.file}: {err}") from None
+    print(f"{count(len(due), 'paper')} due" if due else "no papers due")
     return 0
 
 
@@ -1060,6 +1234,17 @@ def build_parser():
     cites_cmd.add_argument("paper", help="id, name, or alias")
     cites_cmd.add_argument("file", help="saved output of: s2.py paper ID --references --citations")
     cites_cmd.set_defaults(func=cmd_cites)
+
+    standing_cmd = commands.add_parser("standing", help="save papers' citation counts from Semantic Scholar")
+    standing_cmd.add_argument("file", help="saved output of: s2.py batch ID...")
+    standing_cmd.set_defaults(func=cmd_standing)
+
+    due_cmd = commands.add_parser(
+        "standing-due", help="write the ids of papers whose standing is missing or old to a file, one per line"
+    )
+    due_cmd.add_argument("file", help="where to write the ids, for: s2.py batch --ids-file FILE")
+    due_cmd.add_argument("--days", type=int, default=30, help="how old a check may be (default: 30)")
+    due_cmd.set_defaults(func=cmd_standing_due)
 
     return parser
 

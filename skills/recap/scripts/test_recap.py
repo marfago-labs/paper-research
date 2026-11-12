@@ -124,6 +124,36 @@ class Data(unittest.TestCase):
         self.assertEqual(len(data["graph"]["entities"]), 4)
         self.assertEqual([p["graph"] for p in data["papers"]], ["extracted", "unextracted", "unextracted", "missing"])
 
+    def test_each_paper_gets_its_standing_and_its_place_in_the_collection(self):
+        standing = {"citations": 40, "influential": 2, "year": 2025, "checked": "2026-01-03"}
+        entities = [{**ENTITIES[0], "standing": standing}, *ENTITIES[1:]]
+        cites = [
+            {"from": citing, "rel": "cites", "to": "paper:2601.00001", "source": "S2", "status": "verified"}
+            for citing in ("paper:old", "paper:blog")
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            write_research(Path(tmp), entities=entities)
+            relations = "\n".join(json.dumps(r) for r in [RELATION, *cites])
+            (Path(tmp) / "graph" / "relations.jsonl").write_text(relations, encoding="utf-8")
+            papers = recap.build_data(Path(tmp))["papers"]
+        self.assertEqual(papers[0]["standing"], standing)
+        self.assertEqual(
+            [p["collection"] for p in papers],
+            [
+                {"cited_by": 2, "insights": 1, "pins": 1},
+                {"cited_by": 0, "insights": 1, "pins": 0},
+                {"cited_by": 0, "insights": 0, "pins": 0},
+                {"cited_by": 0, "insights": 0, "pins": 0},
+            ],
+        )
+        self.assertEqual(["standing" in p for p in papers], [True, False, False, False])
+
+    def test_the_notes_still_count_when_the_graph_is_broken(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write_research(Path(tmp), entities=[ENTITIES[0]])
+            papers = recap.build_data(Path(tmp))["papers"]
+        self.assertEqual(papers[0]["collection"], {"cited_by": 0, "insights": 1, "pins": 1})
+
     def test_a_saved_full_text_missing_from_papers_md_is_flagged_as_not_in_the_graph(self):
         with tempfile.TemporaryDirectory() as tmp:
             research = Path(tmp)

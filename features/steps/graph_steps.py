@@ -1,5 +1,6 @@
 """Steps for the knowledge graph features. The graph is changed only through its CLI."""
 
+import datetime
 import json
 import shlex
 import subprocess
@@ -69,6 +70,66 @@ def graph_relation(context, start, rel, end, status):
     entities, relations = read_all(context)
     relations.append({"from": start, "rel": rel, "to": end, "source": "test", "status": status})
     write_all(context, list(entities.values()), relations)
+
+
+@given('Semantic Scholar\'s batch output in "{name}" gives ARXIV:{number} {count:d} citations')
+def batch_output(context, name, number, count):
+    record = {"requestedId": f"ARXIV:{number}", "paperId": "S2", "externalIds": {"ArXiv": number}}
+    (context.workspace / name).write_text(json.dumps([{**record, "citationCount": count}]), encoding="utf-8")
+
+
+@given('Semantic Scholar\'s record in "{name}" gives ARXIV:{number} {count:d} citations and no links')
+def paper_record(context, name, number, count):
+    record = {"paperId": "S2", "externalIds": {"ArXiv": number}, "citationCount": count}
+    text = json.dumps({**record, "references": [], "citations": []})
+    (context.workspace / name).write_text(text, encoding="utf-8")
+
+
+@given('Semantic Scholar\'s batch output in "{name}" gives ARXIV:{number} {count:d} citations, citing ARXIV:{other}')
+def batch_output_with_reference(context, name, number, count, other):
+    reference = {"paperId": "REF", "externalIds": {"ArXiv": other}}
+    record = {"requestedId": f"ARXIV:{number}", "paperId": "S2", "externalIds": {"ArXiv": number}}
+    record = {**record, "citationCount": count, "references": [reference]}
+    (context.workspace / name).write_text(json.dumps([record]), encoding="utf-8")
+
+
+@given('Semantic Scholar\'s batch output in "{name}" says it does not know ARXIV:{number}')
+def batch_output_unknown(context, name, number):
+    record = {"requestedId": f"ARXIV:{number}", "error": "not found"}
+    (context.workspace / name).write_text(json.dumps([record]), encoding="utf-8")
+
+
+@then('the paper "{ident}" was checked today but has no citation counts')
+def checked_without_counts(context, ident):
+    standing = read_all(context)[0][ident]["standing"]
+    assert standing == {"checked": datetime.date.today().isoformat()}, standing
+
+
+@given('the paper "{ident}" was checked {days:d} days ago with {count:d} citations')
+def checked_days_ago(context, ident, days, count):
+    entities, relations = read_all(context)
+    checked = (datetime.date.today() - datetime.timedelta(days=days)).isoformat()
+    entities[ident]["standing"] = {"citations": count, "checked": checked}
+    write_all(context, list(entities.values()), relations)
+
+
+@then('the paper "{ident}" has {count:d} citations')
+def has_citations(context, ident, count):
+    standing = read_all(context)[0][ident]["standing"]
+    assert standing["citations"] == count, standing
+
+
+@given('the paper "{ident}" has a standing with no checked date')
+def standing_without_date(context, ident):
+    entities, relations = read_all(context)
+    entities[ident]["standing"] = {"citations": 1000}
+    write_all(context, list(entities.values()), relations)
+
+
+@then('the paper "{ident}" has {count:d} citations checked today')
+def has_standing(context, ident, count):
+    standing = read_all(context)[0][ident]["standing"]
+    assert standing == {"citations": count, "checked": datetime.date.today().isoformat()}, standing
 
 
 @given("the graph files contain an invalid entity")

@@ -198,8 +198,76 @@ class Commands(unittest.TestCase):
 
     def test_batch_rejects_too_many_ids(self):
         args = s2.build_parser().parse_args(["batch", *[f"id{n}" for n in range(501)]])
-        with self.assertRaisesRegex(ValueError, "at most 500"):
+        with self.assertRaisesRegex(ValueError, "at most 500.*--ids-file"):
             args.func(args)
+
+    def test_batch_reads_any_number_of_ids_from_a_file_in_requests_of_500(self):
+        ids = [f"ARXIV:2401.{n:05d}" for n in range(1, 1202)]
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "ids.txt"
+            path.write_text("\n".join(ids) + "\n\n", encoding="utf-8")
+            args = s2.build_parser().parse_args(["batch", "--ids-file", str(path), "2303.11366"])
+
+            def answer(method, route, params, body):
+                return [None if requested == "ARXIV:2303.11366" else {} for requested in body["ids"]]
+
+            with mock.patch.object(s2, "request", side_effect=answer) as sent:
+                result = args.func(args)
+        sizes = [len(call.args[3]["ids"]) for call in sent.call_args_list]
+        self.assertEqual(sizes, [500, 500, 202])
+        self.assertEqual([paper["requestedId"] for paper in result], ["ARXIV:2303.11366", *ids])
+        self.assertEqual(result[0], {"requestedId": "ARXIV:2303.11366", "error": "not found"})
+
+    def test_batch_can_also_ask_for_the_reference_lists_in_requests_of_100(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "ids.txt"
+            path.write_text("\n".join(f"ARXIV:2401.{n:05d}" for n in range(1, 202)), encoding="utf-8")
+            with_references = s2.build_parser().parse_args(["batch", "--ids-file", str(path), "--with-references"])
+            plain = s2.build_parser().parse_args(["batch", "--ids-file", str(path)])
+
+            def answer(method, route, params, body):
+                return [{} for _ in body["ids"]]
+
+            with mock.patch.object(s2, "request", side_effect=answer) as sent:
+                with_references.func(with_references)
+            sizes = [len(call.args[3]["ids"]) for call in sent.call_args_list]
+            fields = [call.args[2]["fields"] for call in sent.call_args_list]
+            with mock.patch.object(s2, "request", side_effect=answer) as plain_sent:
+                plain.func(plain)
+        self.assertEqual(sizes, [100, 100, 1])
+        self.assertTrue(all("references.paperId" in f and "references.externalIds" in f for f in fields), fields)
+        self.assertTrue(all("citations" not in f.replace("citationCount", "") for f in fields), fields)
+        self.assertEqual(plain_sent.call_count, 1)
+        self.assertNotIn("references", plain_sent.call_args.args[2]["fields"])
+
+    def test_a_failed_later_request_keeps_the_papers_already_fetched(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "ids.txt"
+            path.write_text("\n".join(f"ARXIV:2401.{n:05d}" for n in range(1, 502)), encoding="utf-8")
+            argv = ["batch", "--ids-file", str(path)]
+            args = s2.build_parser().parse_args(argv)
+            failures = [[{}] * 500, s2.ApiError("HTTP 503 from /graph/v1/paper/batch")]
+            with mock.patch.object(s2, "request", side_effect=failures):
+                with self.assertRaisesRegex(s2.PartialBatch, "500 of 501 papers") as caught:
+                    args.func(args)
+            self.assertEqual(len(caught.exception.results), 500)
+            with mock.patch.object(s2, "request", side_effect=failures[1]):
+                with self.assertRaises(s2.ApiError) as first:
+                    args.func(args)
+            self.assertNotIsInstance(first.exception, s2.PartialBatch)
+
+    def test_batch_needs_some_ids_and_a_readable_file(self):
+        with tempfile.TemporaryDirectory() as folder:
+            empty = Path(folder) / "empty.txt"
+            empty.write_text("\n", encoding="utf-8")
+            for argv, expected in (
+                (["batch"], "give at least one"),
+                (["batch", "--ids-file", str(empty)], "give at least one"),
+                (["batch", "--ids-file", str(Path(folder) / "missing.txt")], "can't read"),
+            ):
+                args = s2.build_parser().parse_args(argv)
+                with self.assertRaisesRegex(ValueError, expected):
+                    args.func(args)
 
 
 class Pacing(unittest.TestCase):
@@ -353,6 +421,16 @@ class CommandLine(unittest.TestCase):
         out.seek(0)
         err.seek(0)
         return code, out.read(), err.read()
+
+    def test_a_partly_failed_batch_prints_what_it_fetched_and_exits_with_1(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "ids.txt"
+            path.write_text("\n".join(f"ARXIV:2401.{n:05d}" for n in range(1, 502)), encoding="utf-8")
+            with mock.patch.object(s2, "request", side_effect=[[{}] * 500, s2.ApiError("HTTP 503")]):
+                code, out, err = self.run_main(["batch", "--ids-file", str(path)])
+        self.assertEqual(code, 1)
+        self.assertEqual(len(json.loads(out)), 500)
+        self.assertIn("500 of 501 papers", err)
 
     def test_success_prints_json_without_escaping_text(self):
         with mock.patch.object(s2, "request", return_value={"title": "τ²"}):

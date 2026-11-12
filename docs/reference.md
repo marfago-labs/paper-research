@@ -29,7 +29,9 @@ python <skills>/graph/scripts/graph.py [--data FOLDER] COMMAND ...
 | `unlink START REL END` | Removes one relation. |
 | `remove ENTITY` | Removes an entity and all its relations. |
 | `merge KEEP DROP` | Folds a duplicate into the entity to keep, with its names, ids, and connections. |
-| `cites PAPER FILE` | Adds `cites` links from saved `s2.py paper ID --references --citations` output. |
+| `cites PAPER FILE` | Adds `cites` links from saved `s2.py paper ID --references --citations` output, and saves the paper's standing from it. |
+| `standing FILE` | Saves the standing of each paper in saved `s2.py batch` output that is in the graph: citations, influential citations, venue, year, and the date checked. A paper Semantic Scholar has no data for gets only the date checked. If the output was made with `--with-references`, it also adds a `cites` link from each paper to every paper in the graph that it cites. Prints one line with the number of papers updated, the number without data, the number of links added, and the number of records that matched no paper in the graph. |
+| `standing-due FILE [--days N]` | Writes the ids of papers whose standing is missing or older than N days (default 30) to FILE, one per line, ready for `s2.py batch --ids-file`, and says how many. Changes nothing in the graph. |
 
 An `ENTITY` is an id, a name, or an alias. If a name matches more than one entity, the command lists their ids and stops. Use an id.
 
@@ -93,7 +95,7 @@ python <skills>/scholar/scripts/s2.py COMMAND ...
 |---|---|
 | `search QUERY [--year Y] [--min-citations N] [--limit N] [--offset N]` | Finds papers by keyword. `--year` is `2025`, `2024-2025`, or `2025-`. Limit 1 to 100, default 10. |
 | `paper ID [--citations] [--references] [--limit N]` | Details for one paper, with its citing or cited papers. Limit 1 to 1000, default 20. |
-| `batch ID [ID ...]` | Details for up to 500 papers in one request. |
+| `batch [ID ...] [--ids-file FILE] [--with-references]` | Details for papers, 500 to a request. `--with-references` also fetches each paper's reference list, 100 papers to a request, for `graph.py standing`. Up to 500 `ID`s fit on the command line. `--ids-file` reads any number from a file, one per line, and sends them in requests of 500. If a later request fails, the papers already fetched are still printed, and the exit code is 1. |
 | `recommend --like ID [ID ...] [--dislike ID ...] [--limit N]` | Recommendations from example papers. Limit 1 to 500, default 20. |
 | `authors AUTHOR_ID [AUTHOR_ID ...]` | h-index and citation totals. Author ids are Semantic Scholar's, digits only. |
 
