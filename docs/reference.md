@@ -16,7 +16,7 @@ python <skills>/graph/scripts/graph.py [--data FOLDER] COMMAND ...
 
 | Command | What it does |
 |---|---|
-| `validate` | Checks the graph files. |
+| `validate` | Checks the graph files. It also lists any verified link whose source names no document, and exits with 1 if there is one. |
 | `stats` | Counts entities and relations by type. |
 | `search TEXT` | Finds entities whose id, name, note, or alias contains the text. A paper with a saved standing also shows its citation count and the date it was checked. |
 | `neighbours ENTITY [--depth N]` | Lists connections within N steps (default 1), with their sources and status. |
@@ -47,7 +47,7 @@ An `ENTITY` is an id, a name, or an alias. If a name matches more than one entit
 | `--url`, `--note` | Optional details. |
 | `--distinct ENTITY` | Confirms the new entity is different from this possible duplicate. Repeat for more. |
 
-**Options for `link`:** `REL` is one of `authored-by`, `builds-on`, `cites`, `contradicts`, `derived-from`, `evaluates-on`, `proposes`, `related-to`, `uses`. `--status` is `verified` or `inferred`.
+**Options for `link`:** `REL` is one of `authored-by`, `builds-on`, `cites`, `contradicts`, `derived-from`, `evaluates-on`, `proposes`, `related-to`, `uses`. `--status` is `verified` or `inferred`. A `verified` link's `--source` must start with a document: an `ARXIV:` or `DOI:` id, a `paper:` id followed by a comma and a place in it, a link, or `Semantic Scholar`. Anything else is refused, including a reason that only mentions an id, so a reason in prose goes with `inferred`.
 
 **Exit codes:** 0 success. 1 an error, such as an invalid graph, a refused change, or nothing found. 2 invalid arguments. 3 `add` found possible duplicates and made no change.
 

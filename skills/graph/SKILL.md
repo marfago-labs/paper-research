@@ -16,7 +16,7 @@ Run from the workspace root. `<skills>` is the folder that contains this skill's
 - **External ids:** `ids` maps `s2`, `arxiv`, `doi`, `hf`, `github`, or `orcid` to an identifier. Two entities of the same type with the same external id are the same thing. Add ids whenever you know them, especially Semantic Scholar ids for authors, because names alone can't tell two people apart.
 - **Distinct:** `distinct_from` lists entities that look alike but were checked to be different, so the duplicate checks stop flagging them.
 - **Relation:** `from`, `rel`, `to`, `source`, `status`. Relations: uses, evaluates-on, builds-on, proposes, cites, authored-by, contradicts, related-to, derived-from.
-- **Status:** `verified` means checked against the source, and `inferred` is your own reading. Never mark an inference as verified.
+- **Status:** `verified` means checked against the source, and `inferred` is your own reading. Never mark an inference as verified. A verified link's source must name the document it was checked against: `ARXIV:` or `DOI:` with the section, a `paper:` id with a comma and a section, a link, or `Semantic Scholar`. It must start the source: a reason that only mentions an id is refused. `link` refuses anything else as verified, and `validate` lists older links that break this rule.
 
 ## Commands
 

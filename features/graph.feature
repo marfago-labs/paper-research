@@ -89,6 +89,64 @@ Feature: A knowledge graph that stays trustworthy as it grows
     Then the output mentions "already linked"
     And the graph has 1 relations
 
+  Scenario: A link marked verified must name the document it was checked against
+    Given the graph holds a paper "Paper X" with id "paper:2401.00003"
+    And the graph holds a paper "Paper N" with id "paper:2401.00004"
+    When I run graph link paper:2401.00003 related-to paper:2401.00004 --source "Same group; both study memory risk" --status verified
+    Then the command fails
+    And the error mentions "a verified link must name the document it was checked against"
+    And the graph has 0 relations
+    When I run graph link paper:2401.00003 related-to paper:2401.00004 --source "Same group; both study memory risk" --status inferred
+    Then the command succeeds
+    And the relation "paper:2401.00003" related-to "paper:2401.00004" is inferred
+
+  Scenario: Validation lists verified links that name no document, without blocking the graph
+    Given the graph holds a paper "Paper X" with id "paper:2401.00003"
+    And the graph holds a paper "Paper N" with id "paper:2401.00004"
+    And a verified link "paper:2401.00003" related-to "paper:2401.00004" has the source "Same group"
+    When I run graph validate
+    Then the command fails
+    And the output mentions "found 1 verified link with no document it was checked against"
+    And the output mentions "paper:2401.00003 related-to paper:2401.00004  [Same group]"
+    And the output mentions "unlink it and link it again"
+    And the output does not mention "OK"
+    When I run graph stats
+    Then the command succeeds
+    When I run graph unlink paper:2401.00003 related-to paper:2401.00004
+    And I run graph link paper:2401.00003 related-to paper:2401.00004 --source "Same group" --status inferred
+    And I run graph validate
+    Then the command succeeds
+    And the output mentions "OK: 2 entities, 1 relations"
+    And the output does not mention "no document"
+
+  Scenario Outline: A verified link is saved only when its source names a document
+    Given the graph holds a paper "Paper X" with id "paper:2401.00003"
+    And the graph holds a paper "Paper N" with id "paper:2401.00004"
+    When I run graph link paper:2401.00003 related-to paper:2401.00004 --source "<source>" --status verified
+    Then the command <result>
+    And the graph has <count> relations
+
+    Examples: Sources that name a document
+      | source                               | result   | count |
+      | ARXIV:2401.00003, §3.4               | succeeds | 1     |
+      | arxiv:2401.00003                     | succeeds | 1     |
+      | DOI:10.1145/3442188.3445922, Table 2 | succeeds | 1     |
+      | https://github.com/org/repo, README  | succeeds | 1     |
+      | paper:2401.00004, §5.1               | succeeds | 1     |
+      | Semantic Scholar                     | succeeds | 1     |
+
+    Examples: Sources that only look like one
+      | source                        | result | count |
+      | §3.4                          | fails  | 0     |
+      | ARXIV:                        | fails  | 0     |
+      | the arXiv paper               | fails  | 0     |
+      | as cited by Semantic Scholar  | fails  | 0     |
+      | Same group, inferred from §2  | fails  | 0     |
+      | Same group as paper:2401.00004; inferred | fails | 0 |
+      | Inferred from ARXIV:2401.00003 and ARXIV:2401.00004 authors | fails | 0 |
+      | paper:2401.00004              | fails  | 0     |
+      | paper:2401.00004 same group   | fails  | 0     |
+
   Scenario: A relation needs a source and a status
     Given the graph holds a paper "Mamba" with id "paper:2312.00752"
     And the graph has a dataset "The Pile"
@@ -100,11 +158,11 @@ Feature: A knowledge graph that stays trustworthy as it grows
     And the graph holds a author "Wei Zhang" with id "author:wei-zhang-2"
     And "author:wei-zhang-2" is marked as distinct from "author:wei-zhang"
     And the graph holds a paper "A paper" with id "paper:a"
-    When I run graph link paper:a authored-by "Wei Zhang" --source s --status verified
+    When I run graph link paper:a authored-by "Wei Zhang" --source "Semantic Scholar" --status verified
     Then the command fails
     And the error mentions "author:wei-zhang, author:wei-zhang-2"
     And the graph has 0 relations
-    When I run graph link paper:a authored-by author:wei-zhang-2 --source s --status verified
+    When I run graph link paper:a authored-by author:wei-zhang-2 --source "Semantic Scholar" --status verified
     Then the command succeeds
 
   Scenario: Merging a duplicate keeps every connection
@@ -173,6 +231,9 @@ Feature: A knowledge graph that stays trustworthy as it grows
     And the graph has the relation "paper:2611.00002" cites "paper:2511.00001"
     When I run graph standing s2.json
     Then the output mentions "0 citation links added"
+    When I run graph validate
+    Then the command succeeds
+    And the output does not mention "no document"
 
   Scenario: A paper Semantic Scholar does not know is not asked about again for a month
     Given the graph holds a paper "New paper" with id "paper:2611.00001"

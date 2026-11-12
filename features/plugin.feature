@@ -25,6 +25,12 @@ Feature: A plugin that installs cleanly and keeps its promises
     And the arxiv skill routes reading a paper through the read skill
     And the init skill loads the new rules into the session that ran it
 
+  Scenario: The skills tell Claude to give every link its own status and a source it can be checked against
+    Then the read skill says "with the paper and section as `--source`"
+    And the read skill says "Choose the status for each link on its own, never one for all"
+    And the insight skill says "Give the paper and section as `source`"
+    And the graph skill says "A verified link's source must name the document it was checked against"
+
   Scenario: Papers are always listed in the same table
     Then every place that lists papers uses the same paper-list table
     And the paper-list rule says what goes in each column

@@ -84,6 +84,14 @@ BLOCK_CAP = 50
 # a problem, weight each trigram by how rare it is in the graph (IDF) rather than adding rules: still one score.
 SIMILARITY = 0.5
 ID_ALIAS = re.compile(r"(ARXIV|DOI):(.+)", re.I)
+# Verified means checked against a source, so the source must start with a document someone can look up: an arXiv or
+# DOI id, a link, a place in a paper of the graph (paper:<id>, <section>), or Semantic Scholar's data. Only the start
+# counts, because a reason that merely mentions an id ("same group as paper:x") is an inference, not a source.
+DOCUMENT = re.compile(r"^\s*(?:(?:ARXIV|DOI):\S|paper:[^\s,]+,\s*\S|https?://\S|Semantic Scholar\b)", re.I)
+SOURCE_FIX = (
+    "mark it --status inferred, or give a source that names the document, such as 'ARXIV:2401.00001, §3.2',"
+    " a DOI, a link, or 'Semantic Scholar'"
+)
 
 
 class GraphError(Exception):
@@ -563,6 +571,15 @@ def describe(relation, direction, other_name):
     return f"{arrow} {relation['rel']} {arrow} {other_name}  [{relation['source']}; {relation['status']}]"
 
 
+def names_document(source):
+    return bool(DOCUMENT.search(source))
+
+
+def unsourced(relation):
+    """A relation marked verified whose source names no document it could have been checked against."""
+    return relation["status"] == "verified" and not names_document(relation["source"])
+
+
 def checked_load(directory):
     entities, relations = load(directory)
     errors = validate(entities, relations)
@@ -573,8 +590,17 @@ def checked_load(directory):
 
 def cmd_validate(args):
     entities, relations = checked_load(args.data)
-    print(f"OK: {len(entities)} entities, {len(relations)} relations")
-    return 0
+    # Not a load error: an old link must not lock the user out of the graph, so it is listed here to be fixed.
+    found = [relation for relation in relations if unsourced(relation)]
+    if not found:
+        print(f"OK: {len(entities)} entities, {len(relations)} relations")
+        return 0
+    print(f"checked: {len(entities)} entities, {len(relations)} relations")
+    print(f"found {count(len(found), 'verified link')} with no document it was checked against:")
+    for relation in found:
+        print(f"  {relation['from']} {relation['rel']} {relation['to']}  [{relation['source']}]")
+    print(f"For each, unlink it and link it again: {SOURCE_FIX}.")
+    return 1
 
 
 def cmd_stats(args):
@@ -828,6 +854,8 @@ def link(relations, start, rel, end, source, status):
 def cmd_link(args):
     entities, relations = checked_load(args.data)
     start, end = resolve(entities, args.start)["id"], resolve(entities, args.end)["id"]
+    if unsourced({"source": args.source, "status": args.status}):
+        raise GraphError(f"a verified link must name the document it was checked against: {SOURCE_FIX}")
     if link(relations, start, args.rel, end, args.source, args.status):
         save(args.data, entities, relations)
         print(f"linked {start} {args.rel} {end}")

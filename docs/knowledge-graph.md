@@ -34,6 +34,8 @@ A relation connects two entities and says where it comes from.
 | `source` | Where it comes from, such as `ARXIV:2611.05306, §2.2`. |
 | `status` | `verified` if it was checked against the source, or `inferred` if it's Claude's own reading. An inference is never marked verified. |
 
+A verified link's source must start with a document you can look up: an `ARXIV:` or `DOI:` id with the section, a place in a paper of the graph such as `paper:2401.00004, §5.1`, a link, or `Semantic Scholar`. The script refuses a reason in prose, such as "same research group" or "same group as paper:2401.00004", as verified, so that kind of link has to be marked `inferred`. `graph.py validate` lists any older link that breaks the rule, without blocking the rest of the graph. The rule can't tell whether the cited section really says what the link claims. The recap page's Graph tab shows each link's source so you can check.
+
 ## How papers get in
 
 - **`add` saves a paper and its authors** with their Semantic Scholar ids, and adds `authored-by` links and any citation links to papers you already have.

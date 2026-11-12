@@ -16,7 +16,7 @@ An insight is a conclusion worth acting on or remembering, such as a practice to
 4. Add the entry to `research/insights.md`, creating the file with a `# Insights` heading if it doesn't exist. Use the format below.
 5. Connect it in the graph, following the `graph` skill:
    - Add an entity with `graph.py add --type insight`, using the slug from the entry's `id` and its title as `--name`.
-   - For each source paper, add the paper if it's missing, then `link` the insight `derived-from` the paper. Give the section as `source`. Use status `verified` only if you checked it against the text, and `inferred` otherwise.
+   - For each source paper, add the paper if it's missing, then `link` the insight `derived-from` the paper. Give the paper and section as `source`, such as `ARXIV:<id>, §3.2`. Use status `verified` only if you checked it against the text, and `inferred` otherwise.
    - Use `related-to` for any tools, methods, or other insights it clearly connects to.
 6. Reply with the saved titles, what you checked, and anything the source didn't support.
 
