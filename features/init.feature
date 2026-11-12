@@ -8,6 +8,7 @@ Feature: Setting up a workspace without touching what the user already has
     Then the command succeeds
     And the workspace has the starter research files
     And the workspace has the plugin's rules in CLAUDE.md
+    And CLAUDE.md tells Claude to list papers in the paper-list table
     And Claude asks before fetching from arxiv.org
     And Claude asks before fetching from api.semanticscholar.org
     And the settings say nothing about fetching from example.com

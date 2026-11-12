@@ -27,7 +27,7 @@ PAPER_FIELDS = (
     "citationCount,influentialCitationCount,openAccessPdf,authors.name,url"
 )
 DETAIL_FIELDS = PAPER_FIELDS + ",tldr"
-LINK_FIELDS = "isInfluential,paperId,externalIds,title,year,citationCount,authors"
+LINK_FIELDS = "isInfluential,paperId,externalIds,title,year,citationCount,authors,url"
 # Only the ids of the papers a paper cites: enough to link it to the papers already in the graph.
 REFERENCE_FIELDS = "references.paperId,references.externalIds"
 
@@ -263,6 +263,31 @@ def request(method, path, params=None, body=None):
         time.sleep(delay)
 
 
+def paper_link(paper):
+    """The ID column of a paper list as a Markdown link: the arXiv id, else the DOI, else the paper's page."""
+    ids = paper.get("externalIds") or {}
+    if ids.get("ArXiv"):
+        return f"[ARXIV:{ids['ArXiv']}](https://arxiv.org/abs/{ids['ArXiv']})"
+    if ids.get("DOI"):
+        doi = ids["DOI"]
+        text = doi.replace("[", r"\[").replace("]", r"\]")
+        return f"[DOI:{text}](https://doi.org/{urllib.parse.quote(doi, safe='/:;._-')})"
+    return paper.get("url") or None
+
+
+def with_link(paper):
+    """The paper with its link, so a paper list can show the ID as a link without being told how to build one."""
+    link = paper_link(paper)
+    return {**paper, "link": link} if link else paper
+
+
+def with_links(result, key):
+    """A search or recommendation result with a link on each of its papers."""
+    if isinstance(result, dict) and isinstance(result.get(key), list):
+        return {**result, key: [with_link(paper) for paper in result[key]]}
+    return result
+
+
 def check_range(name, value, low, high):
     if not low <= value <= high:
         raise ValueError(f"{name} must be between {low} and {high}")
@@ -281,7 +306,7 @@ def cmd_search(args):
         params["year"] = args.year
     if args.min_citations is not None:
         params["minCitationCount"] = args.min_citations
-    return request("GET", f"{GRAPH}/paper/search", params)
+    return with_links(request("GET", f"{GRAPH}/paper/search", params), "data")
 
 
 def linked_papers(paper_id, edge, key, limit):
@@ -290,14 +315,14 @@ def linked_papers(paper_id, edge, key, limit):
     papers = []
     for item in response.get("data") or []:
         paper = item.get(key) or {}
-        papers.append({**paper, "isInfluential": item.get("isInfluential")})
+        papers.append(with_link({**paper, "isInfluential": item.get("isInfluential")}))
     return papers
 
 
 def cmd_paper(args):
     check_range("--limit", args.limit, 1, 1000)
     paper_id = normalize_id(args.id)
-    result = request("GET", paper_path(paper_id), {"fields": DETAIL_FIELDS})
+    result = with_link(request("GET", paper_path(paper_id), {"fields": DETAIL_FIELDS}))
     if args.citations:
         result["citations"] = linked_papers(paper_id, "citations", "citingPaper", args.limit)
     if args.references:
@@ -320,7 +345,7 @@ def batch_request(ids, with_references=False):
     if not isinstance(papers, list):
         raise ApiError("unexpected response from the batch endpoint")
     return [
-        {"requestedId": requested, **paper} if paper else {"requestedId": requested, "error": "not found"}
+        with_link({"requestedId": requested, **paper}) if paper else {"requestedId": requested, "error": "not found"}
         for requested, paper in zip(ids, papers)
     ]
 
@@ -350,7 +375,7 @@ def cmd_recommend(args):
     }
     check_range("--limit", args.limit, 1, 500)
     params = {"fields": PAPER_FIELDS, "limit": args.limit}
-    return request("POST", f"{RECOMMENDATIONS}/papers", params, body)
+    return with_links(request("POST", f"{RECOMMENDATIONS}/papers", params, body), "recommendedPapers")
 
 
 def cmd_authors(args):

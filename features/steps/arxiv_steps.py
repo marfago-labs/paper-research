@@ -136,6 +136,19 @@ def result_title(context, number, title, date):
     assert (paper["title"], paper["published"]) == (title, date), paper
 
 
+@then('paper {number:d} of the results links to "{link}"')
+def result_link(context, number, link):
+    # The ID column of a paper list, ready to copy, so it is a link even when the workspace rules aren't loaded.
+    paper = printed(context)["papers"][number - 1]
+    assert paper["link"] == link, paper
+
+
+@then('the result for {ident} links to "{link}"')
+def result_for_link(context, ident, link):
+    found = [p for p in printed(context) if p.get("id") == ident]
+    assert found and found[0]["link"] == link, printed(context)
+
+
 @then('the saved text lists the sections "{sections}"')
 def saved_sections(context, sections):
     headings = [s["heading"] for s in printed(context)["sections"]]

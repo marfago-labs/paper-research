@@ -18,10 +18,13 @@ Feature: Finding and reading arXiv papers without any outside server
     And the search found 2 papers
     And paper 1 of the results is "Newer agents paper" published 2026-11-02
 
-  Scenario: Each result carries the date to show in paper lists
+  Scenario: Each result carries the date and the link to show in paper lists
     Given arXiv knows the paper 2611.00002 titled "A paper" submitted on 2026-11-02
     When I run arxiv search "paper"
     Then paper 1 of the results is "A paper" published 2026-11-02
+    And paper 1 of the results links to "[ARXIV:2611.00002](https://arxiv.org/abs/2611.00002)"
+    When I run arxiv paper 2611.00002
+    Then the result for 2611.00002 links to "[ARXIV:2611.00002](https://arxiv.org/abs/2611.00002)"
 
   Scenario: Looking up several papers at once reports the ones that do not exist
     Given arXiv knows the paper 2611.00002 titled "A paper" submitted on 2026-11-02

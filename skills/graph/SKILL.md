@@ -20,7 +20,7 @@ Run from the workspace root. `<skills>` is the folder that contains this skill's
 
 ## Commands
 
-- **Read:** `validate`, `stats`, `search <text>`, `neighbours <entity>`, `path <a> <b>`, `dupes`, `islands`.
+- **Read:** `validate`, `stats`, `search <text>` (a paper also shows its saved citation count and when it was checked), `neighbours <entity>`, `path <a> <b>`, `dupes`, `islands`.
 - **Write:** `add`, `update`, `link`, `unlink`, `merge`, `remove`, `cites`, and `standing`. Run any of them with `--help` for its options.
 - **Citation counts and links:** `standing <file>` reads saved `s2.py batch` output. It saves each paper's counts and, if the output was made with `--with-references`, adds a `cites` link from each paper to every paper in the graph that it cites. `standing-due <file>` writes the ids of papers whose counts are missing or old to a file, for `s2.py batch --ids-file`. It changes nothing in the graph. Links only join papers that are already in the graph, so run `standing` again after the graph grows.
 

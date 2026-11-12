@@ -33,7 +33,7 @@ The plugin is a set of skills. Claude chooses one from what you say, and you can
    - `archive`: keep it searchable, with no plan to read it.
 4. Adds one row per link to `research/papers.md`.
 5. Adds each paper and its authors to the knowledge graph, with the citation links between papers you already have.
-6. Replies with a table of title, publication date, route, and a one-line reason.
+6. Replies with the paper-list table (publication date, title, linked ID, citations, topic, and a one-line reason), plus the route.
 
 A link Claude can't read is saved as `unread-link` instead of guessed at. The route is a suggestion, so tell Claude if you disagree.
 
@@ -48,7 +48,7 @@ A link Claude can't read is saved as `unread-link` instead of guessed at. The ro
 1. Reads your profile, your paper list, and the questions you've asked, to find what you keep coming back to.
 2. Gathers candidates from your own list, from Semantic Scholar's recommendations based on papers you rated 4 or 5, from new arXiv papers on your topics, and from Hugging Face's daily papers.
 3. Drops anything you already have, and picks one or two, or more if you ask.
-4. For each pick, gives the title, **publication date**, link, why it matches you, and a caution if there is one.
+4. Shows the picks in the paper-list table: **publication date**, title, linked ID, citations, topic, why it matches you and a caution, its academic standing, and whether it's on your list or new.
 5. Rates each pick's standing in the research community as `High`, `Medium`, `Low`, or `Too early`, with the evidence: citations for its age, venue, and the highest author h-index. This is Claude's judgement from that evidence, not a calculated score, and it says nothing about whether the paper is correct.
 
 About one in five picks is outside your usual topics, and is labelled so.
@@ -110,6 +110,8 @@ Read-only clients for [Semantic Scholar](https://www.semanticscholar.org/product
 
 - **scholar:** search, paper details with citations and references, batch lookups, recommendations from papers you like and dislike, and author statistics.
 - **arxiv:** search with categories, dates, and sorting by newest, metadata for several papers at once, full text as Markdown, and PDF download.
+
+Whenever Claude lists papers, it uses one table: `Published | Title | ID | Citations | Topic | Note`. The ID is a link to the paper, which both clients build. Citations come from one Semantic Scholar request for the whole list: `-` means Semantic Scholar has no count, and `?` means the request failed. The note is one sentence on the main result or why the paper matters to you.
 
 Paper text and abstracts come from outside your workspace. Claude treats them as data, never as instructions.
 

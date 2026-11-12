@@ -25,6 +25,10 @@ Keep this quick. Users often add more links than they can read, so don't read fu
    - **Links:** `link <paper> authored-by <author> --source "Semantic Scholar" --status verified`.
    - **Citations:** once the papers are in the graph, run `graph.py standing <file>` on the saved `batch` output. It saves each paper's citation counts and links the papers that cite each other. If it fails, say so in your reply.
    - Full extraction of datasets, methods, and the rest waits for the `read` skill.
-6. Reply with a short table of title, publication date, route, and a one-line reason. Say so if a link could not be read, and mark its row `unread-link` rather than guessing what it says.
+6. Reply with the paper-list table under [Listing papers](#listing-papers), with a `Route` column after `Note`. Here `Note` is the one-line reason for the route. Say so if a link could not be read, and mark its row `unread-link` rather than guessing what it says.
 
 The route is a suggestion, so change it if the user disagrees.
+
+## Listing papers
+
+Whenever you list papers to the user, use one table with the columns `Published | Title | ID | Citations | Topic | Note`, in that order. `Published` is the publication date as `YYYY-MM-DD`, from `published` in `arxiv` or `publicationDate` in `scholar`, or `unknown`; never guess it. `ID` is the paper's `link` from `arxiv` or `scholar`, such as `[ARXIV:2611.14326](https://arxiv.org/abs/2611.14326)`, copied as it is so that it stays a link, or the link itself for anything else, such as a blog post or a repository. `Citations` is `citationCount` from one `scholar` `batch` call for all the listed papers, made for every list, so the counts are all from the same moment. Write `-` only when Semantic Scholar has no count. If the call fails, write `?` and say so below the table, or, for a paper in the graph, use the saved count that `graph.py search <id>` shows, with the date it was checked. `Topic` is two to five words. `Note` is one sentence: the main result, or why the paper matters to this user, not details such as the venue, page count, or code. A skill may add its own columns after `Note`. Put the total, caveats, and suggestions below the table, not in it.

@@ -61,6 +61,7 @@ class FreshWorkspace(Workspace):
         self.assertTrue(claude.startswith("# Paper research workspace"))
         self.assertIn(init.BEGIN, claude)
         self.assertIn("@research/lessons.md", claude)
+        self.assertIn("`Published | Title | ID | Citations | Topic | Note`", claude)
         settings = json.loads(self.read(".claude/settings.json"))
         self.assertIn("WebFetch(domain:arxiv.org)", settings["permissions"]["ask"])
         self.assertNotIn("allow", settings["permissions"])

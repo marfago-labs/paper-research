@@ -18,7 +18,7 @@ python <skills>/graph/scripts/graph.py [--data FOLDER] COMMAND ...
 |---|---|
 | `validate` | Checks the graph files. |
 | `stats` | Counts entities and relations by type. |
-| `search TEXT` | Finds entities whose id, name, note, or alias contains the text. |
+| `search TEXT` | Finds entities whose id, name, note, or alias contains the text. A paper with a saved standing also shows its citation count and the date it was checked. |
 | `neighbours ENTITY [--depth N]` | Lists connections within N steps (default 1), with their sources and status. |
 | `path A B` | Shows the shortest chain of connections between two entities, ignoring direction. |
 | `dupes` | Lists pairs of entities that might be duplicates. |
@@ -59,7 +59,7 @@ python <skills>/arxiv/scripts/arxiv.py COMMAND ...
 
 | Command | What it does |
 |---|---|
-| `search QUERY` | Finds papers. Prints JSON, each paper with its `published` date. |
+| `search QUERY` | Finds papers. Prints JSON, each paper with its `published` date and its `link`, such as `[ARXIV:2611.14326](https://arxiv.org/abs/2611.14326)`. |
 | `paper ID [ID ...]` | Metadata for several papers in one request. A missing paper has `"error": "not found"`. |
 | `fetch ID` | Saves arXiv's HTML version as Markdown in `research/fulltext/` and prints its path, its line count, and each section's heading and line number. |
 | `pdf ID` | Downloads the PDF to `research/pdfs/`. |
@@ -103,7 +103,7 @@ python <skills>/scholar/scripts/s2.py COMMAND ...
 
 An `ID` is an arXiv ID or link (new style such as `2303.11366`, or old style such as `hep-th/9901001`), a Hugging Face paper link, a DOI with or without `DOI:` or a DOI link, or a Semantic Scholar id. Other links are sent as `URL:` ids, which Semantic Scholar only resolves for sites it knows.
 
-Everything is printed as JSON. A missing paper in a batch has `"error": "not found"`.
+Everything is printed as JSON. A missing paper in a batch has `"error": "not found"`. Every paper found has a `link` for paper lists: its arXiv id, else its DOI, as a Markdown link, else its Semantic Scholar page.
 
 **Environment:** `SEMANTIC_SCHOLAR_API_KEY` is optional. Without it, `search` is heavily rate-limited and often answers `HTTP 429`.
 
