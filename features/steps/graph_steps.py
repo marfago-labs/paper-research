@@ -68,7 +68,15 @@ def graph_distinct(context, first, second):
 @given('"{start}" {rel} "{end}" is recorded as {status}')
 def graph_relation(context, start, rel, end, status):
     entities, relations = read_all(context)
-    relations.append({"from": start, "rel": rel, "to": end, "source": "test", "status": status})
+    relations.append({"from": start, "rel": rel, "to": end, "source": "ARXIV:2401.00001, §1", "status": status})
+    write_all(context, list(entities.values()), relations)
+
+
+@given('a verified link "{start}" {rel} "{end}" has the source "{source}"')
+def graph_verified_relation(context, start, rel, end, source):
+    # Written straight to the files, as an older graph might hold it: link itself refuses such a source.
+    entities, relations = read_all(context)
+    relations.append({"from": start, "rel": rel, "to": end, "source": source, "status": "verified"})
     write_all(context, list(entities.values()), relations)
 
 

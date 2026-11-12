@@ -18,7 +18,7 @@ def entity(entity_id, name=None, **extra):
 
 
 def relation(start, rel, end, **extra):
-    return {"from": start, "rel": rel, "to": end, "source": "test", "status": "verified", **extra}
+    return {"from": start, "rel": rel, "to": end, "source": "ARXIV:2401.00001, §1", "status": "verified", **extra}
 
 
 ENTITIES = [
@@ -86,6 +86,42 @@ class Queries(unittest.TestCase):
         self.assertEqual([step[2] for step in steps], ["tool:b", "paper:a"])
         self.assertEqual([step[0] for step in steps], ["in", "in"])
         self.assertIsNone(graph.shortest_path(RELATIONS, "paper:a", "concept:d"))
+
+
+class Sources(unittest.TestCase):
+    def test_a_source_names_a_document_by_id_link_or_data_source(self):
+        for source in (
+            "ARXIV:2401.00005, §3.1",
+            "arxiv:2401.00005",
+            "DOI:10.1145/3442188.3445922, Table 2",
+            "https://github.com/example-org/example-repo, README",
+            "paper:2401.00004, §5.1",
+            "Semantic Scholar",
+            "Semantic Scholar references",
+        ):
+            self.assertTrue(graph.names_document(source), source)
+        for source in (
+            "§3.2",
+            "s",
+            "test",
+            "Same group (Author A). Inferred",
+            "the arXiv paper",
+            "ARXIV:",
+            "paper: x",
+            # An id inside a reason is still a reason: the document has to come first.
+            "Same group as paper:2401.00004; inferred",
+            "Inferred from ARXIV:2401.00003 and ARXIV:2401.00004 authors",
+            # A paper id alone, or with a reason after it, checks nothing: it needs a place in that paper.
+            "paper:2401.00004",
+            "paper:2401.00004 same group",
+        ):
+            self.assertFalse(graph.names_document(source), source)
+
+    def test_only_verified_links_need_a_document(self):
+        verified = {"source": "same group", "status": "verified"}
+        self.assertTrue(graph.unsourced(verified))
+        self.assertFalse(graph.unsourced(dict(verified, status="inferred")))
+        self.assertFalse(graph.unsourced(dict(verified, source="ARXIV:2401.00001")))
 
 
 class Loading(unittest.TestCase):
@@ -211,6 +247,18 @@ class CommandLine(CommandLineBase):
         self.assertIn("paper: 1", out)
         self.assertIn("uses: 1", out)
 
+    def test_validate_lists_verified_links_that_name_no_document(self):
+        unsourced = relation("paper:a", "related-to", "concept:d", source="same group")
+        self.write(ENTITIES, [*RELATIONS, unsourced])
+        code, out, _ = self.run_main("validate")
+        self.assertEqual(code, 1)
+        self.assertIn("found 1 verified link with no document it was checked against", out)
+        self.assertNotIn("OK", out, "the first line must not say OK when the command fails")
+        self.assertIn("checked: 4 entities, 3 relations", out)
+        self.assertIn("paper:a related-to concept:d  [same group]", out)
+        self.assertIn("unlink", out)
+        self.assertEqual(self.run_main("stats")[0], 0, "an old link must not lock the user out of the graph")
+
     def test_invalid_graph_fails_every_command(self):
         self.write([entity("paper:a")], [relation("paper:a", "uses", "tool:z")])
         code, _, err = self.run_main("stats")
@@ -235,7 +283,7 @@ class CommandLine(CommandLineBase):
         code, out, _ = self.run_main("neighbours", "Tool B")
         self.assertEqual(code, 0)
         self.assertIn("<- uses <- Paper A", out)
-        self.assertIn("-> evaluates-on -> Dataset C  [test; verified]", out)
+        self.assertIn("-> evaluates-on -> Dataset C  [ARXIV:2401.00001, §1; verified]", out)
 
     def test_path(self):
         code, out, _ = self.run_main("path", "Paper A", "Dataset C")
@@ -532,6 +580,20 @@ class Writing(CommandLineBase):
         self.assertEqual((code, out.strip()), (0, "already linked: paper:a builds-on concept:d"))
         self.assertEqual(len(self.relations()), 3)
 
+    def test_a_verified_link_must_name_the_document_it_was_checked_against(self):
+        reason = "Same group (Author A); both study agent memory risk. Inferred"
+        code, _, err = self.run_main(
+            "link", "paper:a", "related-to", "concept:d", "--source", reason, "--status", "verified"
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("a verified link must name the document it was checked against", err)
+        self.assertIn("--status inferred", err)
+        self.assertEqual(len(self.relations()), 2)
+        code, out, _ = self.run_main(
+            "link", "paper:a", "related-to", "concept:d", "--source", reason, "--status", "inferred"
+        )
+        self.assertEqual((code, out.strip()), (0, "linked paper:a related-to concept:d"))
+
     def test_merge(self):
         entities = [
             entity("tool:keep", "Keep", ids={"s2": "1"}),
@@ -649,12 +711,15 @@ class Safety(CommandLineBase):
             ],
             [],
         )
-        code, _, err = self.run_main("link", "P", "authored-by", "Wei Zhang", "--source", "s", "--status", "verified")
+        code, _, err = self.run_main(
+            "link", "P", "authored-by", "Wei Zhang", "--source", "Semantic Scholar", "--status", "verified"
+        )
         self.assertEqual(code, 1)
         self.assertIn("matches more than one entity, so use an id: author:a, author:b", err)
-        self.assertEqual(
-            self.run_main("link", "P", "authored-by", "author:b", "--source", "s", "--status", "verified")[0], 0
+        code, _, _ = self.run_main(
+            "link", "P", "authored-by", "author:b", "--source", "Semantic Scholar", "--status", "verified"
         )
+        self.assertEqual(code, 0)
 
     def test_missing_folder(self):
         out = io.TextIOWrapper(io.BytesIO(), encoding="utf-8")
