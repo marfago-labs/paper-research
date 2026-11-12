@@ -282,14 +282,16 @@ def skill_says(context, skill, text):
 @then("the arxiv skill routes reading a paper through the read skill")
 def arxiv_routes_reading(context):
     text = (context.repo / "skills" / "arxiv" / "SKILL.md").read_text(encoding="utf-8")
-    assert "run `read` to read, summarize, or discuss a paper" in text, (
+    assert "run `read` to read, summarize, analyze, review, or discuss a paper" in text, (
         "a paper read through arxiv must reach the graph"
     )
     assert "Unless you're already following the `read` skill" in text, "read uses arxiv, so it must not loop"
     description = front_matter(context.repo / "skills" / "arxiv" / "SKILL.md")["description"]
-    assert "To read, summarize, or discuss a paper, use the read skill" in description, (
+    assert "To read, summarize, analyze, review, or discuss a paper, use the read skill" in description, (
         "Claude picks skills by description"
     )
+    read = front_matter(context.repo / "skills" / "read" / "SKILL.md")["description"]
+    assert "analyze, review" in read, "'analyze the top 3' must pick read, not arxiv"
 
 
 @then("the init skill loads the new rules into the session that ran it")

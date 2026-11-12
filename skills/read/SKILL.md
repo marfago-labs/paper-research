@@ -1,6 +1,6 @@
 ---
 name: read
-description: Read, summarize, discuss, and critique a paper with the user, or skim it for useful items, then extract it into the knowledge graph, propose pins, and ask for a rating. Use when the user runs /read or wants to read, summarize, discuss, go through, or skim a specific paper.
+description: Read, summarize, analyze, discuss, and critique a paper with the user, or skim it for useful items, then extract it into the knowledge graph, propose pins, and ask for a rating. Use when the user runs /read or wants to read, summarize, analyze, review, discuss, go through, or skim a specific paper, or several.
 argument-hint: <paper> [skim]
 ---
 

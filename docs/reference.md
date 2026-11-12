@@ -64,6 +64,8 @@ python <skills>/arxiv/scripts/arxiv.py COMMAND ...
 | `fetch ID` | Saves arXiv's HTML version as Markdown in `research/fulltext/` and prints its path, its line count, and each section's heading and line number. |
 | `pdf ID` | Downloads the PDF to `research/pdfs/`. |
 
+Both also print `next`, a reminder to follow the `read` skill for the paper, so a paper fetched any other way still reaches `papers.md` and the graph.
+
 An `ID` is an arXiv ID such as `2303.11366` or `hep-th/9901001`, with an optional version, or an arXiv abs, pdf, or html link.
 
 **`search` options:**

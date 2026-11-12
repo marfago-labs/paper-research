@@ -468,6 +468,7 @@ class Saving(unittest.TestCase):
         self.assertEqual(result["sections"][0]["heading"], "Paper Title")
         self.assertEqual(result["lines"], len(saved.splitlines()))
         self.assertIn("untrusted", result["warning"])
+        self.assertIn("follow the read skill", result["next"])
         self.assertNotIn("hiddenTextRemoved", result)
         self.assertNotIn("Removed text hidden", saved)
 
@@ -525,6 +526,7 @@ class Saving(unittest.TestCase):
         self.assertTrue(result["path"].endswith("hep-th_9901001.pdf"))
         self.assertEqual(result["bytes"], 13)
         self.assertIn("untrusted", result["warning"])
+        self.assertIn("follow the read skill", result["next"])
 
     def test_pdf_failures(self):
         for effect in (arxiv.NotFound("x"), b"<html>not a pdf</html>"):
