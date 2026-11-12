@@ -34,14 +34,15 @@ ALLOWED_HOSTS = {"arxiv.org", "export.arxiv.org"}
 TEXT_DIR = None
 PDF_DIR = None
 
-MIN_INTERVAL = 3.0
-MAX_ATTEMPTS = 4
-TIMEOUT = 60
+# Tuning values carry `pragma: no mutate`: tests use the names, so a nearby number changes nothing they see.
+MIN_INTERVAL = 3.0  # pragma: no mutate
+MAX_ATTEMPTS = 4  # pragma: no mutate
+TIMEOUT = 60  # pragma: no mutate
 DEADLINE = 90  # seconds for one command's request, retries included, to stay inside tool time limits
-MAX_BYTES = 50_000_000
+MAX_BYTES = 50_000_000  # pragma: no mutate
 CACHE_DIR = None
 STATE_NAME = "arxiv-last-request"
-LOCK_WAIT = 60
+LOCK_WAIT = 60  # pragma: no mutate
 RETRYABLE = {429, 500, 502, 503, 504}
 NS = {
     "a": "http://www.w3.org/2005/Atom",
@@ -98,29 +99,34 @@ def normalize_id(raw):
     return value
 
 
-if sys.platform == "win32":
+# Written inline because mypy only understands platform checks in this form. On the system that runs it, a changed
+# comparison mostly picks the same branch, so the line is marked.
+if sys.platform == "win32":  # pragma: no mutate
     import msvcrt
 
     def try_lock(handle):
         """Try to take an exclusive operating-system lock on the file. True if it was taken."""
         try:
-            handle.seek(0)
-            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
-        except OSError:
-            return False
-        return True
+            handle.seek(0)  # pragma: no mutate (Windows only: never runs in a Linux mutation run)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)  # pragma: no mutate (Windows only)
+        except OSError:  # pragma: no mutate (Windows only)
+            return False  # pragma: no mutate (Windows only)
+        return True  # pragma: no mutate (Windows only)
 
     def unlock(handle):
-        handle.seek(0)
-        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+        handle.seek(0)  # pragma: no mutate (Windows only)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)  # pragma: no mutate (Windows only)
 
 else:
     import fcntl
 
+    # Marked alone: the two flags share no bits, so `+` and `^` give the same number as `|`.
+    EXCLUSIVE_NOW = fcntl.LOCK_EX | fcntl.LOCK_NB  # pragma: no mutate
+
     def try_lock(handle):
         """Try to take an exclusive operating-system lock on the file. True if it was taken."""
         try:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(handle.fileno(), EXCLUSIVE_NOW)
         except OSError:
             return False
         return True
@@ -137,7 +143,7 @@ def file_lock(path, wait, busy_message):
         while not try_lock(handle):
             if time.monotonic() > deadline:
                 raise ApiError(busy_message)
-            time.sleep(0.1)
+            time.sleep(0.1)  # pragma: no mutate (a polling interval, a tuning value)
         try:
             yield
         finally:
@@ -166,7 +172,7 @@ def pace(wait=LOCK_WAIT):
         try:
             last = float(state.read_text(encoding="utf-8"))
         except (OSError, ValueError):
-            last = 0.0
+            last = 0.0  # pragma: no mutate (any time long past means no wait, so 1.0 or -1.0 is the same)
         delay = MIN_INTERVAL - (time.time() - last)
         if delay > 0:
             time.sleep(min(delay, MIN_INTERVAL))
@@ -185,7 +191,9 @@ def get(url):
         try:
             return read_once(req, url, started)
         except (urllib.error.URLError, TimeoutError) as err:
-            error = failure(err, url, last=attempt == MAX_ATTEMPTS - 1)
+            # pragma: no mutate below: attempt never passes MAX_ATTEMPTS - 1, and small ints are shared objects,
+            # so `>=` and `is` agree with `==`.
+            error = failure(err, url, last=attempt == MAX_ATTEMPTS - 1)  # pragma: no mutate
             if error:
                 raise error from None
         wait_to_retry(url, started, attempt)
@@ -239,7 +247,8 @@ def parse_xml(data):
     scan.StartDoctypeDeclHandler = refuse_document_type
     scan.EntityDeclHandler = refuse_document_type
     with contextlib.suppress(expat.ExpatError):
-        scan.Parse(data, True)
+        # Complete declarations are reported either way, and errors are left for ET, so the flag changes nothing.
+        scan.Parse(data, True)  # pragma: no mutate
     try:
         # The scan found no DOCTYPE or ENTITY.
         return ET.fromstring(data)  # nosec B314
@@ -248,7 +257,7 @@ def parse_xml(data):
 
 
 def paper_from(entry, abs_url):
-    versioned = abs_url.rsplit("/abs/", 1)[-1]
+    versioned = abs_url.rpartition("/abs/")[2]
     paper_id = re.sub(r"v\d+$", "", versioned)
     primary = entry.find("arxiv:primary_category", NS)
     return {
@@ -354,6 +363,7 @@ NEAR_WHITE_NAMES = {
 # Below these sizes, text can't be read. LaTeXML writes font sizes as percentages.
 TINY_FONT = {"%": 20, "px": 2, "pt": 2, "em": 0.2, "rem": 0.2, "": 1e-9}
 FAINT_OPACITY = {"": 0.1, "%": 10}
+PERCENT_OF_255 = {"%": 2.55}  # an rgb() channel given as a percentage
 OFFSCREEN_PROPERTIES = ("left", "right", "top", "margin-left", "margin-top", "text-indent")
 FAR_OFFSCREEN = {"px": -1000, "": -1000, "em": -50, "rem": -50}
 HIDDEN_NOTE = (
@@ -389,16 +399,17 @@ def hex_is_faint(digits):
     if len(digits) in (3, 4):
         digits = "".join(c * 2 for c in digits)
     channels = [int(digits[i : i + 2], 16) for i in range(0, len(digits), 2)]
-    return min(channels[:3]) >= 0xF0 or (len(channels) == 4 and channels[3] < 0x1A)
+    nearly_transparent = any(alpha < 0x1A for alpha in channels[3:])  # no alpha channel means opaque
+    return min(channels[:3]) >= 0xF0 or nearly_transparent
 
 
 def rgb_is_faint(arguments):
     """True if rgb() or rgba() arguments give a near-white or nearly transparent colour."""
     parts = [number(part) for part in re.split(r"[\s,/]+", arguments.strip()) if part]
-    channels = [amount * 2.55 if unit == "%" else amount for amount, unit in parts[:3] if amount is not None]
-    alpha = parts[3] if len(parts) > 3 else (1.0, "")
-    near_white = len(channels) == 3 and min(channels) >= 0xF0
-    return near_white or below(f"{alpha[0]}{alpha[1]}", FAINT_OPACITY)
+    channels = [amount * PERCENT_OF_255.get(unit, 1) for amount, unit in parts[:3] if amount is not None]
+    near_white = len(channels) > 2 and min(channels) >= 0xF0  # all three channels given, and all near 255
+    faint = len(parts) > 3 and below(f"{parts[3][0]}{parts[3][1]}", FAINT_OPACITY)
+    return near_white or faint
 
 
 def faint_colour(colour):
@@ -464,11 +475,13 @@ class MarkdownWriter(HTMLParser):
         self.lines = []
         self.line = []
         self.inside = False
-        self.skipping = 0
+        self.skipping = 0  # pragma: no mutate (the article's own start tag brings -1 back to 0)
         self.stack = []
         self.cells = None
         self.hiding = False  # inside an element that hides its text
-        self.hidden_chars = 0  # visible characters in the current hidden element
+        # Visible characters in the current hidden element. Reset when hiding starts, so its first value is never
+        # read.
+        self.hidden_chars = 0  # pragma: no mutate
         self.hidden_elements = 0
         self.invisible_chars = 0
 
@@ -482,9 +495,9 @@ class MarkdownWriter(HTMLParser):
             self.lines.append(text)
 
     def blank(self):
+        """End the paragraph. markdown() trims the ends and folds runs of blank lines into one."""
         self.flush()
-        if self.lines and self.lines[-1] != "":
-            self.lines.append("")
+        self.lines.append("")
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
@@ -735,5 +748,5 @@ def main(argv=None):
     return 0
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no mutate (`is` and `<=` agree for the names a module can have)
     sys.exit(main())

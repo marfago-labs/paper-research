@@ -53,12 +53,23 @@ npm test --prefix tools/js && npm run coverage --prefix tools/js                
 coverage run --branch --include="*/graph.py" skills/graph/scripts/test_graph.py && coverage report --fail-under=100
 behave features                                                                  # behaviour
 
-python tools/run_mutation.py init --max-survival 1                               # mutation, one module
+python tools/run_mutation.py init --max-survival 0 --workers 4                   # mutation, one module
 ```
 
 - **Secrets:** turn on the pre-commit hook once per clone with `git config core.hooksPath tools/hooks`. It runs `python tools/gitleaks.py --staged` and stops a commit that adds something that looks like a secret. CI scans every commit with the same script. It downloads a pinned gitleaks release, checks its SHA-256, and keeps it in `.cache/`. If the github.com download fails, which happens when GitHub's release storage has an outage, it falls back to the GitHub API; the same checksum applies. It doesn't use the gitleaks GitHub Action, which needs a paid licence for organisations. If a finding is a false positive, add `gitleaks:allow` in a comment on that line. If it's real, remove the secret and rotate it, because it stays in the history.
-- **Mutation tests** change the code in small ways and check that a test notices. They run on a copy of the repo, so your files are never touched. A mutant that survives is either a missing test, or an equivalent change that can't be observed. Mark a line as unobservable with `# pragma: no mutate` and say why in a comment.
-- **The survival limits in `.github/workflows/mutation.yml` are a ratchet.** Lower them when you kill survivors, and never raise them. Mutation tests run weekly and on request, not on every push, because the graph script alone takes about 35 minutes. The workflow is paused for now to save Actions minutes: run `gh workflow enable "Mutation tests"` to turn it back on, or run `tools/run_mutation.py` locally.
+- **Mutation tests** change the code in small ways and check that a test notices. They run on a copy of the repo, so your files are never touched. A mutant that survives is either a missing test, or an equivalent change that can't be observed. Every module is held at 0% survivors: kill a survivor with a test of real behaviour, rewrite code whose mutants can't be observed, and only then mark a line with `# pragma: no mutate`, saying why in a comment. The pragma skips every mutant on its line, so keep such lines small.
+- **Run mutation tests on Linux, with a memory limit.** On Windows, a test that times out can leave the process running the mutated code behind, and a mutant that loops while it allocates can then fill the machine's memory. A container is the simple way:
+
+  ```bash
+  docker run --rm --memory=6g --memory-swap=6g --pids-limit=512 --cpus=4 -v "$PWD:/src:ro" -w /src python:3.12-slim \
+    bash -c 'pip install -q --require-hashes -r requirements-dev.txt && python tools/run_mutation.py graph --max-survival 0 --workers 4'
+  ```
+
+  In PowerShell, write the volume as `"${PWD}:/src:ro"` and put the whole command on one line, or end each line with a backtick instead of a backslash. In Git Bash, set `MSYS_NO_PATHCONV=1` before `docker run`, or it rewrites the paths.
+
+  `--workers N` tests N mutants at once, each in its own copy of the repo, so give the container N CPUs. Four workers ran `init` about three times faster than one. Each worker gets a free port chosen by the operating system.
+- **While the mutation workflow is paused, nothing checks the 0% limits.** A change to a module's script or its tests therefore runs that module in the container, and its pull request reports the survival rate.
+- **The survival limits in `.github/workflows/mutation.yml` are a ratchet.** Lower them when you kill survivors, and never raise them. Mutation tests run weekly and on request, not on every push, because the graph script alone takes about 45 minutes with one worker, or about 8 with four. The workflow is paused for now to save Actions minutes: run `gh workflow enable "Mutation tests"` to turn it back on, or run `tools/run_mutation.py` locally.
 - **Unchanged modules are skipped.** A module runs again only when its script, its tests, the files they read, the tooling, or its limit has changed. Each pass uploads a marker artifact named after a hash of those files, and a later run with the same hash skips the module. Run the workflow by hand with `force` to re-test everything. If a module reads a new file, add it to that module's `paths` in the workflow.
 - **A mutant that runs longer than 20 seconds counts as caught.** A normal test run takes about 2 seconds, so only a hang gets that far. Raise the `timeout` in `mutation/<module>.toml` if a test file ever gets that slow.
 - **Changing a tool version:** edit `requirements-dev.in`, then run `uv pip compile requirements-dev.in --universal --generate-hashes --python-version 3.12 -o requirements-dev.txt`.

@@ -13,12 +13,20 @@ from unittest import mock
 import graph
 
 
+def loaded(record):
+    """The record as a graph file gives it back. Its strings are new objects, as in a real graph, so code that
+    compares them with `is` instead of `==` fails the tests."""
+    return json.loads(json.dumps(record))
+
+
 def entity(entity_id, name=None, **extra):
-    return {"id": entity_id, "type": entity_id.split(":")[0], "name": name or entity_id, "aliases": [], **extra}
+    return loaded({"id": entity_id, "type": entity_id.split(":")[0], "name": name or entity_id, "aliases": [], **extra})
 
 
 def relation(start, rel, end, **extra):
-    return {"from": start, "rel": rel, "to": end, "source": "ARXIV:2401.00001, §1", "status": "verified", **extra}
+    return loaded(
+        {"from": start, "rel": rel, "to": end, "source": "ARXIV:2401.00001, §1", "status": "verified", **extra}
+    )
 
 
 ENTITIES = [
@@ -122,6 +130,68 @@ class Sources(unittest.TestCase):
         self.assertTrue(graph.unsourced(verified))
         self.assertFalse(graph.unsourced(dict(verified, status="inferred")))
         self.assertFalse(graph.unsourced(dict(verified, source="ARXIV:2401.00001")))
+
+
+class Edges(unittest.TestCase):
+    """Behaviour at the edges: exact thresholds, values on either side of a comparison, and counts."""
+
+    CHAIN = [
+        relation("paper:a", "uses", "tool:b"),
+        relation("tool:b", "evaluates-on", "dataset:c"),
+        relation("dataset:c", "related-to", "concept:d"),
+    ]
+
+    def test_neighbours_give_each_connection_its_distance(self):
+        found = [(distance, other) for distance, _, _, other in graph.neighbours(self.CHAIN, "paper:a", 2)]
+        self.assertEqual(found, [(1, "tool:b"), (2, "dataset:c")])
+        found = [(distance, other) for distance, _, _, other in graph.neighbours(self.CHAIN, "paper:a", 3)]
+        self.assertEqual(found, [(1, "tool:b"), (2, "dataset:c"), (3, "concept:d")])
+
+    def test_neighbours_go_one_step_unless_asked_for_more(self):
+        found = [other for _, _, _, other in graph.neighbours(self.CHAIN, "paper:a")]
+        self.assertEqual(found, ["tool:b"])
+        self.assertEqual(graph.neighbours(self.CHAIN, "paper:a", 0), [])
+
+    def test_the_arrow_points_the_way_the_link_goes(self):
+        link = relation("paper:a", "uses", "tool:b")
+        self.assertTrue(graph.describe(link, "out", "Tool B").startswith("-> uses -> Tool B"))
+        self.assertTrue(graph.describe(link, "in", "Paper A").startswith("<- uses <- Paper A"))
+
+    def test_a_trigram_is_compared_only_while_few_enough_share_it(self):
+        names = [entity(f"concept:{n}", name) for n, name in enumerate(("abcd", "abce", "abcf"))]
+        with mock.patch.object(graph, "BLOCK_CAP", 3):
+            self.assertEqual(len(graph.candidate_pairs(names)), 3)
+        with mock.patch.object(graph, "BLOCK_CAP", 2):
+            self.assertEqual(graph.candidate_pairs(names), set())
+
+    def test_the_same_name_is_compared_however_many_share_it(self):
+        same = [entity(f"concept:{n}", "Same") for n in range(3)]
+        with mock.patch.object(graph, "BLOCK_CAP", 1):
+            self.assertEqual(len(graph.candidate_pairs(same)), 3)
+
+    def test_a_new_id_skips_every_number_already_taken(self):
+        taken = [entity("tool:x"), entity("tool:x-2"), entity("tool:x-3")]
+        self.assertEqual(graph.free_id(taken, "tool:x"), "tool:x-4")
+
+    def test_only_a_paper_gets_an_arxiv_key_from_its_id(self):
+        self.assertEqual(graph.external_keys(entity("paper:2401.00001")), {("arxiv", "2401.00001")})
+        for kind in ("author", "tool"):
+            self.assertEqual(graph.external_keys(entity(f"{kind}:2401.00001")), set(), kind)
+
+    def test_a_name_exactly_at_the_similarity_threshold_is_held(self):
+        self.assertEqual(graph.similarity("Bert", "Berk"), graph.SIMILARITY)
+        self.assertIn("similar name (0.50)", graph.match_reasons(entity("tool:a", "Bert"), entity("tool:b", "Berk")))
+
+    def test_ids_conflict_whichever_value_sorts_first_and_only_where_both_have_one(self):
+        low, high = entity("author:a", ids={"s2": "1"}), entity("author:b", ids={"s2": "2"})
+        self.assertEqual(graph.conflicting_ids(low, high), ["s2"])
+        self.assertEqual(graph.conflicting_ids(high, low), ["s2"])
+        more = entity("author:c", ids={"s2": "1", "github": "x"})
+        self.assertEqual(graph.conflicting_ids(more, low), [])
+
+    def test_a_conflicting_id_alone_is_no_reason_to_hold(self):
+        ann, zed = entity("author:a", "Ann Lee", ids={"s2": "1"}), entity("author:b", "Zed Kim", ids={"s2": "2"})
+        self.assertEqual(graph.judged(ann, zed), ([], False))
 
 
 class Loading(unittest.TestCase):
@@ -1094,6 +1164,209 @@ class Citations(CommandLineBase):
             code, _, err = self.run_main("cites", *argv)
             self.assertEqual(code, 1)
             self.assertIn(expected, err)
+
+
+class CommandEdges(CommandLineBase):
+    """Commands at their edges: links on both sides of the one asked for, counts, ranks, dates, and options."""
+
+    def entities(self):
+        return {e["id"]: e for e in graph.read_jsonl(self.folder / "entities.jsonl")}
+
+    def relations(self):
+        return [(r["from"], r["rel"], r["to"]) for r in graph.read_jsonl(self.folder / "relations.jsonl")]
+
+    def test_unlink_removes_only_its_link_however_the_others_sort(self):
+        others = [
+            relation("paper:a", "builds-on", "tool:b"),
+            relation("paper:a", "uses", "dataset:c"),
+            relation("tool:b", "evaluates-on", "dataset:c"),
+        ]
+        self.write(ENTITIES, [relation("paper:a", "uses", "tool:b"), *others])
+        code, _, err = self.run_main("unlink", "paper:a", "uses", "concept:d")
+        self.assertEqual(code, 1)
+        self.assertIn("no relation paper:a uses concept:d", err)
+        self.assertEqual(self.run_main("unlink", "paper:a", "uses", "tool:b")[0], 0)
+        self.assertEqual(self.relations(), [(r["from"], r["rel"], r["to"]) for r in others])
+
+    def test_remove_counts_the_links_it_removed(self):
+        self.write(ENTITIES, [*RELATIONS, relation("paper:a", "related-to", "concept:d")])
+        self.assertEqual(self.run_main("remove", "tool:b")[1].strip(), "removed tool:b and 2 relations")
+
+    def test_add_saves_a_url_and_a_note_and_keeps_text_unescaped(self):
+        fields = ("--slug", "j", "--url", "https://j.example", "--note", "n")
+        self.run_main("add", "--type", "tool", "--name", "Jürgen Kalb", *fields)
+        added = self.entities()["tool:j"]
+        self.assertEqual((added["url"], added["note"]), ("https://j.example", "n"))
+        self.assertIn("Jürgen Kalb", (self.folder / "entities.jsonl").read_text(encoding="utf-8"))
+
+    def test_update_saves_a_url_and_a_note(self):
+        self.run_main("update", "tool:b", "--url", "https://b.example", "--note", "a note")
+        updated = self.entities()["tool:b"]
+        self.assertEqual((updated["url"], updated["note"]), ("https://b.example", "a note"))
+
+    def test_update_refuses_a_different_id_whichever_sorts_first(self):
+        for current, new in (("2", "1"), ("1", "2")):
+            with self.subTest(current=current):
+                self.write([entity("tool:a", ids={"s2": current})], [])
+                code, _, err = self.run_main("update", "tool:a", "--id", f"s2={new}")
+                self.assertEqual(code, 1)
+                self.assertIn("already has s2 id", err)
+
+    def test_merge_needs_the_same_type_in_either_order(self):
+        for keep, drop in (("paper:a", "tool:b"), ("tool:b", "paper:a")):
+            code, _, err = self.run_main("merge", keep, drop)
+            self.assertEqual(code, 1, keep)
+            self.assertIn("two different entities of the same type", err)
+
+    def test_merge_keeps_the_newer_standing(self):
+        for drop_checked, kept_checked in (
+            ("2026-01-01", "2026-01-02"),
+            ("2026-01-02", "2026-01-02"),
+            ("2026-01-03", "2026-01-03"),
+        ):
+            with self.subTest(drop=drop_checked):
+                keep = entity("paper:keep", "Keep", standing={"citations": 1, "checked": "2026-01-02"})
+                drop = entity("paper:drop", "Drop", standing={"citations": 9, "checked": drop_checked})
+                self.write([keep, drop], [])
+                self.run_main("merge", "paper:keep", "paper:drop")
+                self.assertEqual(self.entities()["paper:keep"]["standing"]["checked"], kept_checked)
+                # On the same day the kept entity's own standing stays.
+                self.assertEqual(
+                    self.entities()["paper:keep"]["standing"]["citations"], 9 if drop_checked > "2026-01-02" else 1
+                )
+
+    def test_merge_repoints_distinct_marks_beside_others(self):
+        entities = [
+            entity("tool:keep", "Keep"),
+            entity("tool:drop", "Drop"),
+            entity("tool:a", "A"),
+            entity("tool:x", "X", distinct_from=["tool:a", "tool:drop"]),
+        ]
+        self.write(entities, [])
+        self.run_main("merge", "tool:keep", "tool:drop")
+        self.assertEqual(self.entities()["tool:x"]["distinct_from"], ["tool:a", "tool:keep"])
+
+    def test_merging_links_keeps_the_first_of_equal_rank_and_a_verified_one_over_an_inferred_one(self):
+        entities = [entity("tool:keep", "Keep"), entity("tool:drop", "Drop"), entity("paper:p", "P")]
+        cases = (
+            (("verified", "s1"), ("verified", "s2"), ("verified", "s1")),
+            (("verified", "s1"), ("inferred", "s2"), ("verified", "s1")),
+            (("inferred", "s1"), ("verified", "s2"), ("verified", "s2")),
+        )
+        for first, second, kept in cases:
+            with self.subTest(first=first, second=second):
+                links = [
+                    relation("paper:p", "uses", "tool:keep", status=first[0], source=f"ARXIV:2401.00001, {first[1]}"),
+                    relation("paper:p", "uses", "tool:drop", status=second[0], source=f"ARXIV:2401.00001, {second[1]}"),
+                ]
+                self.write(entities, links)
+                self.run_main("merge", "tool:keep", "tool:drop")
+                (merged,) = graph.read_jsonl(self.folder / "relations.jsonl")
+                self.assertEqual((merged["status"], merged["source"][-2:]), kept)
+
+    def test_a_paper_cites_papers_on_either_side_of_its_id_but_never_itself(self):
+        papers = [entity("paper:m", "Middle", ids={"s2": "m"}), entity("paper:a", "A", ids={"s2": "a"})]
+        self.write([*papers, entity("paper:z", "Z", ids={"s2": "z"})], [])
+        record = {"paperId": "m", "references": [{"paperId": "a"}, {"paperId": "m"}, {"paperId": "z"}], "citations": []}
+        (self.folder / "s2.json").write_text(json.dumps(record), encoding="utf-8")
+        code, out, _ = self.run_main("cites", "paper:m", str(self.folder / "s2.json"))
+        self.assertEqual(code, 0)
+        self.assertIn("linked paper:m cites paper:a", out)
+        self.assertIn("linked paper:m cites paper:z", out)
+        self.assertEqual(sorted(self.relations()), [("paper:m", "cites", "paper:a"), ("paper:m", "cites", "paper:z")])
+
+    def test_a_requested_id_with_no_value_is_asked_about_as_written(self):
+        self.assertEqual(graph.requested_keys({"requestedId": "ARXIV:"}), {("s2", "arxiv:")})
+
+    def test_a_paper_checked_exactly_the_given_days_ago_is_due(self):
+        import datetime
+
+        cutoff = (datetime.date.today() - datetime.timedelta(days=30)).isoformat()
+        self.write([entity("paper:2401.00001", standing={"citations": 1, "checked": cutoff})], [])
+        due = self.folder / "due.txt"
+        self.assertEqual(self.run_main("standing-due", str(due))[1].strip(), "1 paper due")
+
+    def test_the_records_that_came_with_reference_lists_are_counted(self):
+        papers = [entity("paper:2401.00001"), entity("paper:2401.00002"), entity("paper:2401.00003")]
+        records = [
+            {"requestedId": f"ARXIV:2401.0000{n}", "paperId": f"s{n}", "citationCount": 1, "references": []}
+            for n in (1, 2)
+        ] + [{"requestedId": "ARXIV:2401.00003", "paperId": "s3", "citationCount": 1}]
+        results = graph.apply_standing(papers, [], records)
+        self.assertEqual((results["with references"], results["updated"], results["links"]), (2, 3, 0))
+        records = [{"requestedId": "ARXIV:2401.00001", "paperId": "s1", "citationCount": 1, "references": []}]
+        self.write(papers, [])
+        (self.folder / "batch.json").write_text(json.dumps(records), encoding="utf-8")
+        out = self.run_main("standing", str(self.folder / "batch.json"))[1]
+        self.assertIn("0 citation links added", out)
+
+    def test_a_blank_line_inside_a_graph_file_is_skipped(self):
+        (self.folder / "entities.jsonl").write_text(
+            "\n".join([json.dumps(ENTITIES[0]), "", json.dumps(ENTITIES[1])]), encoding="utf-8"
+        )
+        (self.folder / "relations.jsonl").write_text("", encoding="utf-8")
+        self.assertEqual(len(self.entities()), 2)
+
+    def test_validation_goes_on_after_a_malformed_entity(self):
+        errors = graph.validate([loaded({"name": "no id"}), entity("tool:a", "Same"), entity("tool:b", "Same")], [])
+        self.assertTrue(any("needs an id" in error for error in errors), errors)
+        self.assertTrue(any("already used by tool:a" in error for error in errors), errors)
+
+    def test_a_name_or_id_already_used_is_reported_whichever_id_sorts_first(self):
+        errors = graph.validate([entity("tool:b", "Same"), entity("tool:a", "Same")], [])
+        self.assertTrue(any("'Same' is already used by tool:b" in error for error in errors), errors)
+        errors = graph.validate([entity("tool:b", ids={"s2": "1"}), entity("tool:a", "Other", ids={"s2": "1"})], [])
+        self.assertTrue(any("s2 id '1' is already used by tool:b" in error for error in errors), errors)
+
+    def test_a_repeated_id_is_reported_once_as_a_duplicate(self):
+        twins = [entity("tool:a", "Same", ids={"s2": "1"}), entity("tool:a", "Same", ids={"s2": "1"})]
+        self.assertEqual(graph.validate(twins, []), ["duplicate entity id: tool:a"])
+
+    def test_only_a_paper_has_a_standing_or_can_be_an_island(self):
+        for kind in ("author", "tool"):
+            other = entity(f"{kind}:x", standing={"citations": 1, "checked": "2026-01-01"})
+            self.assertIn(f"{kind}:x: only papers have a standing", graph.validate([other], []), kind)
+        alone = [entity("author:x"), entity("paper:p"), entity("tool:y")]
+        self.assertEqual([e["id"] for e in graph.islands(alone, [])], ["paper:p"])
+
+    def test_listing_commands_succeed_with_or_without_results(self):
+        for command in ("dupes", "islands"):
+            self.assertEqual(self.run_main(command)[0], 0, command)
+
+    def test_required_options_and_documented_defaults(self):
+        parser = graph.build_parser()
+        for argv in (
+            [],
+            ["add", "--name", "X"],
+            ["add", "--type", "tool"],
+            ["link", "a", "uses", "b", "--status", "verified"],
+            ["link", "a", "uses", "b", "--source", "s"],
+        ):
+            with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit, msg=argv) as stopped:
+                parser.parse_args(argv)
+            self.assertEqual(stopped.exception.code, 2, argv)
+        self.assertEqual(parser.parse_args(["neighbours", "x"]).depth, 1)
+        self.assertEqual(parser.parse_args(["standing-due", "f"]).days, 30)
+
+    def test_a_held_lock_is_tried_until_its_deadline_has_passed(self):
+        clock = [100.0]
+
+        def sleep(seconds):
+            clock[0] += 0.25  # exact steps, so the deadline is hit exactly
+
+        lock = self.folder / "held.lock"
+        with (
+            open(lock, "a+b") as holder,
+            mock.patch.object(graph.time, "monotonic", lambda: clock[0]),
+            mock.patch.object(graph.time, "sleep", side_effect=sleep) as slept,
+        ):
+            self.assertTrue(graph.try_lock(holder))
+            with self.assertRaisesRegex(graph.GraphError, "busy"):
+                with graph.file_lock(lock, 0.5, "busy"):
+                    pass
+            graph.unlock(holder)
+        # Tried at 100.0, 100.25, 100.5 (the deadline itself), and 100.75, which is past it.
+        self.assertEqual(slept.call_count, 3)
 
 
 if __name__ == "__main__":

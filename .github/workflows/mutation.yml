@@ -33,14 +33,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Survival limits in percent, set just above what was measured on 2026-11-07. They are a
-          # ratchet: lower them when survivors are killed, never raise them.
+          # Survival limits in percent. Every module is held at 0, so any surviving mutant fails the run.
+          # They are a ratchet: never raise them.
           # paths: everything besides the shared tooling that can change the module's result.
-          - {module: init, limit: 1, paths: "skills/init .claude-plugin/plugin.json"}
-          - {module: recap, limit: 6, paths: "skills/recap skills/graph/scripts/graph.py"}
-          - {module: arxiv, limit: 19, paths: "skills/arxiv/scripts"}
-          - {module: s2, limit: 22, paths: "skills/scholar/scripts"}
-          - {module: graph, limit: 19, paths: "skills/graph/scripts"}
+          - {module: init, limit: 0, paths: "skills/init .claude-plugin/plugin.json"}
+          - {module: recap, limit: 0, paths: "skills/recap skills/graph/scripts/graph.py"}
+          - {module: arxiv, limit: 0, paths: "skills/arxiv/scripts"}
+          - {module: s2, limit: 0, paths: "skills/scholar/scripts"}
+          - {module: graph, limit: 0, paths: "skills/graph/scripts"}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

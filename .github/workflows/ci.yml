@@ -126,7 +126,7 @@ jobs:
         shell: bash
         run: |
           set -e
-          for test in skills/*/scripts/test_*.py evals/*/test_*.py; do
+          for test in skills/*/scripts/test_*.py evals/*/test_*.py tools/test_*.py; do
             echo "== $test"
             python "$test"
           done

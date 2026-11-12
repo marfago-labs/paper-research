@@ -277,14 +277,20 @@ class Hardening(Workspace):
         self.assertIn('+        "ask": [', out)
 
     def test_the_files_own_indentation_is_kept(self):
-        for indent, sample in ((4, '{\n    "model": "x"\n}\n'), ("\t", '{\n\t"model": "x"\n}\n')):
+        # The last sample has eight spaces before short content: an indent longer than what follows it.
+        samples = ((4, '{\n    "model": "x"\n}\n'), ("\t", '{\n\t"model": "x"\n}\n'), (8, '{\n        "a": 1\n}\n'))
+        for indent, sample in samples:
             with self.subTest(indent=indent):
                 self.write_settings(sample)
                 self.run_main()
                 self.assertEqual(
                     self.read(".claude/settings.json").splitlines()[1],
-                    f'{indent if indent == chr(9) else " " * indent}"model": "x",',
+                    f"{indent if indent == chr(9) else ' ' * indent}{sample.splitlines()[1].strip()},",
                 )
+
+    def test_a_new_settings_file_gets_two_spaces(self):
+        self.run_main()
+        self.assertEqual(self.read(".claude/settings.json").splitlines()[1], '  "permissions": {')
 
     def test_a_flat_file_gets_two_spaces_and_unicode_survives(self):
         self.write_settings('{"note": "café"}')
@@ -302,7 +308,12 @@ class Hardening(Workspace):
 
     def test_more_than_one_block_is_refused_rather_than_half_fixed(self):
         one = f"{init.BEGIN}\nold\n{init.END}\n"
-        for text in (one + "\n" + one, f"{init.BEGIN}\n{init.END}\n{init.END}\n"):
+        twice = (
+            one + "\n" + one,
+            f"{init.BEGIN}\n{init.END}\n{init.END}\n",
+            f"{init.BEGIN}\n{init.BEGIN}\n{init.END}\n",
+        )
+        for text in twice:
             with self.subTest(text=text[:30]):
                 (self.root / "CLAUDE.md").write_text(text, encoding="utf-8")
                 code, out, err = self.run_main()
