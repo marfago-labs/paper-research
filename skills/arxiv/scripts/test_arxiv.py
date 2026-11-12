@@ -132,6 +132,34 @@ class Network(unittest.TestCase):
     def test_gives_up_when_the_next_wait_would_pass_the_deadline(self):
         self.assertIn("after about 90 seconds of retries", self.run_on_a_fake_clock(80))
 
+    def test_gives_up_when_the_wait_alone_would_pass_the_deadline(self):
+        # The request ends at 89 seconds, so only the 2 second wait would take it past 90.
+        self.assertIn("after about 90 seconds of retries", self.run_on_a_fake_clock(89))
+
+    def test_gives_up_when_a_sleep_overran_the_deadline(self):
+        # The wait was checked against the deadline before sleeping, but the sleep itself ran 89 seconds long. The next
+        # round starts past the deadline and must stop there, not ask once more.
+        clock, asked = [0.0], []
+
+        def fail(request, timeout=None):
+            asked.append(1)
+            raise http_error(503)
+
+        def overrunning_sleep(seconds):
+            clock[0] += seconds + 89
+
+        opener = mock.Mock()
+        opener.open.side_effect = fail
+        with (
+            mock.patch.object(arxiv, "OPENER", opener),
+            mock.patch.object(arxiv.time, "monotonic", lambda: clock[0]),
+            mock.patch.object(arxiv.time, "sleep", overrunning_sleep),
+            self.assertRaises(arxiv.ApiError) as caught,
+        ):
+            arxiv.get("https://arxiv.org/x")
+        self.assertEqual(str(caught.exception), "gave up on https://arxiv.org/x after about 90 seconds")
+        self.assertEqual(len(asked), 1)
+
     def test_gives_up_when_the_deadline_is_reached_exactly(self):
         message = self.run_on_a_fake_clock(88)
         self.assertIn("after about 90 seconds", message)
@@ -150,6 +178,85 @@ class Network(unittest.TestCase):
         with mock.patch.object(arxiv, "OPENER", opener):
             self.assertEqual(arxiv.get("https://arxiv.org/x"), b"ok")
         self.assertEqual(opener.open.call_count, 3)
+
+    def test_retries_every_busy_or_failing_status_and_nothing_else(self):
+        for code in (429, 500, 502, 503, 504):
+            opener = mock.Mock()
+            opener.open.side_effect = [http_error(code), response(b"ok")]
+            with mock.patch.object(arxiv, "OPENER", opener):
+                self.assertEqual(arxiv.get("https://arxiv.org/x"), b"ok", code)
+            self.assertEqual(opener.open.call_count, 2, code)
+        for code in (400, 401, 403, 501):
+            opener = mock.Mock()
+            opener.open.side_effect = [http_error(code)]
+            with mock.patch.object(arxiv, "OPENER", opener):
+                with self.assertRaisesRegex(arxiv.ApiError, f"HTTP {code}"):
+                    arxiv.get("https://arxiv.org/x")
+            self.assertEqual(opener.open.call_count, 1, code)
+
+    def fail_on_a_fake_clock(self, seconds_per_request):
+        """Every request takes this long and fails with a 503. Returns the sleeps and the pacing waits."""
+        clock, sleeps = [0.0], []
+
+        def fail(request, timeout=None):
+            clock[0] += seconds_per_request
+            raise http_error(503)
+
+        def sleep(seconds):
+            sleeps.append(seconds)
+            clock[0] += seconds
+
+        opener = mock.Mock()
+        opener.open.side_effect = fail
+        with (
+            mock.patch.object(arxiv, "OPENER", opener),
+            mock.patch.object(arxiv.time, "monotonic", lambda: clock[0]),
+            mock.patch.object(arxiv.time, "sleep", sleep),
+            self.assertRaises(arxiv.ApiError),
+        ):
+            arxiv.get("https://arxiv.org/x")
+        return sleeps, [call.args[0] for call in arxiv.pace.call_args_list]
+
+    def test_backs_off_2_4_then_8_seconds_between_attempts(self):
+        self.assertEqual(self.fail_on_a_fake_clock(0)[0], [2, 4, 8])
+
+    def test_the_wait_for_the_pacing_lock_shrinks_with_the_time_left(self):
+        # Requests take 20 seconds; the waits between them are 2, 4, and 8.
+        waits = self.fail_on_a_fake_clock(20)[1]
+        deadline, lock = arxiv.DEADLINE, arxiv.LOCK_WAIT
+        self.assertEqual(waits, [min(lock, deadline), min(lock, deadline - 22), deadline - 46, deadline - 74])
+
+    def test_each_request_gets_the_time_left_before_the_deadline(self):
+        timeouts = []
+
+        def opened(request, timeout):
+            timeouts.append(timeout)
+            return response(b"ok")
+
+        opener = mock.Mock()
+        opener.open.side_effect = opened
+        for elapsed in (0.0, 70.0, arxiv.DEADLINE - 0.5):
+            with (
+                mock.patch.object(arxiv, "OPENER", opener),
+                mock.patch.object(arxiv.time, "monotonic", return_value=1000.0 + elapsed),
+            ):
+                arxiv.read_once(urllib.request.Request("https://arxiv.org/x"), "https://arxiv.org/x", 1000.0)
+        # The usual timeout, then what is left of the deadline, then never less than a second.
+        self.assertEqual(timeouts, [arxiv.TIMEOUT, arxiv.DEADLINE - 70.0, 1])
+
+    def test_reads_one_byte_past_the_cap_and_accepts_a_reply_of_exactly_the_cap(self):
+        asked = []
+
+        class Reply(io.BytesIO):
+            def read(self, size=-1):
+                asked.append(size)
+                return super().read(size)
+
+        opener = mock.Mock()
+        opener.open.return_value = Reply(b"ok")
+        with mock.patch.object(arxiv, "OPENER", opener), mock.patch.object(arxiv, "MAX_BYTES", 2):
+            self.assertEqual(arxiv.get("https://arxiv.org/x"), b"ok")
+        self.assertEqual(asked, [3])
 
     def test_get_failures(self):
         cases = [
@@ -199,6 +306,50 @@ class Pacing(unittest.TestCase):
                 arxiv.pace(0)
             arxiv.unlock(holder)
         arxiv.pace()
+
+    def pace_at(self, now, last, interval=0.5):
+        """Pace at a fixed time, with the previous request at last. Exact binary fractions keep the sums exact."""
+        self.cache.mkdir(exist_ok=True)
+        (self.cache / arxiv.STATE_NAME).write_text(repr(last), encoding="utf-8")
+        with (
+            mock.patch.object(arxiv, "MIN_INTERVAL", interval),
+            mock.patch.object(arxiv.time, "time", return_value=now),
+        ):
+            arxiv.pace()
+
+    def test_waits_exactly_the_rest_of_the_interval(self):
+        self.pace_at(now=1000.25, last=1000.0)
+        self.sleep.assert_called_once_with(0.25)
+
+    def test_does_not_wait_once_the_interval_has_passed(self):
+        for now in (1000.5, 1001.0):
+            self.sleep.reset_mock()
+            self.pace_at(now=now, last=1000.0)
+            self.sleep.assert_not_called()
+
+    def test_creates_the_cache_folder_with_its_parents(self):
+        nested = self.cache / "a" / "b"
+        with mock.patch.object(arxiv, "CACHE_DIR", nested):
+            arxiv.pace()
+        self.assertTrue((nested / arxiv.STATE_NAME).is_file())
+
+    def test_a_held_lock_is_tried_until_its_deadline_has_passed(self):
+        self.cache.mkdir()
+        lock = self.cache / "held.lock"
+        clock = [100.0]
+
+        def sleep(seconds):
+            clock[0] += 0.25  # exact steps, so the deadline is hit exactly
+
+        self.sleep.side_effect = sleep
+        with open(lock, "a+b") as holder, mock.patch.object(arxiv.time, "monotonic", lambda: clock[0]):
+            self.assertTrue(arxiv.try_lock(holder))
+            with self.assertRaisesRegex(arxiv.ApiError, "busy"):
+                with arxiv.file_lock(lock, 0.5, "busy"):
+                    pass
+            arxiv.unlock(holder)
+        # Tried at 100.0, 100.25, 100.5 (the deadline itself), and 100.75, which is past it.
+        self.assertEqual(self.sleep.call_count, 3)
 
     def test_a_leftover_lock_file_blocks_nobody(self):
         self.cache.mkdir()
@@ -430,6 +581,75 @@ class Markdown(unittest.TestCase):
                 markdown = arxiv.to_markdown(f'<article><span style="{style}">Shown</span></article>')
                 self.assertEqual(markdown, "Shown\n")
 
+    def test_every_threshold_hides_just_below_it_and_shows_at_it(self):
+        # A detector for prompt injection: a value one step past each limit hides, the limit itself shows.
+        edges = [
+            ("font-size:19.9%", "font-size:20%"),
+            ("font-size:1.9px", "font-size:2px"),
+            ("font-size:1.9pt", "font-size:2pt"),
+            ("font-size:0.19em", "font-size:0.2em"),
+            ("font-size:0.19rem", "font-size:0.2rem"),
+            ("font-size:0", "font-size:0.5"),
+            ("opacity:0.09", "opacity:0.1"),
+            ("opacity:9%", "opacity:10%"),
+            ("left:-1001px", "left:-1000px"),
+            ("left:-1001", "left:-1000"),
+            ("left:-51em", "left:-50em"),
+            ("text-indent:-51rem", "text-indent:-50rem"),
+            ("color:#f0f0f0", "color:#efefef"),
+            ("color:#f0f0f0", "color:#f0f000"),
+            ("color:#00000019", "color:#0000001a"),
+            ("color:#0001", "color:#000000ff"),
+            ("color:#0001", "color:#000f"),
+            ("color:rgb(240,240,240)", "color:rgb(239,240,240)"),
+            ("color:rgb(95%,95%,95%)", "color:rgb(94%,94%,94%)"),
+            ("color:rgba(0,0,0,0.05)", "color:rgb(255,255)"),
+            ("color:rgba(0,0,0,0.05)", "color:rgb(255)"),
+        ]
+        for hidden, shown in edges:
+            with self.subTest(hidden=hidden, shown=shown):
+                self.assertTrue(arxiv.hides({"style": hidden}), hidden)
+                self.assertFalse(arxiv.hides({"style": shown}), shown)
+
+    def test_nested_hidden_text_is_counted_once_and_whole(self):
+        page = '<article><p>A</p><span style="display:none"><b>xx</b>y<i>z</i></span><p>B</p></article>'
+        markdown, writer = arxiv.convert(page)
+        self.assertEqual(markdown, "A\n\n[hidden text removed: 4 characters]\n\nB\n")
+        self.assertEqual(writer.hidden_elements, 1)
+
+    def test_only_the_article_is_converted(self):
+        markdown = arxiv.to_markdown("<a>Outside link</a><abbr>out</abbr><article><p>In</p></article><p>After</p>")
+        self.assertEqual(markdown, "In\n")
+
+    def test_only_br_breaks_a_line_among_self_closing_tags(self):
+        page = "<article><p>one<wbr/>two<area/>three<img/>four<br/>five</p></article>"
+        self.assertEqual(arxiv.to_markdown(page), "onetwothreefour\nfive\n")
+
+    def test_character_references_become_text(self):
+        self.assertEqual(arxiv.to_markdown("<article><p>R&amp;D &lt;x&gt; caf&#233;</p></article>"), "R&D <x> café\n")
+
+    def test_an_end_tag_closes_the_elements_left_open_inside_it(self):
+        page = "<article><p>one<span>two<b>three</p><p>four</p><table><tr><td>a<td>b</tr></table>end</article>"
+        self.assertEqual(arxiv.to_markdown(page), "onetwothree\n\nfour\n\n| a | b |\n\nend\n")
+
+    def test_closing_an_inline_tag_in_a_cell_keeps_the_row_open(self):
+        page = "<article><table><tr><td>a<u>b</u></td><td>c</td></tr></table></article>"
+        self.assertEqual(arxiv.to_markdown(page), "| ab | c |\n")
+
+    def test_a_footnote_closes_at_its_end_tag_even_with_tags_left_open_inside(self):
+        page = (
+            '<article><p>a<span class="ltx_note_content">one<b>bold</span> mid'
+            '<span class="ltx_note_content">two<u>under</span> end</p></article>'
+        )
+        self.assertEqual(arxiv.to_markdown(page), "a [Footnote: onebold] mid [Footnote: twounder] end\n")
+
+    def test_a_hidden_heading_leaves_only_the_marker(self):
+        page = '<article><p>A</p><h2 style="display:none">secret</h2><p>B</p></article>'
+        self.assertEqual(arxiv.to_markdown(page), "A\n\n[hidden text removed: 6 characters]\n\nB\n")
+
+    def test_section_levels_count_the_hashes(self):
+        self.assertEqual([s["level"] for s in arxiv.sections("## A\n# B\n###### C\n")], [2, 1, 6])
+
     def test_empty_or_unclosed_hidden_elements(self):
         markdown, writer = arxiv.convert('<article><p style="display:none"> </p><p>Text</p></article>')
         self.assertEqual((markdown, writer.hidden_elements), ("Text\n", 0))
@@ -500,6 +720,26 @@ class Saving(unittest.TestCase):
             result = arxiv.cmd_fetch(self.args(force=True))
         self.assertNotIn("hiddenTextRemoved", result)
         self.assertIn("0 hidden elements", Path(result["path"]).read_text(encoding="utf-8"))
+
+    def test_a_page_needs_200_words_of_article_text(self):
+        for words, saved in ((199, False), (200, True)):
+            page = "<article><p>" + "word " * words + "</p></article>"
+            with mock.patch.object(arxiv, "get", return_value=page.encode()):
+                if saved:
+                    arxiv.cmd_fetch(self.args(force=True))
+                else:
+                    with self.assertRaises(arxiv.NoHtml, msg=words):
+                        arxiv.cmd_fetch(self.args(force=True))
+
+    def test_saves_into_folders_that_do_not_exist_yet(self):
+        page = ARTICLE.replace("A footnote.", "A footnote. " + "word " * 250)
+        text_folder, pdf_folder = self.folder / "a" / "b", self.folder / "c" / "d"
+        with mock.patch.object(arxiv, "get", return_value=page.encode()):
+            self.assertTrue(Path(arxiv.cmd_fetch(self.args(folder=text_folder))["path"]).is_file())
+        with mock.patch.object(arxiv, "get", return_value=b"%PDF-1.5 data"):
+            for _ in range(2):  # the second download goes into the folder the first one made
+                result = arxiv.cmd_pdf(self.args(force=True, folder=pdf_folder))
+        self.assertTrue(Path(result["path"]).is_file())
 
     def test_fetch_turns_not_found_into_no_html(self):
         with mock.patch.object(arxiv, "get", side_effect=arxiv.NotFound("x")), self.assertRaises(arxiv.NoHtml):
@@ -580,6 +820,34 @@ class Cli(unittest.TestCase):
         self.assertIn("use the pdf command", err)
         with mock.patch.object(arxiv, "get", side_effect=arxiv.ApiError("HTTP 500")):
             self.assertEqual(self.run_main(["search", "agent"])[0], 1)
+
+    def test_prints_indented_json_without_escaping_text(self):
+        with mock.patch.object(arxiv, "cmd_paper", return_value=[{"title": "τ²"}]):
+            code, out, _ = self.run_main(["paper", "2401.00001"])
+        self.assertEqual(code, 0)
+        self.assertEqual(out, json.dumps([{"title": "τ²"}], ensure_ascii=False, indent=2) + "\n")
+
+    def test_search_limits_are_accepted_at_their_edges_and_refused_past_them(self):
+        for value in (1, 200):
+            args = arxiv.build_parser().parse_args(["search", "x", "--limit", str(value)])
+            with mock.patch.object(arxiv, "get", return_value=FEED.format(total=2).encode()) as get:
+                arxiv.cmd_search(args)
+            self.assertIn(f"max_results={value}", get.call_args.args[0])
+        for value in (0, 201):
+            args = arxiv.build_parser().parse_args(["search", "x", "--limit", str(value)])
+            with self.assertRaisesRegex(ValueError, "between 1 and 200"):
+                arxiv.cmd_search(args)
+
+    def test_the_documented_defaults_and_required_command(self):
+        search = arxiv.build_parser().parse_args(["search", "x"])
+        self.assertEqual((search.limit, search.sort), (10, "relevance"))
+        with mock.patch.object(arxiv, "get", return_value=FEED.format(total=2).encode()) as get:
+            arxiv.cmd_search(search)
+        self.assertIn("start=0&", get.call_args.args[0])
+        self.assertIn("sortBy=relevance&sortOrder=descending", get.call_args.args[0])
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as stopped:
+            arxiv.build_parser().parse_args([])
+        self.assertEqual(stopped.exception.code, 2)
 
     def test_script_entry_point(self):
         out = io.TextIOWrapper(io.BytesIO(), encoding="utf-8")

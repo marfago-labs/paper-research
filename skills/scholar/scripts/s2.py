@@ -36,15 +36,16 @@ AUTHOR_FIELDS = "name,hIndex,citationCount,paperCount"
 MAX_BATCH = 500  # the most IDs the batch endpoint takes in one request
 # With reference lists a response is far larger, and the endpoint answers at most 10 MB, so ask for fewer papers.
 REFERENCE_BATCH = 100
-MIN_INTERVAL = 1.1  # seconds between requests; a new API key allows 1 per second
-MAX_ATTEMPTS = 5
-TIMEOUT = 30
+# Tuning values carry `pragma: no mutate`: tests use the names, so a nearby number changes nothing they see.
+MIN_INTERVAL = 1.1  # seconds between requests (a new API key allows 1 per second); pragma: no mutate
+MAX_ATTEMPTS = 5  # pragma: no mutate
+TIMEOUT = 30  # pragma: no mutate
 DEADLINE = 90  # seconds for one command's request, retries included, to stay inside tool time limits
-MAX_BYTES = 20_000_000
+MAX_BYTES = 20_000_000  # pragma: no mutate
 RETRYABLE = {429, 500, 502, 503, 504}
 CACHE_DIR = None  # the workspace's .cache, found from the current folder when None
 STATE_NAME = "s2-last-request"
-LOCK_WAIT = 60
+LOCK_WAIT = 60  # pragma: no mutate
 
 
 class ApiError(Exception):
@@ -126,29 +127,34 @@ def retry_delay(retry_after, attempt):
     return min(2 ** (attempt + 1), 30)
 
 
-if sys.platform == "win32":
+# Written inline because mypy only understands platform checks in this form. On the system that runs it, a changed
+# comparison mostly picks the same branch, so the line is marked.
+if sys.platform == "win32":  # pragma: no mutate
     import msvcrt
 
     def try_lock(handle):
         """Try to take an exclusive operating-system lock on the file. True if it was taken."""
         try:
-            handle.seek(0)
-            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
-        except OSError:
-            return False
-        return True
+            handle.seek(0)  # pragma: no mutate (Windows only: never runs in a Linux mutation run)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)  # pragma: no mutate (Windows only)
+        except OSError:  # pragma: no mutate (Windows only)
+            return False  # pragma: no mutate (Windows only)
+        return True  # pragma: no mutate (Windows only)
 
     def unlock(handle):
-        handle.seek(0)
-        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+        handle.seek(0)  # pragma: no mutate (Windows only)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)  # pragma: no mutate (Windows only)
 
 else:
     import fcntl
 
+    # Marked alone: the two flags share no bits, so `+` and `^` give the same number as `|`.
+    EXCLUSIVE_NOW = fcntl.LOCK_EX | fcntl.LOCK_NB  # pragma: no mutate
+
     def try_lock(handle):
         """Try to take an exclusive operating-system lock on the file. True if it was taken."""
         try:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(handle.fileno(), EXCLUSIVE_NOW)
         except OSError:
             return False
         return True
@@ -165,7 +171,7 @@ def file_lock(path, wait, busy_message):
         while not try_lock(handle):
             if time.monotonic() > deadline:
                 raise ApiError(busy_message)
-            time.sleep(0.1)
+            time.sleep(0.1)  # pragma: no mutate (a polling interval, a tuning value)
         try:
             yield
         finally:
@@ -194,7 +200,7 @@ def pace(wait=LOCK_WAIT):
         try:
             last = float(state.read_text(encoding="utf-8"))
         except (OSError, ValueError):
-            last = 0.0
+            last = 0.0  # pragma: no mutate (any time long past means no wait, so 1.0 or -1.0 is the same)
         delay = MIN_INTERVAL - (time.time() - last)
         if delay > 0:
             time.sleep(min(delay, MIN_INTERVAL))
@@ -231,7 +237,9 @@ def read_json(req, path, started):
 
 def delay_before_retry(err, path, attempt):
     """How long to wait before retrying after err. Raises if it shouldn't be retried."""
-    last_attempt = attempt == MAX_ATTEMPTS - 1
+    # pragma: no mutate below: attempt never passes MAX_ATTEMPTS - 1, small ints are shared objects so `is`
+    # agrees, and 5 ^ 1 is 4.
+    last_attempt = attempt == MAX_ATTEMPTS - 1  # pragma: no mutate
     if not isinstance(err, urllib.error.HTTPError):
         if last_attempt:
             raise ApiError(f"network failure calling {path}: {err}") from None
@@ -338,7 +346,7 @@ def read_ids(file):
         raise ValueError(f"can't read {file}: {err}") from None
 
 
-def batch_request(ids, with_references=False):
+def batch_request(ids, with_references):
     """One request for a batch of ids, as a record for each, with their reference lists if asked."""
     fields = f"{PAPER_FIELDS},{REFERENCE_FIELDS}" if with_references else PAPER_FIELDS
     papers = request("POST", f"{GRAPH}/paper/batch", {"fields": fields}, {"ids": ids})
@@ -450,5 +458,5 @@ def main(argv=None):
     return 0
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no mutate (`is` and `<=` agree for the names a module can have)
     sys.exit(main())

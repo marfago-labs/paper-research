@@ -111,6 +111,36 @@ class RequestBehaviour(unittest.TestCase):
         handler = s2.NoRedirect()
         self.assertIsNone(handler.redirect_request(None, None, 302, "Found", {}, "https://evil.example"))
 
+    def test_retries_every_busy_or_failing_status_and_nothing_else(self):
+        for code in (429, 500, 502, 503, 504):
+            with mock.patch.object(s2.OPENER, "open", side_effect=[http_error(code), fake_response({})]) as opened:
+                self.assertEqual(s2.request("GET", "/x"), {}, code)
+            self.assertEqual(opened.call_count, 2, code)
+        for code in (400, 401, 403, 404, 501):
+            with mock.patch.object(s2.OPENER, "open", side_effect=[http_error(code)]) as opened:
+                with self.assertRaisesRegex(s2.ApiError, f"HTTP {code}"):
+                    s2.request("GET", "/x")
+            self.assertEqual(opened.call_count, 1, code)
+
+    def test_an_error_keeps_the_first_300_characters_of_the_reply(self):
+        long = urllib.error.HTTPError("https://api.semanticscholar.org/x", 400, "bad", {}, io.BytesIO(b"x" * 400))
+        with mock.patch.object(s2.OPENER, "open", side_effect=[long]):
+            with self.assertRaises(s2.ApiError) as caught:
+                s2.request("GET", "/x")
+        self.assertIn("x" * 300, str(caught.exception))
+        self.assertNotIn("x" * 301, str(caught.exception))
+
+
+class RetryDelay(unittest.TestCase):
+    def test_backs_off_from_2_seconds_doubling_up_to_30(self):
+        self.assertEqual([s2.retry_delay(None, attempt) for attempt in range(6)], [2, 4, 8, 16, 30, 30])
+
+    def test_follows_retry_after_for_at_most_a_minute(self):
+        self.assertEqual(s2.retry_delay("5", 0), 5)
+        self.assertEqual(s2.retry_delay("60", 0), 60)
+        self.assertEqual(s2.retry_delay("61", 0), 60)
+        self.assertEqual(s2.retry_delay("soon", 2), 8)
+
 
 class Links(unittest.TestCase):
     """Each paper carries the ID column of a paper list as a ready link, so it doesn't depend on Claude's wording."""
@@ -251,6 +281,41 @@ class Commands(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "must be between"):
                 args.func(args)
 
+    def test_limits_are_accepted_at_their_edges_and_refused_past_them(self):
+        ranges = (
+            (lambda value: ["search", "x", "--limit", value], 1, 100),
+            (lambda value: ["search", "x", "--offset", value], 0, 9999),
+            (lambda value: ["paper", "2401.00001", "--limit", value], 1, 1000),
+            (lambda value: ["recommend", "--like", "2401.00001", "--limit", value], 1, 500),
+        )
+        for argv, low, high in ranges:
+            for value in (low, high):
+                args = s2.build_parser().parse_args(argv(str(value)))
+                with mock.patch.object(s2, "request", return_value={}):
+                    args.func(args)
+            for value in (low - 1, high + 1):
+                args = s2.build_parser().parse_args(argv(str(value)))
+                with self.assertRaisesRegex(ValueError, "must be between", msg=argv(str(value))):
+                    args.func(args)
+
+    def test_batch_takes_exactly_500_ids_on_the_command_line(self):
+        args = s2.build_parser().parse_args(["batch", *[f"2401.{n:05d}" for n in range(1, 501)]])
+        with mock.patch.object(s2, "request", return_value=[None] * 500) as sent:
+            self.assertEqual(len(args.func(args)), 500)
+        self.assertEqual(sent.call_count, 1)
+
+    def test_the_documented_defaults(self):
+        search = s2.build_parser().parse_args(["search", "x"])
+        self.assertEqual((search.limit, search.offset), (10, 0))
+        self.assertEqual(s2.build_parser().parse_args(["paper", "2401.00001"]).limit, 20)
+        self.assertEqual(s2.build_parser().parse_args(["recommend", "--like", "2401.00001"]).limit, 20)
+
+    def test_a_command_and_liked_papers_are_required(self):
+        for argv in ([], ["recommend"]):
+            with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as stopped:
+                s2.build_parser().parse_args(argv)
+            self.assertEqual(stopped.exception.code, 2, argv)
+
     def test_rejects_unexpected_batch_responses(self):
         for argv in (["batch", "2401.00001"], ["authors", "123"]):
             args = s2.build_parser().parse_args(argv)
@@ -372,6 +437,47 @@ class Pacing(unittest.TestCase):
             s2.unlock(holder)
         s2.pace()
 
+    def pace_at(self, now, last, interval=0.5):
+        """Pace at a fixed time, with the previous request at last. Exact binary fractions keep the sums exact."""
+        self.cache.mkdir(exist_ok=True)
+        (self.cache / s2.STATE_NAME).write_text(repr(last), encoding="utf-8")
+        with mock.patch.object(s2, "MIN_INTERVAL", interval), mock.patch.object(s2.time, "time", return_value=now):
+            s2.pace()
+
+    def test_waits_exactly_the_rest_of_the_interval(self):
+        self.pace_at(now=1000.25, last=1000.0)
+        self.sleep.assert_called_once_with(0.25)
+
+    def test_does_not_wait_once_the_interval_has_passed(self):
+        for now in (1000.5, 1001.0):
+            self.sleep.reset_mock()
+            self.pace_at(now=now, last=1000.0)
+            self.sleep.assert_not_called()
+
+    def test_creates_the_cache_folder_with_its_parents(self):
+        nested = self.cache / "a" / "b"
+        with mock.patch.object(s2, "CACHE_DIR", nested):
+            s2.pace()
+        self.assertTrue((nested / s2.STATE_NAME).is_file())
+
+    def test_a_held_lock_is_tried_until_its_deadline_has_passed(self):
+        self.cache.mkdir()
+        lock = self.cache / "held.lock"
+        clock = [100.0]
+
+        def sleep(seconds):
+            clock[0] += 0.25  # exact steps, so the deadline is hit exactly
+
+        self.sleep.side_effect = sleep
+        with open(lock, "a+b") as holder, mock.patch.object(s2.time, "monotonic", lambda: clock[0]):
+            self.assertTrue(s2.try_lock(holder))
+            with self.assertRaisesRegex(s2.ApiError, "busy"):
+                with s2.file_lock(lock, 0.5, "busy"):
+                    pass
+            s2.unlock(holder)
+        # Tried at 100.0, 100.25, 100.5 (the deadline itself), and 100.75, which is past it.
+        self.assertEqual(self.sleep.call_count, 3)
+
     def test_a_leftover_lock_file_blocks_nobody(self):
         self.cache.mkdir()
         (self.cache / f"{s2.STATE_NAME}.lock").write_bytes(b"left by a process that died")
@@ -458,6 +564,28 @@ class RequestFailures(unittest.TestCase):
             s2.request("GET", "/x")
         return str(caught.exception)
 
+    def test_gives_up_when_a_sleep_overran_the_deadline(self):
+        # The wait was checked against the deadline before sleeping, but the sleep itself ran 89 seconds long. The next
+        # round starts past the deadline and must stop there, not ask once more.
+        clock, asked = [0.0], []
+
+        def fail(request, timeout=None):
+            asked.append(1)
+            raise http_error(503)
+
+        def overrunning_sleep(seconds):
+            clock[0] += seconds + 89
+
+        with (
+            mock.patch.object(s2.OPENER, "open", fail),
+            mock.patch.object(s2.time, "monotonic", lambda: clock[0]),
+            mock.patch.object(s2.time, "sleep", overrunning_sleep),
+            self.assertRaises(s2.ApiError) as caught,
+        ):
+            s2.request("GET", "/x")
+        self.assertEqual(str(caught.exception), "gave up on /x after about 90 seconds")
+        self.assertEqual(len(asked), 1)
+
     def test_gives_up_when_the_next_wait_would_pass_the_deadline(self):
         self.assertIn("gave up on /x after about 90 seconds of retries", self.run_on_a_fake_clock(40))
 
@@ -465,6 +593,53 @@ class RequestFailures(unittest.TestCase):
         message = self.run_on_a_fake_clock(30)
         self.assertIn("gave up on /x after about 90 seconds", message)
         self.assertNotIn("of retries", message)
+
+    def test_each_request_gets_the_time_left_before_the_deadline(self):
+        timeouts = []
+
+        def opened(request, timeout):
+            timeouts.append(timeout)
+            return fake_response({})
+
+        for elapsed in (0.0, 70.0, s2.DEADLINE - 0.5):
+            with (
+                mock.patch.object(s2.OPENER, "open", opened),
+                mock.patch.object(s2.time, "monotonic", return_value=1000.0 + elapsed),
+            ):
+                s2.read_json(s2.build_request("GET", "/x", None, None), "/x", 1000.0)
+        # The usual timeout, then what is left of the deadline, then never less than a second.
+        self.assertEqual(timeouts, [s2.TIMEOUT, s2.DEADLINE - 70.0, 1])
+
+    def test_the_wait_for_the_pacing_lock_shrinks_with_the_time_left(self):
+        clock = [0.0]
+
+        def sleep(seconds):
+            clock[0] += seconds
+
+        def busy(request, timeout=None):
+            raise http_error(503, {"Retry-After": "40"})
+
+        with (
+            mock.patch.object(s2.OPENER, "open", busy),
+            mock.patch.object(s2.time, "monotonic", lambda: clock[0]),
+            mock.patch.object(s2.time, "sleep", sleep),
+            self.assertRaises(s2.ApiError),
+        ):
+            s2.request("GET", "/x")
+        waits = [call.args[0] for call in s2.pace.call_args_list]
+        self.assertEqual(waits, [min(s2.LOCK_WAIT, s2.DEADLINE), s2.DEADLINE - 40, s2.DEADLINE - 80])
+
+    def test_reads_one_byte_past_the_cap_and_accepts_a_reply_of_exactly_the_cap(self):
+        asked = []
+
+        class Reply(io.BytesIO):
+            def read(self, size=-1):
+                asked.append(size)
+                return super().read(size)
+
+        with mock.patch.object(s2, "MAX_BYTES", 2), mock.patch.object(s2.OPENER, "open", return_value=Reply(b"{}")):
+            self.assertEqual(s2.request("GET", "/x"), {})
+        self.assertEqual(asked, [3])
 
     def test_refuses_oversized_responses(self):
         with (
@@ -503,7 +678,15 @@ class CommandLine(unittest.TestCase):
         with mock.patch.object(s2, "request", return_value={"title": "τ²"}):
             code, out, _ = self.run_main(["search", "agents"])
         self.assertEqual(code, 0)
-        self.assertIn("τ²", out)
+        # Indented, so it reads in a terminal, and unescaped, so titles stay readable.
+        self.assertEqual(out, json.dumps({"title": "τ²"}, ensure_ascii=False, indent=2) + "\n")
+
+    def test_a_partly_failed_batch_prints_what_it_fetched_the_same_way(self):
+        with mock.patch.object(s2, "request", side_effect=[[{"title": "τ²"}] * 500, s2.ApiError("HTTP 503")]):
+            code, out, _ = self.run_main(["batch", *[f"2401.{n:05d}" for n in range(1, 501)], "--with-references"])
+        self.assertEqual(code, 1)
+        fetched = [{"requestedId": f"ARXIV:2401.{n:05d}", "title": "τ²"} for n in range(1, 101)]
+        self.assertEqual(out, json.dumps(fetched, ensure_ascii=False, indent=2) + "\n")
 
     def test_invalid_input_exits_2(self):
         code, _, err = self.run_main(["paper", "a b"])

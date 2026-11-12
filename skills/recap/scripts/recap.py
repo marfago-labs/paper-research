@@ -16,7 +16,8 @@ from datetime import datetime
 from pathlib import Path
 
 CODE_DIR = Path(__file__).resolve().parent
-sys.path.insert(0, str(CODE_DIR.parents[1] / "graph" / "scripts"))
+# pragma: no mutate below: graph.py is the only module of its name on the path, so its position changes nothing.
+sys.path.insert(0, str(CODE_DIR.parents[1] / "graph" / "scripts"))  # pragma: no mutate
 import graph  # noqa: E402
 
 PAGE_DIR = CODE_DIR.parent / "page"
@@ -54,7 +55,7 @@ def parse_papers(text):
         cells = split_row(line)
         if header is None:
             header = [cell.lower() for cell in cells]
-        elif not set("".join(cells)) <= set("-: "):
+        elif set("".join(cells)) - set("-: "):  # anything but dashes, colons, and spaces: not a separator row
             paper = dict(zip(header, cells))
             paper["id"] = paper.get("id", "").strip("<>")
             paper["url"] = paper_url(paper["id"])
@@ -95,7 +96,7 @@ def parse_questions(text):
     questions = []
     for line in text.splitlines():
         parts = [part.strip() for part in line.split("|", 3)]
-        if len(parts) == 4 and parts[1] == "question":
+        if len(parts) > 3 and parts[1] == "question":  # split at most 3 times, so > 3 means exactly 4 parts
             questions.append({"added": parts[0], "text": parts[3]})
     return questions
 
@@ -238,5 +239,5 @@ def main(argv=None):
     return 0
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no mutate (`is` and `<=` agree for the names a module can have)
     sys.exit(main())

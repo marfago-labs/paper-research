@@ -50,14 +50,17 @@ RELATION_TYPES = {
     "derived-from",
 }
 STATUSES = {"verified", "inferred"}
+STRENGTH = ["inferred", "verified"]  # weakest first: when two links merge into one, the stronger stays
+VERIFIED = {"verified"}
 EXTERNAL_ID_KINDS = {"s2", "arxiv", "doi", "hf", "github", "orcid"}
 # Relations that come from reading a paper, as opposed to authors, citations, or insights.
 EXTRACTED_RELATIONS = {"uses", "evaluates-on", "builds-on", "proposes", "related-to", "contradicts"}
 # The source recorded on cites relations, by the list of the Semantic Scholar record they come from.
 CITATION_SOURCES = {"references": "Semantic Scholar references", "citations": "Semantic Scholar citations"}
+OUTGOING = {"references"}  # a paper cites its references; its citations cite it
 FILES = ("entities.jsonl", "relations.jsonl")
 LOCK_FILE, COMMIT_FILE = ".lock", ".commit"
-LOCK_WAIT = 15  # seconds
+LOCK_WAIT = 15  # seconds; pragma: no mutate (a tuning value: tests use the name)
 FIELD_TYPES = {
     "id": str,
     "type": str,
@@ -73,11 +76,13 @@ FIELD_TYPES = {
 # because citation counts change. Only checked is required: a record may lack the venue or year.
 STANDING_FIELDS = {"citations": int, "influential": int, "venue": str, "year": int, "checked": str}
 DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+DATE_FIELDS = {"checked"}  # standing fields that hold a date
 RELATION_FIELDS = ("from", "rel", "to", "source", "status")
 TYPE_NAMES = {str: "text", list: "a list of text", dict: "an object"}
 # dupes compares only entities that share a key. A character trigram shared by more than this many entities of
 # one type is too common to say anything, so it is skipped. Names and external ids are always compared.
-BLOCK_CAP = 50
+BLOCK_CAP = 50  # pragma: no mutate (a tuning value: tests use the name)
+UNCAPPED_KEYS = {"ext", "name"}  # block key kinds always compared, however many share them
 # How much of the shorter name's character trigrams the other name must share to be a possible duplicate. This is
 # the one setting of the detector: raise it if add holds too often, lower it if duplicates get through. It can't
 # remove holds where one name contains the other ('MoE' and 'MoE-LLaVA'), which always score 1.0. If those become
@@ -119,10 +124,13 @@ def load(directory):
     return read_jsonl(directory / "entities.jsonl"), read_jsonl(directory / "relations.jsonl")
 
 
+def is_paper(entity):
+    return entity.get("type") == "paper"
+
+
 def is_separator(char):
-    """Whitespace, dashes, and connectors such as '_' (Unicode categories Z, Pd, and Pc)."""
-    category = unicodedata.category(char)
-    return char.isspace() or category[0] == "Z" or category in ("Pd", "Pc")
+    """Whitespace, which takes in all of Unicode category Z, dashes (Pd), and connectors such as '_' (Pc)."""
+    return char.isspace() or unicodedata.category(char) in ("Pd", "Pc")
 
 
 def name_key(text):
@@ -142,7 +150,7 @@ def ascii_spelling(char):
     if char.isascii():
         return char
     words = unicodedata.name(char, "").split(" WITH ")[0].split()
-    if char.isalpha() and words and words[-1].isalpha() and words[-1].isascii():
+    if char.isalpha() and words and words[-1].isalpha():  # character names are always ASCII
         return words[-1].lower()
     return f" u{ord(char):x} "
 
@@ -154,7 +162,7 @@ def loose(text):
     chars = (
         ascii_spelling(char) if unicodedata.category(char)[0] in "LN" else " "
         for char in unicodedata.normalize("NFKD", str(text).casefold())
-        if unicodedata.category(char)[0] != "M"
+        if not unicodedata.category(char).startswith("M")
     )
     return " ".join("".join(chars).split())
 
@@ -210,7 +218,7 @@ def external_keys(entity):
         if match:
             keys.add((match.group(1).lower(), id_key(match.group(2))))
     slug = str(entity.get("id", "")).partition(":")[2]
-    if entity.get("type") == "paper" and re.fullmatch(r"\d{4}\.\d{4,5}", slug):
+    if is_paper(entity) and re.fullmatch(r"\d{4}\.\d{4,5}", slug):
         keys.add(("arxiv", slug))
     return keys
 
@@ -291,7 +299,7 @@ def candidate_pairs(entities):
     """Pairs of positions worth comparing: those sharing a name, an id, or a trigram that few entities share."""
     pairs: set[tuple[int, int]] = set()
     for (_, key), positions in block_index(entities).items():
-        if len(positions) <= BLOCK_CAP or key[0] != "gram":
+        if len(positions) <= BLOCK_CAP or key[0] in UNCAPPED_KEYS:
             pairs.update(itertools.combinations(positions, 2))  # positions ascend, so i < j
     return pairs
 
@@ -313,7 +321,7 @@ def islands(entities, relations):
     for relation in relations:
         if relation["rel"] in EXTRACTED_RELATIONS:
             extracted.update((relation["from"], relation["to"]))
-    return [entity for entity in entities if entity["type"] == "paper" and entity["id"] not in extracted]
+    return [entity for entity in entities if is_paper(entity) and entity["id"] not in extracted]
 
 
 def type_errors(entity):
@@ -322,7 +330,9 @@ def type_errors(entity):
     for field, kind in FIELD_TYPES.items():
         value = entity.get(field)
         if field in entity and (
-            not isinstance(value, kind) or (kind is list and not all(isinstance(item, str) for item in value))
+            # pragma: no mutate below: types are unique objects, so `==` agrees with `is`.
+            not isinstance(value, kind)
+            or (kind is list and not all(isinstance(item, str) for item in value))  # pragma: no mutate
         ):
             errors.append(f"{entity['id']}: {field} must be {TYPE_NAMES[kind]}")
     return errors
@@ -353,12 +363,13 @@ def valid_standing_field(field, value):
     """Whether one field of a standing is known and of the right type: a count is a whole number, not negative,
     and checked is a date."""
     kind = STANDING_FIELDS.get(field)
-    right_type = kind is not None and type(value) is kind
+    # pragma: no mutate on this line and the `is int` below: types and None are unique objects, so `==` agrees.
+    right_type = kind is not None and type(value) is kind  # pragma: no mutate
     if not right_type:
         return False
-    if kind is int:
+    if kind is int:  # pragma: no mutate
         return value >= 0
-    return field != "checked" or bool(DATE.fullmatch(value))
+    return field not in DATE_FIELDS or bool(DATE.fullmatch(value))
 
 
 def standing_errors(entity):
@@ -366,7 +377,7 @@ def standing_errors(entity):
     if "standing" not in entity:
         return []
     standing, entity_id = entity["standing"], entity["id"]
-    if entity.get("type") != "paper":
+    if not is_paper(entity):
         return [f"{entity_id}: only papers have a standing"]
     bad = [field for field, value in standing.items() if not valid_standing_field(field, value)]
     if "checked" not in standing:
@@ -491,7 +502,7 @@ def resolve(entities, text):
     if len(found) > 1:
         raise GraphError(f"{text!r} matches more than one entity, so use an id: {', '.join(e['id'] for e in found)}")
     if found:
-        return found[0]
+        return found[0]  # pragma: no mutate (one entity is left after the check above, so any index agrees)
     near = named(entities, text, loose)
     if near:
         raise GraphError(f"no entity is named {text!r}; did you mean {', '.join(e['id'] for e in near)}? Use its id")
@@ -509,18 +520,18 @@ def adjacency(relations):
 def neighbours(relations, start, depth=1):
     """Return (distance, direction, relation, other id) for connections within depth."""
     links = adjacency(relations)
-    distances = {start: 0}
-    queue = deque([start])
+    reached = {start}
+    level = [start]
     found = []
-    while queue:
-        current = queue.popleft()
-        if distances[current] >= depth:
-            continue
-        for direction, relation, other in links.get(current, []):
-            found.append((distances[current] + 1, direction, relation, other))
-            if other not in distances:
-                distances[other] = distances[current] + 1
-                queue.append(other)
+    for distance in range(1, depth + 1):
+        following = []
+        for current in level:
+            for direction, relation, other in links.get(current, []):
+                found.append((distance, direction, relation, other))
+                if other not in reached:
+                    reached.add(other)
+                    following.append(other)
+        level = following
     return first_per_relation(found)
 
 
@@ -539,7 +550,7 @@ def first_per_relation(found):
 
 def search_tree(links, start, end):
     """Breadth-first search from start until end is reached: each node's (parent, direction, relation)."""
-    previous: dict[str, tuple | None] = {start: None}
+    previous: dict = {start: None}  # each node's (parent, direction, relation); None for start
     queue = deque([start])
     while queue and end not in previous:
         current = queue.popleft()
@@ -552,8 +563,6 @@ def search_tree(links, start, end):
 
 def shortest_path(relations, start, end):
     """Return the shortest list of (direction, relation, other id), ignoring direction."""
-    if start == end:
-        return []
     previous = search_tree(adjacency(relations), start, end)
     if end not in previous:
         return None
@@ -566,8 +575,11 @@ def shortest_path(relations, start, end):
     return steps[::-1]
 
 
+ARROWS = {"out": "->", "in": "<-"}
+
+
 def describe(relation, direction, other_name):
-    arrow = "->" if direction == "out" else "<-"
+    arrow = ARROWS[direction]
     return f"{arrow} {relation['rel']} {arrow} {other_name}  [{relation['source']}; {relation['status']}]"
 
 
@@ -577,7 +589,7 @@ def names_document(source):
 
 def unsourced(relation):
     """A relation marked verified whose source names no document it could have been checked against."""
-    return relation["status"] == "verified" and not names_document(relation["source"])
+    return relation["status"] in VERIFIED and not names_document(relation["source"])
 
 
 def checked_load(directory):
@@ -689,29 +701,34 @@ def recover(directory):
     marker.unlink(missing_ok=True)
 
 
-if sys.platform == "win32":
+# Written inline because mypy only understands platform checks in this form. On the system that runs it, a changed
+# comparison mostly picks the same branch, so the line is marked.
+if sys.platform == "win32":  # pragma: no mutate
     import msvcrt
 
     def try_lock(handle):
         """Try to take an exclusive operating-system lock on the file. True if it was taken."""
         try:
-            handle.seek(0)
-            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
-        except OSError:
-            return False
-        return True
+            handle.seek(0)  # pragma: no mutate (Windows only: never runs in a Linux mutation run)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)  # pragma: no mutate (Windows only)
+        except OSError:  # pragma: no mutate (Windows only)
+            return False  # pragma: no mutate (Windows only)
+        return True  # pragma: no mutate (Windows only)
 
     def unlock(handle):
-        handle.seek(0)
-        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+        handle.seek(0)  # pragma: no mutate (Windows only)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)  # pragma: no mutate (Windows only)
 
 else:
     import fcntl
 
+    # Marked alone: the two flags share no bits, so `+` and `^` give the same number as `|`.
+    EXCLUSIVE_NOW = fcntl.LOCK_EX | fcntl.LOCK_NB  # pragma: no mutate
+
     def try_lock(handle):
         """Try to take an exclusive operating-system lock on the file. True if it was taken."""
         try:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(handle.fileno(), EXCLUSIVE_NOW)
         except OSError:
             return False
         return True
@@ -728,7 +745,7 @@ def file_lock(path, wait, busy_message):
         while not try_lock(handle):
             if time.monotonic() > deadline:
                 raise GraphError(busy_message)
-            time.sleep(0.1)
+            time.sleep(0.1)  # pragma: no mutate (a polling interval, a tuning value)
         try:
             yield
         finally:
@@ -867,9 +884,10 @@ def cmd_link(args):
 def cmd_unlink(args):
     entities, relations = checked_load(args.data)
     start, end = resolve(entities, args.start)["id"], resolve(entities, args.end)["id"]
-    kept = [r for r in relations if (r["from"], r["rel"], r["to"]) != (start, args.rel, end)]
-    if len(kept) == len(relations):
+    target = (start, args.rel, end)
+    if target not in {(r["from"], r["rel"], r["to"]) for r in relations}:
         raise GraphError(f"no relation {start} {args.rel} {end}")
+    kept = [r for r in relations if (r["from"], r["rel"], r["to"]) != target]
     save(args.data, entities, kept)
     print(f"unlinked {start} {args.rel} {end}")
     return 0
@@ -877,29 +895,33 @@ def cmd_unlink(args):
 
 def cmd_remove(args):
     entities, relations = checked_load(args.data)
-    target = resolve(entities, args.entity)["id"]
-    kept = [e for e in entities if e["id"] != target]
-    for entity in kept:
-        if target in entity.get("distinct_from", []):
-            entity["distinct_from"].remove(target)
-            if not entity["distinct_from"]:
-                del entity["distinct_from"]
+    entity = resolve(entities, args.entity)
+    target = entity["id"]
+    kept = list(entities)
+    kept.remove(entity)
+    for other in kept:
+        if target in other.get("distinct_from", []):
+            other["distinct_from"].remove(target)
+            if not other["distinct_from"]:
+                del other["distinct_from"]
     links = [r for r in relations if target not in (r["from"], r["to"])]
     save(args.data, kept, links)
     print(f"removed {target} and {len(relations) - len(links)} relations")
     return 0
 
 
-def merge(entities, relations, keep_id, drop_id):
-    """Fold drop into keep: names, aliases, ids, and every relation. Returns the new lists."""
-    keep = next(e for e in entities if e["id"] == keep_id)
-    drop = next(e for e in entities if e["id"] == drop_id)
-    if keep_id == drop_id or keep["type"] != drop["type"]:
+def merge(entities, relations, keep, drop):
+    """Fold the entity drop into keep: names, aliases, ids, and every relation. Returns the new lists."""
+    keep_id, drop_id = keep["id"], drop["id"]
+    if keep is drop:  # pragma: no mutate (two different entities never compare equal, so == agrees)
+        raise GraphError("merge needs two different entities of the same type")
+    if keep["type"] != drop["type"]:
         raise GraphError("merge needs two different entities of the same type")
     if marked_distinct(keep, drop):
         raise GraphError(f"{keep_id} and {drop_id} were checked and marked as distinct, so they can't be merged")
     absorb(keep, drop)
-    kept = [e for e in entities if e["id"] != drop_id]
+    kept = list(entities)
+    kept.remove(drop)
     for entity in kept:
         repoint_distinct(entity, keep_id, drop_id)
     return kept, merged_relations(relations, keep_id, drop_id)
@@ -922,7 +944,7 @@ def absorb(keep, drop):
 def repoint_distinct(entity, keep_id, drop_id):
     """Make distinct marks that named drop name keep, without duplicates or marks on itself."""
     others = [keep_id if o == drop_id else o for o in entity.get("distinct_from", [])]
-    others = [o for o in dict.fromkeys(others) if o != entity["id"]]
+    others = list(dict.fromkeys(others))  # a mark on the entity itself can't arise: the save would refuse it
     if others:
         entity["distinct_from"] = others
     else:
@@ -941,17 +963,17 @@ def merged_relations(relations, keep_id, drop_id):
         key = (relation["from"], relation["rel"], relation["to"])
         if relation["from"] == relation["to"]:
             continue
-        if key not in merged or (merged[key]["status"] == "inferred" and relation["status"] == "verified"):
+        if key not in merged or STRENGTH.index(relation["status"]) > STRENGTH.index(merged[key]["status"]):
             merged[key] = relation
     return list(merged.values())
 
 
 def cmd_merge(args):
     entities, relations = checked_load(args.data)
-    keep, drop = resolve(entities, args.keep)["id"], resolve(entities, args.drop)["id"]
+    keep, drop = resolve(entities, args.keep), resolve(entities, args.drop)
     entities, relations = merge(entities, relations, keep, drop)
     save(args.data, entities, relations)
-    print(f"merged {drop} into {keep}")
+    print(f"merged {drop['id']} into {keep['id']}")
     return 0
 
 
@@ -989,7 +1011,7 @@ def s2_keys(paper):
 
 def cites(entities, relations, paper_id, record):
     """Add cites relations between this paper and graph papers found in its references and citations."""
-    index = {key: e["id"] for e in entities if e["type"] == "paper" for key in external_keys(e)}
+    index = {key: e["id"] for e in entities if is_paper(e) for key in external_keys(e)}
     added = []
     for edge, start, end in citation_pairs(index, paper_id, record):
         if link(relations, start, "cites", end, CITATION_SOURCES[edge], "verified"):
@@ -1001,8 +1023,8 @@ def citation_pairs(index, paper_id, record):
     """(edge, citing id, cited id) for each reference or citation that is a paper in the graph."""
     for edge in CITATION_SOURCES:
         for match in papers_in_graph(index, record.get(edge) or []):
-            if match != paper_id:
-                yield (edge, paper_id, match) if edge == "references" else (edge, match, paper_id)
+            if match != paper_id:  # pragma: no mutate (the paper's own id is the very string it matches)
+                yield (edge, paper_id, match) if edge in OUTGOING else (edge, match, paper_id)
 
 
 def papers_in_graph(index, papers):
@@ -1026,8 +1048,7 @@ def read_citations(file):
 
 def adopt_s2_id(paper, record):
     """Give the paper the Semantic Scholar id from the record, if it has none yet."""
-    has_s2 = any(kind == "s2" for kind, _ in external_keys(paper))
-    if not has_s2 and any(kind == "s2" for kind, _ in s2_keys(record)):
+    if "s2" not in dict(external_keys(paper)) and "s2" in dict(s2_keys(record)):
         merge_ids(paper, {"s2": record["paperId"]})
 
 
@@ -1037,7 +1058,7 @@ def today():
 
 def set_standing(paper, record):
     """Copy the paper's citation counts, venue, and year from a Semantic Scholar record. True if it had counts."""
-    if type(record.get("citationCount")) is not int:
+    if type(record.get("citationCount")) is not int:  # pragma: no mutate (types are unique, so != agrees)
         return False
     standing = {"citations": record["citationCount"]}
     for field, key, kind in (
@@ -1045,7 +1066,8 @@ def set_standing(paper, record):
         ("venue", "venue", str),
         ("year", "year", int),
     ):
-        if type(record.get(key)) is kind and record[key] != "":
+        # pragma: no mutate below: types are unique objects, and so is the empty string, so `==` agrees with `is`.
+        if type(record.get(key)) is kind and record[key] != "":  # pragma: no mutate
             standing[field] = record[key]
     paper["standing"] = {**standing, "checked": today()}
     return True
@@ -1059,7 +1081,7 @@ def describe_standing(paper):
 def cmd_cites(args):
     entities, relations = checked_load(args.data)
     paper = resolve(entities, args.paper)
-    if paper["type"] != "paper":
+    if not is_paper(paper):
         raise GraphError(f"{paper['id']} is not a paper")
     record = read_citations(args.file)
     adopt_s2_id(paper, record)
@@ -1124,7 +1146,7 @@ def apply_standing(entities, relations, records):
     """Save each record's counts, and link the paper to the graph papers in its reference list. Returns how many
     papers were updated, had no counts, or matched no paper in the graph, how many records came with a reference
     list, and how many citation links they added."""
-    index = {key: e for e in entities if e["type"] == "paper" for key in external_keys(e)}
+    index = {key: e for e in entities if is_paper(e) for key in external_keys(e)}
     results: Counter[str] = Counter()
     for record in records:
         paper = find_paper(index, record)
@@ -1171,7 +1193,7 @@ def cmd_standing_due(args):
     due = [
         lookup_id(e)
         for e in entities
-        if e["type"] == "paper" and e.get("standing", {}).get("checked", "") <= cutoff and lookup_id(e)
+        if is_paper(e) and e.get("standing", {}).get("checked", "") <= cutoff and lookup_id(e)
     ]
     try:
         Path(args.file).write_text("".join(f"{paper_id}\n" for paper_id in due), encoding="utf-8")
@@ -1300,5 +1322,5 @@ def main(argv=None):
         return 1
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no mutate (`is` and `<=` agree for the names a module can have)
     sys.exit(main())

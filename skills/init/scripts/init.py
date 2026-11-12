@@ -58,7 +58,13 @@ EXPECTED_SHAPE = [
     ("sandbox.network.allowedDomains", list),
     ("sandbox.network.deniedDomains", list),
 ]
-MISSING = object()
+
+
+class Missing:
+    """The type of MISSING, so a shape check accepts it with isinstance rather than comparing to it."""
+
+
+MISSING = Missing()
 # Characters a path may hold and still sit safely inside double quotes in bash, PowerShell, and cmd.
 SAFE_PATH = re.compile(r"[\w .:/()@+,=~-]+")
 
@@ -113,7 +119,7 @@ def extend(target, rules):
     target.extend(rule for rule in rules if rule not in target)
 
 
-def merge_settings(current, sandbox=False):
+def merge_settings(current, sandbox):
     """Add the template's rules to the settings, removing nothing."""
     template = check_template(load_template("settings.json"))
     settings = json.loads(json.dumps(current))
@@ -166,7 +172,7 @@ def parse_settings(path, text):
     except ValueError as err:
         raise InitError(f"{path} is not valid JSON ({err}); fix it by hand first") from None
     if not isinstance(settings, dict) or any(
-        (value := lookup(settings, key)) is not MISSING and not isinstance(value, kind) for key, kind in EXPECTED_SHAPE
+        not isinstance(lookup(settings, key), (kind, Missing)) for key, kind in EXPECTED_SHAPE
     ):
         raise InitError(f"{path} has an unexpected shape; fix it by hand first")
     return settings
@@ -217,7 +223,7 @@ def gitignore_change(workspace):
     return path, old, (old or "").rstrip("\n") + separator + "".join(f"{m}\n" for m in missing)
 
 
-def plan(workspace, sandbox=False):
+def plan(workspace, sandbox):
     """Every change as (path, old text or None, new text)."""
     claude = workspace / "CLAUDE.md"
     old = read_or_none(claude)
