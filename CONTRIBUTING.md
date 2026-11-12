@@ -24,7 +24,7 @@ Each skill is a folder in `skills/` with a `SKILL.md`. Scripts live in the skill
 - **A change that makes `name_key` merge more names needs a repair path.** Validation refuses a graph in which two entities of one type share a key, and every command, `merge` included, loads through validation. So a key that merges names an older key kept apart can stop an existing graph from loading, with no command left to fix it. Ship such a change with a migration, or with a way to load the graph and merge the clashing pairs.
 - **Functions stay simple:** cyclomatic complexity at most 6 and cognitive complexity at most 10, in Python and JavaScript, tests included. ruff (`C901`) and ESLint (`complexity`) check the first, complexipy and `sonarjs/cognitive-complexity` the second. Split a function rather than raising a limit. The inline script in `recap.html` isn't linted, so keep it small.
 - **Every behaviour a user relies on** gets a scenario in `features/`, written in the user's words.
-- **A change a user can see updates the docs** in the same commit: a new skill, command, option, file, or message.
+- **A change a user can see updates the docs** in the same commit: a new skill, command, option, file, or message. It also adds a line under `[Unreleased]` in `CHANGELOG.md`. Only a release changes the version: see [Releases](#releases).
 - **Tests never use made-up absolute paths** such as `/no/such/folder`. Build a missing path inside a temporary folder. A mutant that skips a check can otherwise create real folders on the developer's machine.
 - **Cytoscape.js is the only vendored file.** To update it, take `dist/cytoscape.min.js` and its licence from the npm release, put the version in the file name, and update the name in `recap.py`, `recap.html`, the recap tests, `features/steps/workspace_steps.py`, and `docs/troubleshooting.md`. Update the version, hash, and check command in [Security](docs/security.md#third-party-code).
 - **Rules the user's agent follows** go in `skills/init/templates/rules-block.md` if they apply in every session, or in the skill that needs them.
@@ -76,6 +76,15 @@ python tools/run_mutation.py init --max-survival 0 --workers 4                  
 - **CI is kept to a few jobs,** because billing rounds each job up to a whole minute and bills Windows at 2x and macOS at 10x in private repos. Quick checks share one Linux job, and macOS isn't tested on every push. Add a check as a step of the `checks` job rather than a new job.
 - **Actions are pinned to commit SHAs** with the release in a comment. Dependabot proposes updates to both.
 - **`tools/run_tests.py`** is what the mutation runner calls. It succeeds only if tests really ran, because a mutant that makes a script exit during import would otherwise look like a pass.
+
+## Releases
+
+The version in `.claude-plugin/plugin.json` changes only in a release, never in a feature or fix. Claude Code installs an update for a plugin only when its version changes, so a bump is what delivers the merged changes to users. Versions follow [Semantic Versioning](https://semver.org/): a patch for fixes, a minor version for new features, a major version for a change that breaks existing workspaces.
+
+1. **Collect the changes.** Each change a user can see adds a line under `## [Unreleased]` in `CHANGELOG.md` in the same pull request.
+2. **Open a release pull request.** It does two things: it sets `version` in `.claude-plugin/plugin.json`, and it renames `[Unreleased]` to the new version and today's date, with a new empty `[Unreleased]` above it and the links at the bottom updated. `python tools/check_release.py` fails if the version has no dated entry, and the unit tests run it, so a bump without a changelog entry cannot merge.
+3. **Merge it, then tag the merge commit** with `git tag vX.Y.Z` and `git push origin vX.Y.Z`. The Release check workflow fails if the tag is not `v` followed by the plugin's version.
+4. **Create the GitHub release** from the tag, with the changelog entry as its notes: `gh release create vX.Y.Z --title vX.Y.Z --notes-file <the entry>`.
 
 ## Design decisions
 
