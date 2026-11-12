@@ -588,11 +588,20 @@ def cmd_stats(args):
     return 0
 
 
+def standing_note(entity):
+    """A paper's saved citation count and when it was checked, so a paper list can reuse it without a request."""
+    standing = entity.get("standing")
+    if not standing:
+        return ""
+    counts = f"{count(standing['citations'], 'citation')}" if "citations" in standing else "no citation data"
+    return f"  [{counts}, checked {standing['checked']}]"
+
+
 def cmd_search(args):
     entities, _ = checked_load(args.data)
     matches = search(entities, args.text)
     for entity in matches:
-        print(f"{entity['id']}  {entity['name']}")
+        print(f"{entity['id']}  {entity['name']}{standing_note(entity)}")
     if not matches:
         print(f"no matches for {args.text!r}", file=sys.stderr)
         return 1

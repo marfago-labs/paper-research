@@ -149,6 +149,8 @@ Feature: A knowledge graph that stays trustworthy as it grows
     When I run graph standing s2.json
     Then the command succeeds
     And the paper "paper:2611.00001" has 42 citations checked today
+    When I run graph search 2611.00001
+    Then the output mentions "42 citations, checked"
     When I run graph standing-due due.txt
     Then the output mentions "no papers due"
     And the file "due.txt" does not contain "2611.00001"
@@ -178,6 +180,8 @@ Feature: A knowledge graph that stays trustworthy as it grows
     When I run graph standing s2.json
     Then the output mentions "1 without citation data"
     And the paper "paper:2611.00001" was checked today but has no citation counts
+    When I run graph search 2611.00001
+    Then the output mentions "no citation data, checked"
     When I run graph standing-due due.txt
     Then the output mentions "no papers due"
 

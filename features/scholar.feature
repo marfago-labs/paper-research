@@ -29,6 +29,24 @@ Feature: Paper details and citations from Semantic Scholar
     Then the command exits with code 1
     And Semantic Scholar was asked 1 times
 
+  Scenario Outline: Each paper carries the link to show in the ID column of a paper list
+    Given Semantic Scholar then answers a batch with a paper that has <ids>
+    When I run scholar batch 2401.00001
+    Then the command succeeds
+    And the first printed result links to "<link>"
+
+    Examples:
+      | ids                                    | link                                                              |
+      | the arXiv id 2611.14326 and a DOI      | [ARXIV:2611.14326](https://arxiv.org/abs/2611.14326)              |
+      | only the DOI 10.1145/3442188.3445922   | [DOI:10.1145/3442188.3445922](https://doi.org/10.1145/3442188.3445922) |
+      | no arXiv id or DOI                     | https://www.semanticscholar.org/paper/abc                         |
+
+  Scenario: Search results carry links too
+    Given Semantic Scholar then answers a search with a paper that has the arXiv id 2611.14326
+    When I run scholar search "agent memory"
+    Then the command succeeds
+    And the first search result links to "[ARXIV:2611.14326](https://arxiv.org/abs/2611.14326)"
+
   Scenario: A batch marks the papers it could not find
     Given Semantic Scholar then answers with an unknown paper
     When I run scholar batch 2401.00001

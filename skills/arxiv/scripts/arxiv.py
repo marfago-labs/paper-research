@@ -249,9 +249,12 @@ def parse_xml(data):
 
 def paper_from(entry, abs_url):
     versioned = abs_url.rsplit("/abs/", 1)[-1]
+    paper_id = re.sub(r"v\d+$", "", versioned)
     primary = entry.find("arxiv:primary_category", NS)
     return {
-        "id": re.sub(r"v\d+$", "", versioned),
+        "id": paper_id,
+        # The ID column of a paper list, ready to copy, so it is a link even when the workspace rules aren't loaded.
+        "link": f"[ARXIV:{paper_id}]({SITE}/abs/{paper_id})",
         "version": versioned,
         "title": text_of(entry, "a:title"),
         "authors": [text_of(a, "a:name") for a in entry.findall("a:author", NS)],
@@ -263,8 +266,8 @@ def paper_from(entry, abs_url):
         "comment": text_of(entry, "arxiv:comment"),
         "journalRef": text_of(entry, "arxiv:journal_ref"),
         "doi": text_of(entry, "arxiv:doi"),
-        "url": f"{SITE}/abs/{re.sub(r'v[0-9]+$', '', versioned)}",
-        "pdf": f"{SITE}/pdf/{re.sub(r'v[0-9]+$', '', versioned)}",
+        "url": f"{SITE}/abs/{paper_id}",
+        "pdf": f"{SITE}/pdf/{paper_id}",
     }
 
 

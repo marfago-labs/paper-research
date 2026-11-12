@@ -60,6 +60,43 @@ def scholar_unknown(context):
     context.s2_answers.append([None])
 
 
+def paper_with(ids):
+    """A Semantic Scholar paper record with the external ids a scenario names."""
+    paper = {"paperId": "abc", "title": "A paper", "url": "https://www.semanticscholar.org/paper/abc"}
+    words = ids.split()
+    if ids.startswith("the arXiv id "):
+        paper["externalIds"] = {"ArXiv": words[3], "DOI": "10.1/x"}
+    elif ids.startswith("only the DOI "):
+        paper["externalIds"] = {"DOI": words[3]}
+    elif ids == "no arXiv id or DOI":
+        paper["externalIds"] = {"CorpusId": 1}
+    else:
+        raise ValueError(f"unknown ids: {ids}")
+    return paper
+
+
+@given("Semantic Scholar then answers a batch with a paper that has {ids}")
+def scholar_batch_with(context, ids):
+    context.s2_answers.append([paper_with(ids)])
+
+
+@given("Semantic Scholar then answers a search with a paper that has {ids}")
+def scholar_search_with(context, ids):
+    context.s2_answers.append({"total": 1, "offset": 0, "data": [paper_with(ids)]})
+
+
+@then('the first printed result links to "{link}"')
+def scholar_first_link(context, link):
+    first = json.loads(context.result.out)[0]
+    assert first.get("link") == link, first
+
+
+@then('the first search result links to "{link}"')
+def scholar_search_link(context, link):
+    first = json.loads(context.result.out)["data"][0]
+    assert first.get("link") == link, first
+
+
 @given("Semantic Scholar then answers with something unexpected")
 def scholar_odd(context):
     context.s2_answers.append({"error": "surprise"})

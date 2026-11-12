@@ -294,6 +294,56 @@ def arxiv_routes_reading(context):
     assert "analyze, review" in read, "'analyze the top 3' must pick read, not arxiv"
 
 
+PAPER_LIST = "`Published | Title | ID | Citations | Topic | Note`"
+PAPER_RULE_LEAD = "- **Paper lists:** whenever you list papers to the user, "
+
+
+def paper_rule(context):
+    """The paper-list rule, as the rules block states it. It is the one source the skills copy word for word."""
+    text = (context.repo / "skills" / "init" / "templates" / "rules-block.md").read_text(encoding="utf-8")
+    lines = [line for line in text.splitlines() if line.startswith(PAPER_RULE_LEAD)]
+    assert len(lines) == 1, "the rules block must state the paper-list rule once, on one line"
+    return lines[0][len(PAPER_RULE_LEAD) :]
+
+
+@then("every place that lists papers uses the same paper-list table")
+def same_paper_list(context):
+    # The rules block may not be loaded yet, so each skill that shows papers carries the whole rule, not just the
+    # column names: with only the names, Claude filled in the ID, Citations, and Note columns its own way.
+    rule = paper_rule(context)
+    assert PAPER_LIST in rule
+    for place in ("arxiv/SKILL.md", "scholar/SKILL.md", "add/SKILL.md", "next/SKILL.md"):
+        text = (context.repo / "skills" / place).read_text(encoding="utf-8")
+        assert rule in text, f"{place} must carry the paper-list rule of the rules block, word for word"
+
+
+@then("the paper-list rule says what goes in each column")
+def paper_rule_columns(context):
+    rule = paper_rule(context)
+    for part, why in (
+        ("`Published` is the publication date as `YYYY-MM-DD`", "one date format"),
+        ("or `unknown`; never guess it", "never invent a date"),
+        ("`ID` is the paper's `link` from `arxiv` or `scholar`", "the scripts build the link, so it is always one"),
+        ("copied as it is so that it stays a link", "a bare id is not a link"),
+        ("or the link itself for anything else", "a row without an arXiv or DOI id still has an ID"),
+        ("from one `scholar` `batch` call for all the listed papers, made for every list", "never skipped"),
+        ("Write `-` only when Semantic Scholar has no count", "a dash never stands for a count not fetched"),
+        ("If the call fails, write `?` and say so below the table", "a failed lookup is shown as one"),
+        ("the saved count that `graph.py search <id>` shows, with the date it was checked", "dated fallback"),
+        ("`Topic` is two to five words", "short topics"),
+        ("`Note` is one sentence: the main result, or why the paper matters to this user", "a result, not metadata"),
+        ("not details such as the venue, page count, or code", "metadata goes below the table"),
+        ("Put the total, caveats, and suggestions below the table", "the table holds only papers"),
+    ):
+        assert part in rule, why
+
+
+@then("CLAUDE.md tells Claude to list papers in the paper-list table")
+def claude_md_paper_list(context):
+    text = (context.workspace / "CLAUDE.md").read_text(encoding="utf-8")
+    assert paper_rule(context) in text, "the rules init writes must carry the whole paper-list rule"
+
+
 @then("the init skill loads the new rules into the session that ran it")
 def init_loads_rules(context):
     text = (context.repo / "skills" / "init" / "SKILL.md").read_text(encoding="utf-8")

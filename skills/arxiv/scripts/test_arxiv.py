@@ -255,6 +255,9 @@ class Feed(unittest.TestCase):
         self.assertEqual((first["comment"], first["doi"], first["journalRef"]), ("10 pages", "10.1/x", ""))
         self.assertEqual(first["pdf"], "https://arxiv.org/pdf/2401.00001")
         self.assertEqual((old["id"], old["primaryCategory"], old["published"]), ("hep-th/9901001", "", ""))
+        # The ID column of a paper list, ready to copy, so it is a link even when the workspace rules aren't loaded.
+        self.assertEqual(first["link"], "[ARXIV:2401.00001](https://arxiv.org/abs/2401.00001)")
+        self.assertEqual(old["link"], "[ARXIV:hep-th/9901001](https://arxiv.org/abs/hep-th/9901001)")
 
     def test_total_falls_back_to_count(self):
         self.assertEqual(arxiv.parse_feed(FEED.format(total="").encode())[1], 2)
@@ -514,6 +517,27 @@ class Saving(unittest.TestCase):
             with self.assertRaises(arxiv.NoHtml):
                 arxiv.cmd_fetch(mock.Mock(id="hep-th/9901001", force=False, dir=None))
         self.assertFalse((self.folder / "text").exists())
+
+    def test_without_a_folder_papers_go_into_the_workspace_research_folder(self):
+        # The default the skills rely on: run from anywhere in a workspace, text and PDFs land in its research/.
+        root = self.folder.resolve()
+        (root / "research").mkdir()
+        nested = root / "notes" / "drafts"
+        nested.mkdir(parents=True)
+        page = ARTICLE.replace("A footnote.", "A footnote. " + "word " * 250)
+        with (
+            mock.patch.object(arxiv, "TEXT_DIR", None),
+            mock.patch.object(arxiv, "PDF_DIR", None),
+            mock.patch.object(arxiv.Path, "cwd", return_value=nested),
+        ):
+            with mock.patch.object(arxiv, "get", return_value=page.encode()):
+                text = arxiv.cmd_fetch(mock.Mock(id="2401.00001", force=False, dir=None))
+            with mock.patch.object(arxiv, "get", return_value=b"%PDF-1.5 data"):
+                pdf = arxiv.cmd_pdf(mock.Mock(id="2401.00001", force=False, dir=None))
+        self.assertEqual(Path(text["path"]), root / "research" / "fulltext" / "2401.00001.md")
+        self.assertEqual(Path(pdf["path"]), root / "research" / "pdfs" / "2401.00001.pdf")
+        self.assertTrue(Path(text["path"]).is_file())
+        self.assertTrue(Path(pdf["path"]).is_file())
 
     def test_pdf(self):
         with (

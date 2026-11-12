@@ -112,6 +112,73 @@ class RequestBehaviour(unittest.TestCase):
         self.assertIsNone(handler.redirect_request(None, None, 302, "Found", {}, "https://evil.example"))
 
 
+class Links(unittest.TestCase):
+    """Each paper carries the ID column of a paper list as a ready link, so it doesn't depend on Claude's wording."""
+
+    def test_a_link_prefers_the_arxiv_id_then_the_doi_then_the_page(self):
+        both = {"externalIds": {"ArXiv": "2611.14326", "DOI": "10.1/x"}, "url": "https://www.semanticscholar.org/p/a"}
+        self.assertEqual(s2.paper_link(both), "[ARXIV:2611.14326](https://arxiv.org/abs/2611.14326)")
+        doi = {"externalIds": {"DOI": "10.1145/3442188.3445922"}, "url": "https://www.semanticscholar.org/p/b"}
+        self.assertEqual(s2.paper_link(doi), "[DOI:10.1145/3442188.3445922](https://doi.org/10.1145/3442188.3445922)")
+        page = {"externalIds": {"CorpusId": 1}, "url": "https://www.semanticscholar.org/p/c"}
+        self.assertEqual(s2.paper_link(page), "https://www.semanticscholar.org/p/c")
+        self.assertIsNone(s2.paper_link({"externalIds": None, "url": None}))
+        self.assertIsNone(s2.paper_link({"title": "no ids"}))
+
+    def test_a_doi_that_would_break_a_markdown_link_is_escaped(self):
+        odd = {"externalIds": {"DOI": "10.1002/(SICI)1097[x]"}}
+        self.assertEqual(
+            s2.paper_link(odd), r"[DOI:10.1002/(SICI)1097\[x\]](https://doi.org/10.1002/%28SICI%291097%5Bx%5D)"
+        )
+
+    def test_every_command_that_returns_papers_adds_their_links(self):
+        paper = {"title": "A", "externalIds": {"ArXiv": "2401.00001"}}
+        link = "[ARXIV:2401.00001](https://arxiv.org/abs/2401.00001)"
+        cases = (
+            (["search", "agents"], {"total": 1, "data": [paper]}, lambda out: out["data"][0]),
+            (
+                ["recommend", "--like", "2401.00001"],
+                {"recommendedPapers": [paper]},
+                lambda out: out["recommendedPapers"][0],
+            ),
+            (["batch", "2401.00001"], [paper], lambda out: out[0]),
+            (["paper", "2401.00001"], paper, lambda out: out),
+        )
+        for argv, answer, pick in cases:
+            args = s2.build_parser().parse_args(argv)
+            with mock.patch.object(s2, "request", return_value=answer):
+                self.assertEqual(pick(args.func(args))["link"], link, argv)
+
+    def test_citing_and_cited_papers_get_links_too(self):
+        args = s2.build_parser().parse_args(["paper", "2303.11366", "--citations"])
+        citing = {"title": "B", "externalIds": {"DOI": "10.1/b"}}
+        responses = [{"title": "A"}, {"data": [{"citingPaper": citing, "isInfluential": False}]}]
+        with mock.patch.object(s2, "request", side_effect=responses):
+            result = args.func(args)
+        self.assertEqual(result["citations"][0]["link"], "[DOI:10.1/b](https://doi.org/10.1/b)")
+
+    def test_citing_and_cited_papers_ask_for_the_page_their_link_falls_back_to(self):
+        # A citing paper with no arXiv id or DOI is linked to its Semantic Scholar page, so the page must be asked for.
+        self.assertIn("url", s2.LINK_FIELDS.split(","))
+        args = s2.build_parser().parse_args(["paper", "2303.11366", "--references"])
+        cited = {"title": "C", "externalIds": {"CorpusId": 7}, "url": "https://www.semanticscholar.org/paper/c"}
+        responses = [{"title": "A"}, {"data": [{"citedPaper": cited, "isInfluential": False}]}]
+        with mock.patch.object(s2, "request", side_effect=responses) as sent:
+            result = args.func(args)
+        self.assertIn("url", sent.call_args_list[1].args[2]["fields"].split(","))
+        self.assertEqual(result["references"][0]["link"], "https://www.semanticscholar.org/paper/c")
+
+    def test_papers_without_an_id_or_page_and_missing_papers_get_no_link(self):
+        args = s2.build_parser().parse_args(["batch", "2401.00001", "2401.00002"])
+        with mock.patch.object(s2, "request", return_value=[{"title": "A"}, None]):
+            result = args.func(args)
+        self.assertNotIn("link", result[0])
+        self.assertEqual(result[1], {"requestedId": "ARXIV:2401.00002", "error": "not found"})
+        search = s2.build_parser().parse_args(["search", "agents"])
+        with mock.patch.object(s2, "request", return_value={"total": 0}):
+            self.assertEqual(search.func(search), {"total": 0})
+
+
 class Commands(unittest.TestCase):
     def test_batch_keeps_requested_id_and_marks_missing(self):
         args = s2.build_parser().parse_args(["batch", "2303.11366", "2210.03629"])

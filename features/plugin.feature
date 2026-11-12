@@ -25,6 +25,17 @@ Feature: A plugin that installs cleanly and keeps its promises
     And the arxiv skill routes reading a paper through the read skill
     And the init skill loads the new rules into the session that ran it
 
+  Scenario: Papers are always listed in the same table
+    Then every place that lists papers uses the same paper-list table
+    And the paper-list rule says what goes in each column
+    And the arxiv skill says "Each result has `published` and `link`"
+    And the scholar skill says "each paper in a result has a `link`"
+    And the add skill says "with a `Route` column after `Note`"
+    And the next skill says "with `Standing` and `Source` after `Note`"
+    And the next skill says "use the counts from this `batch` call for both the `Citations` column and the rating"
+    And the next skill says "If the call fails, follow the paper-list rule"
+    And the next skill says "write `?` and say so, or, for a pick in the graph, use the saved count"
+
   Scenario: The skills keep each paper's citation counts and links up to date without being asked
     Then the read skill says "s2.py batch <ID> --with-references"
     And the read skill says "run `graph.py standing <file>`"

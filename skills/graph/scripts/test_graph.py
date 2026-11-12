@@ -68,6 +68,13 @@ class Queries(unittest.TestCase):
         with self.assertRaises(graph.GraphError):
             graph.resolve(ENTITIES, "missing")
 
+    def test_search_shows_a_papers_saved_citation_count(self):
+        counted = {"id": "paper:a", "standing": {"citations": 1, "checked": "2026-11-01"}}
+        unknown = {"id": "paper:b", "standing": {"checked": "2026-11-02"}}
+        self.assertEqual(graph.standing_note(counted), "  [1 citation, checked 2026-11-01]")
+        self.assertEqual(graph.standing_note(unknown), "  [no citation data, checked 2026-11-02]")
+        self.assertEqual(graph.standing_note({"id": "tool:b"}), "")
+
     def test_neighbours_respect_depth(self):
         one = graph.neighbours(RELATIONS, "paper:a", 1)
         two = graph.neighbours(RELATIONS, "paper:a", 2)
@@ -214,6 +221,12 @@ class CommandLine(CommandLineBase):
         code, out, _ = self.run_main("search", "alpha")
         self.assertEqual(code, 0)
         self.assertIn("paper:a  Paper A", out)
+        self.assertNotIn("checked", out)
+        counted = [
+            dict(e, standing={"citations": 7, "checked": "2026-11-01"}) if e["id"] == "paper:a" else e for e in ENTITIES
+        ]
+        self.write(counted, RELATIONS)
+        self.assertIn("paper:a  Paper A  [7 citations, checked 2026-11-01]", self.run_main("search", "alpha")[1])
         code, _, err = self.run_main("search", "zzz")
         self.assertEqual(code, 1)
         self.assertIn("no matches", err)
