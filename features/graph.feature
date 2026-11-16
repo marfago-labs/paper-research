@@ -412,14 +412,14 @@ Feature: A knowledge graph that stays trustworthy as it grows
     And the graph has 1 relations
 
     Examples: authored-by and cites
-      | start | rel         | end          |
-      | paper | authored-by | author       |
-      | paper | authored-by | organisation |
-      | method | authored-by | author      |
-      | model | authored-by | organisation |
+      | start   | rel         | end          |
+      | paper   | authored-by | author       |
+      | paper   | authored-by | organisation |
+      | method  | authored-by | author       |
+      | model   | authored-by | organisation |
       | dataset | authored-by | organisation |
-      | tool  | authored-by | author       |
-      | paper | cites       | paper        |
+      | tool    | authored-by | author       |
+      | paper   | cites       | paper        |
 
     Examples: evaluates-on
       | start  | rel          | end     |
@@ -514,6 +514,15 @@ Feature: A knowledge graph that stays trustworthy as it grows
     And the error mentions "authored-by goes from dataset or method or model or paper or tool to author or organisation"
     And the error does not mention "must name the document"
     And the graph has 0 relations
+
+  Scenario: A refusal names the works as one phrase, and other sets as a list
+    Given a graph with two entities of every type
+    When I run graph link author:sample uses tool:sample --source "ARXIV:2401.00001, section 2" --status verified
+    Then the command fails
+    And the error mentions "uses goes from any type except author and organisation to any type except author and organisation, not author to tool"
+    When I run graph link paper:sample evaluates-on tool:sample --source "ARXIV:2401.00001, section 2" --status verified
+    Then the command fails
+    And the error mentions "evaluates-on goes from method or model or paper or tool to dataset, not paper to tool"
 
   Scenario: A link to the right types still needs a source it can be checked against
     Given a graph with two entities of every type

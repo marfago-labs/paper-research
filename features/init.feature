@@ -88,6 +88,13 @@ Feature: Setting up a workspace without touching what the user already has
     And the settings ask before "Edit(/CLAUDE.md)"
     And the settings ask before "Edit(/.claude/**)"
 
+  Scenario: The sandbox cannot write the files and folder that steer Claude
+    When I run init with the sandbox
+    Then the sandbox cannot write "./research/lessons.md"
+    And the sandbox cannot write "./research/profile.md"
+    And the sandbox cannot write "./CLAUDE.md"
+    And the sandbox cannot write "./.claude"
+
   Scenario: Every file the settings protect is a file init created
     When I run init with the sandbox
     Then every file the settings protect exists

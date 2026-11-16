@@ -207,7 +207,7 @@ class Hardening(Workspace):
         self.run_main("--sandbox")
         denied = self.settings()["sandbox"]["filesystem"]["denyWrite"]
         self.assertEqual(denied[0], "/etc")
-        for path in ("./research/lessons.md", "./research/profile.md", "./CLAUDE.md"):
+        for path in ("./research/lessons.md", "./research/profile.md", "./CLAUDE.md", "./.claude"):
             self.assertEqual(denied.count(path), 1, path)
         self.assertEqual(self.run_main("--sandbox")[1].strip(), "workspace is up to date")
 
