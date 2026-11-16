@@ -38,6 +38,13 @@ All notable changes to the plugin are listed here, newest first. The format foll
   such reason, and the reason is dropped when the paper gets an author. In a graph with papers saved
   without authors, the first `read` adds the authors of all of them, which can take one longer turn.
 
+- `arxiv.py` and `s2.py` remove invisible characters (tag characters, variation selectors outside the emoji range,
+  zero-width spaces, direction marks and overrides, the deprecated format characters, interlinear annotation
+  anchors, and the byte order mark) from every title, abstract, summary, author name, and field name they print or
+  save with `--out`, in every command. The count goes to the error output, and the `arxiv` and `scholar` skills tell
+  Claude to tell the user when tag characters or variation selectors were among them. Before, only `arxiv.py fetch`
+  cleaned the text it saved. Both scripts use one function: `s2.py` now takes `write_output` from `arxiv.py`. Joiners
+  and emoji selectors stay.
 - `graph.py unlink` and `graph.py remove` warn about each entity other than a paper that they leave with no links.
   They still succeed, and `graph.py validate` lists any that are left.
 - `graph.py add` saves an entity with its first link, given with `--link-from ENTITY REL` or `--link-to REL ENTITY`

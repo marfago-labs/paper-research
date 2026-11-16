@@ -18,6 +18,117 @@ Feature: Finding and reading arXiv papers without any outside server
     And the search found 2 papers
     And paper 1 of the results is "Newer agents paper" published 2026-11-02
 
+  Scenario: Instructions hidden in tag characters are removed from an abstract, and the user is told
+    Given arXiv knows the paper 2611.00003 titled "Hidden instructions" submitted on 2026-11-03
+    And that paper's abstract reads "We study agents.[U+E0069][U+E0067][U+E006E][U+E006F][U+E0072][U+E0065] Results follow."
+    When I run arxiv search "agents"
+    Then the command succeeds
+    And the output holds no hidden characters
+    And paper 1 of the results has the abstract "We study agents. Results follow."
+    And the error mentions "removed 6 invisible character(s)"
+    And the error mentions "6 of them were tag characters or variation selectors"
+    And the error mentions "prompt-injection"
+    And the error mentions "tell the user"
+
+  Scenario Outline: Stray invisible characters are removed from an abstract and reported, with no alarm
+    Given arXiv knows the paper 2611.00003 titled "Stray characters" submitted on 2026-11-03
+    And that paper's abstract reads "Read<chars>this"
+    When I run arxiv search "agents"
+    Then the command succeeds
+    And the output holds no hidden characters
+    And paper 1 of the results has the abstract "Readthis"
+    And the error mentions "removed <count> invisible character(s)"
+    And the error mentions "not a sign of an attack by themselves"
+    And the error does not mention "prompt-injection"
+    And the error does not mention "tell the user"
+
+    Examples:
+      | chars            | count |
+      | [U+200B]         | 1     |
+      | [U+200E][U+200F] | 2     |
+      | [U+202E]         | 1     |
+      | [U+2060][U+2062] | 2     |
+      | [U+2066][U+2069] | 2     |
+      | [U+FEFF]         | 1     |
+      | [U+061C]         | 1     |
+      | [U+180E]         | 1     |
+      | [U+206A][U+206F] | 2     |
+      | [U+FFF9][U+FFFB] | 2     |
+
+  Scenario Outline: Tag characters and variation selectors are removed from an abstract, and the user is told
+    Given arXiv knows the paper 2611.00003 titled "Hidden characters" submitted on 2026-11-03
+    And that paper's abstract reads "Read<chars>this"
+    When I run arxiv search "agents"
+    Then the command succeeds
+    And the output holds no hidden characters
+    And paper 1 of the results has the abstract "Readthis"
+    And the error mentions "removed <count> invisible character(s)"
+    And the error mentions "<count> of them were tag characters or variation selectors"
+    And the error mentions "prompt-injection"
+
+    Examples:
+      | chars              | count |
+      | [U+E0041]          | 1     |
+      | [U+E007F]          | 1     |
+      | [U+E0100][U+E01EF] | 2     |
+
+  Scenario: Only the tag characters and selectors among the removed ones are counted as the warning sign
+    Given arXiv knows the paper 2611.00003 titled "Mixed characters" submitted on 2026-11-03
+    And that paper's abstract reads "A[U+200B]B[U+E0041]C[U+FEFF]D[U+E0100]E[U+202E]"
+    When I run arxiv search "agents"
+    Then the command succeeds
+    And paper 1 of the results has the abstract "ABCDE"
+    And the error mentions "removed 5 invisible character(s)"
+    And the error mentions "2 of them were tag characters or variation selectors"
+
+  Scenario: A title that tries to reorder itself with a direction override is cleaned
+    Given arXiv knows the paper 2611.00003 titled "Safe [U+202E]title[U+202C]" submitted on 2026-11-03
+    When I run arxiv search "agents"
+    Then the command succeeds
+    And the output holds no hidden characters
+    And paper 1 of the results is "Safe title" published 2026-11-03
+
+  Scenario: The paper command cleans an abstract too
+    Given arXiv knows the paper 2611.00003 titled "Hidden characters" submitted on 2026-11-03
+    And that paper's abstract reads "Real[U+200B] abstract."
+    When I run arxiv paper 2611.00003
+    Then the command succeeds
+    And the output holds no hidden characters
+    And the error mentions "removed 1 invisible character(s)"
+
+  Scenario: A result saved to a file is cleaned too
+    Given arXiv knows the paper 2611.00003 titled "Hidden characters" submitted on 2026-11-03
+    And that paper's abstract reads "Real[U+E0041] abstract."
+    And I am in a workspace
+    When I run arxiv search "agents" --out WORKSPACE/research/found.json
+    Then the command succeeds
+    And only the path of "research/found.json" is printed
+    And the file "research/found.json" holds no hidden characters
+    And the error mentions "removed 1 invisible character(s)"
+
+  Scenario: Text that needs joiners and emoji selectors is left alone, and nothing is reported
+    Given arXiv knows the paper 2611.00003 titled "Joiners" submitted on 2026-11-03
+    And that paper's abstract reads "[U+0645][U+200C][U+0646] [U+1F469][U+200D][U+1F4BB] [U+2764][U+FE0F]"
+    When I run arxiv search "agents"
+    Then the command succeeds
+    And paper 1 of the results has the abstract "[U+0645][U+200C][U+0646] [U+1F469][U+200D][U+1F4BB] [U+2764][U+FE0F]"
+    And nothing is written to the error output
+
+  Scenario: Headings printed by fetch are cleaned, even from a text saved earlier
+    Given the saved text of 2611.00003 has the heading "1 Intro[U+200B][U+E0041][U+E0042] ideas"
+    When I run arxiv fetch 2611.00003 --dir WORKSPACE/fulltext --all-sections
+    Then the command succeeds
+    And the output holds no hidden characters
+    And the section headings printed are "A paper, 1 Intro ideas"
+    And the error mentions "removed 3 invisible character(s)"
+    And the error mentions "2 of them were tag characters or variation selectors"
+
+  Scenario: A search with nothing hidden prints no note
+    Given arXiv knows the paper 2611.00002 titled "Newer agents paper" submitted on 2026-11-02
+    When I run arxiv search "agents"
+    Then the command succeeds
+    And nothing is written to the error output
+
   Scenario: Searching a date range includes both days
     When I run arxiv search "agent memory" --since 2025-01-01 --until 2025-12-31
     Then the command succeeds

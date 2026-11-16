@@ -14,6 +14,64 @@ Feature: Paper details and citations from Semantic Scholar
     And every request went to the Semantic Scholar API host
     And no request carried an API key
 
+  Scenario: Invisible characters are removed from a paper's text, and the user is told
+    Given Semantic Scholar then answers with a paper titled "Safe [U+202E]title" whose abstract reads "Real abstract.[U+E0069][U+E0067][U+E006E][U+E006F][U+E0072][U+E0065]"
+    When I run scholar paper 1706.03762
+    Then the command succeeds
+    And the output holds no hidden characters
+    And the printed paper is titled "Safe title"
+    And the printed paper has the abstract "Real abstract."
+    And the printed paper has the summary "Short summary" and the author "Ann Author"
+    And the error mentions "removed 9 invisible character(s)"
+    And the error mentions "6 of them were tag characters or variation selectors"
+    And the error mentions "prompt-injection"
+
+  Scenario: Stray invisible characters from Semantic Scholar are reported with no alarm
+    Given Semantic Scholar then answers with a paper titled "Safe [U+202E]title" whose abstract reads "Real abstract.[U+200B]"
+    When I run scholar paper 1706.03762
+    Then the command succeeds
+    And the printed paper is titled "Safe title"
+    And the error mentions "removed 4 invisible character(s)"
+    And the error does not mention "prompt-injection"
+
+  Scenario Outline: Every command cleans what it prints
+    Given Semantic Scholar then answers <answer>
+    When I run scholar <command>
+    Then the command succeeds
+    And the output holds no hidden characters
+    And the error mentions "removed <removed> invisible character(s)"
+    And the error mentions "<tags> of them were tag characters or variation selectors"
+
+    Examples:
+      | answer                                                         | command                                | removed | tags |
+      | a search with a paper titled "Ti[U+200B]tle[U+E0041]"          | search agents                          | 2       | 1    |
+      | a recommendation with a paper titled "Ti[U+E0041][U+E0042]tle" | recommend --like ARXIV:2401.00001      | 2       | 2    |
+      | about an author named "An[U+2060]n[U+E0042]"                   | authors 1                              | 2       | 1    |
+      | with 3 papers titled "Ti[U+E0041]tle"                          | batch 2401.00001 2401.00002 2401.00003 | 3       | 3    |
+
+  Scenario: A search result is printed without the hidden characters
+    Given Semantic Scholar then answers a search with a paper titled "Safe [U+202E]title[U+E0041]"
+    When I run scholar search agents
+    Then the command succeeds
+    And the first search result is titled "Safe title"
+
+  Scenario: A failed request in a long list prints the papers already fetched, cleaned
+    Given a file "ids.txt" of 501 arXiv ids
+    And Semantic Scholar then answers with 500 papers titled "One[U+E0041]"
+    And Semantic Scholar answers with HTTP 404
+    When I look up the papers listed in "ids.txt"
+    Then the command exits with code 1
+    And the error mentions "500 of 501 papers"
+    And the error mentions "removed 500 invisible character(s)"
+    And 500 results are printed
+    And the output holds no hidden characters
+
+  Scenario: Text from Semantic Scholar with nothing hidden prints no note
+    Given Semantic Scholar then answers with the paper "Attention Is All You Need"
+    When I run scholar paper 1706.03762
+    Then the command succeeds
+    And nothing is written to the error output
+
   Scenario: A busy service is retried after a wait
     Given Semantic Scholar answers with HTTP 429
     And Semantic Scholar answers with HTTP 429
