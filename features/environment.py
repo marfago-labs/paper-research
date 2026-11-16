@@ -47,6 +47,13 @@ def before_scenario(context, scenario):
     context.result = SimpleNamespace(code=None, out="", err="")
     context.patches = []
 
+    def place(part):
+        """A command-line word with WORKSPACE and ELSEWHERE (a temporary folder) replaced by their folders."""
+        part = part.replace("WORKSPACE", str(context.workspace))
+        return part.replace("ELSEWHERE", str(context.elsewhere)) if hasattr(context, "elsewhere") else part
+
+    context.place = place
+
 
 def after_scenario(context, scenario):
     os.chdir(context.original_cwd)

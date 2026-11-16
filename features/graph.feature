@@ -209,17 +209,67 @@ Feature: A knowledge graph that stays trustworthy as it grows
     And the paper "paper:2611.00001" has 42 citations checked today
     When I run graph search 2611.00001
     Then the output mentions "42 citations, checked"
-    When I run graph standing-due due.txt
+    When I run graph standing-due research/due.txt
     Then the output mentions "no papers due"
-    And the file "due.txt" does not contain "2611.00001"
+    And the file "research/due.txt" does not contain "2611.00001"
+
+  Scenario Outline: The list of papers due is never written over the workspace's own files
+    Given the graph holds a paper "Paper A" with id "paper:2611.00001"
+    When I run graph standing-due <path>
+    Then the command exits with code 1
+    And the error mentions "write the file inside research/"
+    And the file "<path>" does not exist
+
+    Examples:
+      | path                    |
+      | due.txt                 |
+      | CLAUDE.md               |
+      | .claude/settings.json   |
+      | research/lessons.md     |
+      | research/PROFILE.md     |
+
+  Scenario Outline: The list of papers due is never written over another project's control files
+    Given the graph holds a paper "Paper A" with id "paper:2611.00001"
+    And a temporary folder outside the workspace
+    When I run graph standing-due <path>
+    Then the command exits with code 1
+    And the error mentions "never CLAUDE.md, .mcp.json, lessons.md, profile.md, or a file inside .claude/ or .git/"
+
+    Examples:
+      | path                              |
+      | ELSEWHERE/repo/CLAUDE.md          |
+      | ELSEWHERE/repo/claude.MD          |
+      | ELSEWHERE/repo/.mcp.json          |
+      | ELSEWHERE/repo/.claude/settings.json |
+      | ELSEWHERE/repo/.git/config        |
+
+  Scenario Outline: Only .json and .txt files are written in the temporary folder
+    Given the graph holds a paper "Paper A" with id "paper:2611.00001"
+    And a temporary folder outside the workspace
+    When I run graph standing-due <path>
+    Then the command exits with code 1
+    And the error mentions "(a .json or .txt file there)"
+
+    Examples:
+      | path                               |
+      | ELSEWHERE/repo/scripts/tool.py     |
+      | ELSEWHERE/repo/README.md           |
+      | ELSEWHERE/repo/Makefile            |
+      | ELSEWHERE/repo/ci.yml              |
+
+  Scenario: The list of papers due can be written to the temporary folder outside the workspace
+    Given the graph holds a paper "Paper A" with id "paper:2611.00001"
+    And a temporary folder outside the workspace
+    When I run graph standing-due ELSEWHERE/due.txt
+    Then the output mentions "1 paper due"
 
   Scenario: Papers whose citations were never checked are due, if they can be looked up
     Given the graph holds a paper "Paper A" with id "paper:2611.00001"
     And the graph holds a paper "A blog post" with id "paper:blog"
-    When I run graph standing-due due.txt
+    When I run graph standing-due research/due.txt
     Then the output mentions "1 paper due"
-    And the file "due.txt" contains "ARXIV:2611.00001"
-    And the file "due.txt" does not contain "blog"
+    And the file "research/due.txt" contains "ARXIV:2611.00001"
+    And the file "research/due.txt" does not contain "blog"
 
   Scenario: A batch with reference lists links the papers that cite each other
     Given the graph holds a paper "Newer" with id "paper:2611.00002"
@@ -243,7 +293,7 @@ Feature: A knowledge graph that stays trustworthy as it grows
     And the paper "paper:2611.00001" was checked today but has no citation counts
     When I run graph search 2611.00001
     Then the output mentions "no citation data, checked"
-    When I run graph standing-due due.txt
+    When I run graph standing-due research/due.txt
     Then the output mentions "no papers due"
 
   Scenario: Saving many papers' citation counts takes one line of output
@@ -267,11 +317,11 @@ Feature: A knowledge graph that stays trustworthy as it grows
     And the graph holds a paper "Recent check" with id "paper:2611.00002"
     And the paper "paper:2611.00001" was checked 40 days ago with 3 citations
     And the paper "paper:2611.00002" was checked 2 days ago with 5 citations
-    When I run graph standing-due due.txt
-    Then the file "due.txt" contains "ARXIV:2611.00001"
-    And the file "due.txt" does not contain "2611.00002"
-    When I run graph standing-due due.txt --days 1
-    Then the file "due.txt" contains "ARXIV:2611.00002"
+    When I run graph standing-due research/due.txt
+    Then the file "research/due.txt" contains "ARXIV:2611.00001"
+    And the file "research/due.txt" does not contain "2611.00002"
+    When I run graph standing-due research/due.txt --days 1
+    Then the file "research/due.txt" contains "ARXIV:2611.00002"
 
   Scenario: Merging two copies of a paper keeps the newer citation counts
     Given the graph holds a paper "Paper A" with id "paper:a"

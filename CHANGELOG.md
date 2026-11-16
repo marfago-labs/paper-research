@@ -6,6 +6,35 @@ All notable changes to the plugin are listed here, newest first. The format foll
 
 ## [Unreleased]
 
+### Added
+
+- `arxiv.py search --until` limits results to papers submitted on or before a date, with `--since` for a range.
+- `arxiv.py fetch --all-sections` lists every heading. By default `fetch` lists the title, the abstract, and the
+  numbered sections, and says how many deeper headings there are, so a long paper's output stays short.
+- `--brief` on `arxiv.py search` leaves out the abstracts, which are most of its output. `--out FILE` on `arxiv.py`
+  `search` and `paper`, and on every `s2.py` command, saves the JSON to a file as UTF-8 and prints only its path.
+  The file must be inside `research/`, or in a temporary folder outside the workspace (the system's, and `/tmp`
+  outside Windows; a `.json` or `.txt` file there). It is never `CLAUDE.md`, `.mcp.json`, `lessons.md`, `profile.md`, or a file
+  inside `.claude/` or `.git/`, in any letter case and in any project. `graph.py standing-due` follows the same rule
+  for the file it writes.
+
+### Changed
+
+- Without an API key, the `scholar` skill says how to rank papers when `search` is refused: find candidates with
+  `arxiv` `search`, look up their citation counts in one `batch` call, and say that the queries decided what could
+  appear. It also says that a free API key gives a better answer, and that counts for recent papers show early
+  traction, not influence.
+- The `read` skill checks papers that came from a search or a ranking before reading them, stops to ask when a text is
+  far longer than a paper or has chapters, reads a long work chapter by chapter, and says whether a Hugging Face
+  download count is for all time or the last 30 days. The `next` skill checks each pick the same way.
+- Without an API key, `s2.py search` reports an `HTTP 429` at once instead of retrying for up to 90 seconds, so
+  the switch to arXiv search is quick. Other commands still retry.
+- The `read` skill searches for code and data by the paper's title, says "not searched" for any place it couldn't
+  search, and says which parts of the paper it read, marking claims from unread parts as unverified.
+- The `add` skill keeps Semantic Scholar's spelling of an author's name, and adds arXiv's spelling as an alias.
+- The `next` and `scholar` skills use a search with a year or date range for "similar papers from a period",
+  because recommendations can't be limited to dates.
+
 ## [0.2.0] - 2026-11-12
 
 ### Added

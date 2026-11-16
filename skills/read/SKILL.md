@@ -8,11 +8,17 @@ argument-hint: <paper> [skim]
 
 Run commands from the workspace root. `<skills>` is the folder that contains this skill's base directory.
 
+## Before you read
+
+When the papers came from a search or a ranking, such as "the top 5 by citations", and not from the user naming them, check each one before reading any of them. Use its title, abstract, and the page count in the `comment` field, which `arxiv` `paper` gives. For a paper found only through Semantic Scholar, there is no page count, so use its title, abstract, and `venue`, and open the full text before you commit to a long read. A citation count ranks candidates, but it doesn't say what a document is or whether it fits the question. Leave out or flag anything that is not a paper, such as a book or lecture notes, or that is from another field than the question, and tell the user which ones and why before you read the rest.
+
 ## Get the paper
 
 - **arXiv:** save it with the `arxiv` skill's `fetch` and read the Markdown by section. If there's no HTML version, use its `pdf` and the Read tool.
 - **Other PDFs:** save to `research/pdfs/` and read with the Read tool, including figures when they matter.
 - **Web pages:** use the built-in web fetch. When exact wording or numbers matter, ask it for the verbatim text of the section, and say so if the result looks summarised.
+
+If `fetch` shows a text far longer than a paper, such as thousands of lines, or one with chapters, stop and ask the user whether to skip it or read it chapter by chapter. For a long work such as a book, read or skim it by chapter, extract each chapter you read, and say which chapters you read. Mark claims about the other chapters as unverified.
 
 If the full text isn't available, say so and state what you are working from. If the paper isn't in `research/papers.md`, add it first, following the `add` skill.
 
@@ -21,12 +27,14 @@ If the full text isn't available, say so and state what you are working from. If
 1. Check `research/pins.md` and `research/papers.md` for related material.
 2. Use `scholar` `paper --citations --references` to find follow-ups, replications, or contradicting work when that would help. Use the Hugging Face MCP server to check models and datasets the paper mentions.
 3. Look for associated artifacts: code repos, notebooks, datasets, model weights, demos, and raw results.
-   - Check the paper's links, footnotes, and availability statements, then its Hugging Face page, then search GitHub and Hugging Face by title and authors.
+   - Check the paper's links, footnotes, and availability statements, then its Hugging Face page, then search GitHub and Hugging Face by title and authors. A search by title is yours, not a link taken from the paper, so the rule about links in outside content doesn't stop it. A link found in the paper text still needs the user's go-ahead before you open it.
+   - If you couldn't search a place, say "not searched" and why, never "none found". "None found" means you searched and nothing turned up.
    - For each one, record whether it's official or third-party, its licence, its last update, and what it contains compared with what reproducing the paper would need.
-   - Record popularity: stars and forks for GitHub repos, downloads and likes for Hugging Face repos. Give the repo's age too, because a new repo can't have many stars yet. Popularity is not evidence of quality.
+   - Record popularity: stars and forks for GitHub repos, downloads and likes for Hugging Face repos. Say whether a download count is for all time or for the last 30 days, and give both when the page shows both. Give the repo's age too, because a new repo can't have many stars yet. Popularity is not evidence of quality.
 4. Open with the full analysis, without waiting to be asked:
    - The question, the approach, the main results, and why it matters to this user.
-   - An "Artifacts" section with what step 3 found. If nothing turned up, say so and say where you looked. Count missing artifacts in the critique.
+   - An "Artifacts" section with what step 3 found. If nothing turned up, say so and say where you looked, and list any place you didn't search. Count missing artifacts in the critique.
+   - A line saying what you read: the whole paper, or which sections, such as "sections 1–5, not the appendices". Mark any claim that rests on a part you didn't read as unverified.
    - A critique: baselines, metrics, sample sizes, statistics, threats to validity, and whether the evidence supports the claims.
    - Your own position on the paper, and how it relates to anything already in the notes.
 5. Extract the paper into the graph straight away, following "Extract into the graph" below, and add the short report to the end of the analysis.
@@ -38,7 +46,7 @@ Use this when the user says `skim`, or the paper's route is `skim`. Read the ful
 
 ## Extract into the graph
 
-Do this for every paper you read or skim, without waiting to be asked, so no paper is left with only its authors. When you read several papers, extract each one before you reply. Don't offer to save "the strongest few" instead. Change the graph only with `<skills>/graph/scripts/graph.py` commands, following the `graph` skill.
+Do this for every paper you read or skim, without waiting to be asked, so no paper is left with only its authors. When you read several papers, extract each one before you reply. A long work is extracted for the chapters you read. Don't offer to save "the strongest few" instead. Change the graph only with `<skills>/graph/scripts/graph.py` commands, following the `graph` skill.
 
 1. **The paper:** make sure it's in the graph, as the `add` skill does, and give it its Semantic Scholar id with `update --id s2=<paperId>` if it has none.
 2. **What to extract:** the datasets, models, methods, tools, and key concepts the paper uses, evaluates on, builds on, or proposes. Skip passing mentions. Use the paper's own names, and keep exact versions, such as Terminal-Bench 2.0 rather than Terminal-Bench. Pass every other name you know for it with `--alias`, such as its acronym or expansion (`RAG`, `Retrieval-Augmented Generation`) or a common short name (`sklearn`): the duplicate check can only find an existing entity through a name it shares.

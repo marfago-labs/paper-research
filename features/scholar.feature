@@ -23,11 +23,113 @@ Feature: Paper details and citations from Semantic Scholar
     And Semantic Scholar was asked 3 times
     And the script waited before asking again
 
+  Scenario: Without an API key, a refused search is reported at once so arXiv search can take over
+    Given no Semantic Scholar API key is set
+    And Semantic Scholar answers with HTTP 429
+    When I run scholar search "agent memory"
+    Then the command exits with code 1
+    And Semantic Scholar was asked 1 times
+    And the error mentions "use the arxiv skill's search instead"
+
+  Scenario: Without an API key, other requests are still retried
+    Given no Semantic Scholar API key is set
+    And Semantic Scholar answers with HTTP 429
+    And Semantic Scholar then answers with the paper "Attention Is All You Need"
+    When I run scholar paper 1706.03762
+    Then the command succeeds
+    And Semantic Scholar was asked 2 times
+
+  Scenario: Without an API key, a search that meets a server error is still retried
+    Given no Semantic Scholar API key is set
+    And Semantic Scholar answers with HTTP 503
+    And Semantic Scholar then answers a search with a paper that has the arXiv id 2401.00001
+    When I run scholar search "agent memory"
+    Then the command succeeds
+    And Semantic Scholar was asked 2 times
+
+  Scenario: With an API key, a refused search is retried
+    Given a Semantic Scholar API key is set
+    And Semantic Scholar answers with HTTP 429
+    And Semantic Scholar then answers a search with a paper that has the arXiv id 2401.00001
+    When I run scholar search "agent memory"
+    Then the command succeeds
+    And Semantic Scholar was asked 2 times
+
   Scenario: A paper that does not exist is not retried
     Given Semantic Scholar answers with HTTP 404
     When I run scholar paper 1706.03762
     Then the command exits with code 1
     And Semantic Scholar was asked 1 times
+
+  Scenario: A long result can be saved to a file in research instead of printed
+    Given Semantic Scholar then answers a batch with a paper that has the arXiv id 2401.00006 and a DOI
+    And I am in a workspace
+    When I run scholar batch 2401.00001 --out WORKSPACE/research/found.json
+    Then the command succeeds
+    And only the path of "research/found.json" is printed
+    And the file "research/found.json" holds 1 papers
+
+  Scenario Outline: Every command refuses a path outside research before asking Semantic Scholar
+    Given I am in a workspace
+    When I run scholar <command> --out WORKSPACE/CLAUDE.md
+    Then the command exits with code 2
+    And the error mentions "--out must name a file inside"
+    And Semantic Scholar was asked 0 times
+
+    Examples:
+      | command                  |
+      | search "agent memory"    |
+      | paper 1706.03762         |
+      | batch 2401.00001         |
+      | recommend --like 1706.03762 |
+      | authors 12345            |
+
+  Scenario Outline: Another project's control files in the temporary folder are never written
+    Given I am in a workspace
+    And a temporary folder outside the workspace
+    When I run scholar batch 2401.00001 --out <path>
+    Then the command exits with code 2
+    And the error mentions "never CLAUDE.md, .mcp.json, lessons.md, profile.md, or a file inside .claude/ or .git/"
+    And Semantic Scholar was asked 0 times
+
+    Examples:
+      | path                              |
+      | ELSEWHERE/repo/CLAUDE.md          |
+      | ELSEWHERE/repo/claude.MD          |
+      | ELSEWHERE/repo/.mcp.json          |
+      | ELSEWHERE/repo/.claude/settings.json |
+      | ELSEWHERE/repo/.git/config        |
+
+  Scenario Outline: Only .json and .txt files are written in the temporary folder
+    Given I am in a workspace
+    And a temporary folder outside the workspace
+    When I run scholar batch 2401.00001 --out <path>
+    Then the command exits with code 2
+    And the error mentions "(a .json or .txt file there)"
+    And Semantic Scholar was asked 0 times
+
+    Examples:
+      | path                               |
+      | ELSEWHERE/repo/scripts/tool.py     |
+      | ELSEWHERE/repo/README.md           |
+      | ELSEWHERE/repo/Makefile            |
+      | ELSEWHERE/repo/ci.yml              |
+
+  Scenario Outline: A result is never saved outside research or over a file that steers Claude
+    Given I am in a workspace
+    When I run scholar batch 2401.00001 --out <path>
+    Then the command exits with code 2
+    And the error mentions "--out must name a file inside"
+    And Semantic Scholar was asked 0 times
+
+    Examples:
+      | path                              |
+      | WORKSPACE/CLAUDE.md               |
+      | WORKSPACE/.claude/settings.json   |
+      | WORKSPACE/research/lessons.md     |
+      | WORKSPACE/research/profile.md     |
+      | WORKSPACE/research/LESSONS.md     |
+      | WORKSPACE/research/Profile.MD     |
 
   Scenario Outline: Each paper carries the link to show in the ID column of a paper list
     Given Semantic Scholar then answers a batch with a paper that has <ids>
@@ -37,15 +139,15 @@ Feature: Paper details and citations from Semantic Scholar
 
     Examples:
       | ids                                    | link                                                              |
-      | the arXiv id 2611.14326 and a DOI      | [ARXIV:2611.14326](https://arxiv.org/abs/2611.14326)              |
+      | the arXiv id 2401.00006 and a DOI      | [ARXIV:2401.00006](https://arxiv.org/abs/2401.00006)              |
       | only the DOI 10.1145/3442188.3445922   | [DOI:10.1145/3442188.3445922](https://doi.org/10.1145/3442188.3445922) |
       | no arXiv id or DOI                     | https://www.semanticscholar.org/paper/abc                         |
 
   Scenario: Search results carry links too
-    Given Semantic Scholar then answers a search with a paper that has the arXiv id 2611.14326
+    Given Semantic Scholar then answers a search with a paper that has the arXiv id 2401.00006
     When I run scholar search "agent memory"
     Then the command succeeds
-    And the first search result links to "[ARXIV:2611.14326](https://arxiv.org/abs/2611.14326)"
+    And the first search result links to "[ARXIV:2401.00006](https://arxiv.org/abs/2401.00006)"
 
   Scenario: A batch marks the papers it could not find
     Given Semantic Scholar then answers with an unknown paper

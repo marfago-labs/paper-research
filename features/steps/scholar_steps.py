@@ -3,6 +3,7 @@
 import contextlib
 import io
 import json
+import os
 import shlex
 import tempfile
 import urllib.error
@@ -41,6 +42,16 @@ def scholar_scripted(context):
     start(context, mock.patch.object(s2.OPENER, "open", fake_open))
     start(context, mock.patch.object(s2, "pace"))
     start(context, mock.patch.object(s2.time, "sleep", lambda seconds: context.s2_sleeps.append(seconds)))
+
+
+@given("no Semantic Scholar API key is set")
+def scholar_no_key_set(context):
+    start(context, mock.patch.dict(os.environ, {"SEMANTIC_SCHOLAR_API_KEY": ""}))
+
+
+@given("a Semantic Scholar API key is set")
+def scholar_key_set(context):
+    start(context, mock.patch.dict(os.environ, {"SEMANTIC_SCHOLAR_API_KEY": "test-key"}))
 
 
 @given("Semantic Scholar answers with HTTP {code:d}")
@@ -125,7 +136,7 @@ def run_s2(context, argv):
 
 @when("I run scholar {command}")
 def run_scholar(context, command):
-    run_s2(context, shlex.split(command))
+    run_s2(context, [context.place(part) for part in shlex.split(command)])
 
 
 @when('I look up the papers listed in "{name}"')

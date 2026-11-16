@@ -5,7 +5,9 @@ import io
 import json
 import os
 import shlex
+import tempfile
 import urllib.parse
+from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
@@ -30,8 +32,14 @@ def entry(ident, title, date):
 
 def article(sections):
     filler = "word " * 250
-    body = "".join(f"<section><h2>{name}</h2><p>{filler}</p></section>" for name in sections)
-    return f'<html><body><article class="ltx_document"><h1>A paper</h1>{body}</article></body></html>'
+    # A dotted number such as "1.1" is a subsection, one level below a numbered section.
+    body = "".join(
+        f"<section><h{3 if '.' in name.split()[0] else 2}>{name}</h{3 if '.' in name.split()[0] else 2}>"
+        f"<p>{filler}</p></section>"
+        for name in sections
+    )
+    abstract = f'<div class="ltx_abstract"><h6>Abstract</h6><p>{filler}</p></div>'
+    return f'<html><body><article class="ltx_document"><h1>A paper</h1>{abstract}{body}</article></body></html>'
 
 
 def stored_file(files, url, ident):
@@ -104,9 +112,22 @@ def arxiv_fake_pdf(context, ident):
     context.pdfs[ident] = b"<html>sorry</html>"
 
 
+@given("a temporary folder outside the workspace")
+def temporary_folder(context):
+    folder = tempfile.TemporaryDirectory()
+    context.patches.append(SimpleNamespace(stop=folder.cleanup))
+    context.elsewhere = Path(folder.name).resolve()
+
+
+@then('the file "{name}" in that folder holds {count:d} papers')
+def elsewhere_holds(context, name, count):
+    saved = json.loads((context.elsewhere / name).read_text(encoding="utf-8"))
+    assert len(saved["papers"]) == count, saved
+
+
 @when("I run arxiv {command}")
 def run_arxiv(context, command):
-    argv = [part.replace("WORKSPACE", str(context.workspace)) for part in shlex.split(command)]
+    argv = [context.place(part) for part in shlex.split(command)]
     out = io.TextIOWrapper(io.BytesIO(), encoding="utf-8")
     err = io.TextIOWrapper(io.BytesIO(), encoding="utf-8")
     with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
@@ -118,6 +139,22 @@ def run_arxiv(context, command):
 
 def printed(context):
     return json.loads(context.result.out)
+
+
+@then("no result has an abstract")
+def no_abstracts(context):
+    assert all("abstract" not in paper for paper in printed(context)["papers"]), printed(context)
+
+
+@then("every result has an abstract")
+def all_abstracts(context):
+    papers = printed(context)["papers"]
+    assert papers and all(paper["abstract"] for paper in papers), papers
+
+
+@then("nothing was requested from arXiv")
+def nothing_requested(context):
+    assert context.requested == [], context.requested
 
 
 @then('the request sent to arXiv contained "{text}"')
@@ -156,6 +193,16 @@ def saved_sections(context, sections):
         assert name in headings, headings
 
 
+@then('the output does not list the section "{name}"')
+def section_not_listed(context, name):
+    assert name not in [s["heading"] for s in printed(context)["sections"]]
+
+
+@then("the output counts {count:d} subsections")
+def subsections_counted(context, count):
+    assert printed(context)["subsections"] == count, printed(context).get("subsections")
+
+
 @then("the output warns that paper text is untrusted")
 def untrusted_warning(context):
     assert "untrusted" in printed(context)["warning"]
@@ -178,6 +225,12 @@ def in_subfolder(context, folder):
     (context.workspace / "research").mkdir(exist_ok=True)
     (context.workspace / folder).mkdir(parents=True)
     os.chdir(context.workspace / folder)
+
+
+@given("I am in a workspace")
+def in_workspace(context):
+    (context.workspace / "research").mkdir(exist_ok=True)
+    os.chdir(context.workspace)
 
 
 @given("I am in a folder with no workspace")

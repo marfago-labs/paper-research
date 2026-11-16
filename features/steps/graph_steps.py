@@ -148,7 +148,7 @@ def graph_invalid(context):
 @when("I run graph {command}")
 def run_graph(context, command):
     context.entities_before = len(read_all(context)[0]) if (graph_dir(context) / "entities.jsonl").exists() else 0
-    context.run_script("graph", shlex.split(command))
+    context.run_script("graph", [context.place(part) for part in shlex.split(command)])
 
 
 @when("{count:d} processes each add a different method at the same moment")

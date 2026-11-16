@@ -46,7 +46,7 @@ arXiv has no HTML version of this paper, which is common for older papers. Claud
 arXiv is limiting requests. The script spaces its requests by 3 seconds and retries, so wait a minute and ask again. Don't start several searches at once.
 
 **`scholar`: `HTTP 429`.**
-Semantic Scholar limits requests from anyone without an API key, and `search` most of all. Set `SEMANTIC_SCHOLAR_API_KEY` in your environment (request one at semanticscholar.org). Until then, Claude uses arXiv search for finding papers, and says so. Other requests to Semantic Scholar can be refused too, so some details and citation links may be missing. Ask again later.
+Semantic Scholar limits requests from anyone without an API key, and `search` most of all, so without a key the script doesn't retry a refused search. Set `SEMANTIC_SCHOLAR_API_KEY` in your environment (request one at semanticscholar.org). Until then, Claude finds candidates with arXiv search and looks up their citation counts in one `batch` call, which retries, and says so. Such a list covers only arXiv papers, and only those its queries found. Other requests to Semantic Scholar can be refused too, so some details and citation links may be missing. Ask again later.
 
 **`scholar`: `gave up ... after about 90 seconds`.**
 Semantic Scholar kept refusing. Try again later.
