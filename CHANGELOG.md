@@ -8,6 +8,13 @@ All notable changes to the plugin are listed here, newest first. The format foll
 
 ### Added
 
+- A `Stop` hook (`hooks/hooks.json`) that checks the recap when Claude finishes a turn in a paper workspace. If a
+  file the recap is built from changed since the page was last written, or the page was never written but the
+  starter files were changed, it stops Claude once. Claude is told to log the session's questions and facts that are
+  not yet in `research/user-facts.md`, including those from turns that changed no files, and to refresh the page
+  with the `recap` skill. Before, both steps were rules in `CLAUDE.md` that a long chain of skills could drop. The
+  command runs `recap.py --stop-hook` with `python3`, and falls back to `python`. It reads only the research files,
+  writes nothing, and never asks twice in a turn.
 - `arxiv.py search --until` limits results to papers submitted on or before a date, with `--since` for a range.
 - `arxiv.py fetch --all-sections` lists every heading. By default `fetch` lists the title, the abstract, and the
   numbered sections, and says how many deeper headings there are, so a long paper's output stays short.
@@ -37,6 +44,8 @@ All notable changes to the plugin are listed here, newest first. The format foll
   and `--source` and `--status`. Every type but a paper needs one, so an entity can no longer be left with no
   link when a later `link` is skipped or fails. `graph.py validate` lists any entity other than a paper with no
   links, and the `read` skill runs it after each extraction.
+- The recap page's Activity tab lists every line of `user-facts.md` with its type, not only the questions. A question
+  that was logged as an interest used to be missing from the page.
 - With the sandbox on, `init` also stops sandboxed shell commands from writing anything in `.claude/`, where the
   settings and approval rules live. Run `init` again to add it to an existing sandbox. Claude Code's file tools were
   already covered by an approval prompt.

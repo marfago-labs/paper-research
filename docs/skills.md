@@ -100,7 +100,7 @@ If part of an insight isn't supported by its source, Claude rewords it to match,
 
 ## recap
 
-**Triggers:** after any change to your files, or when you ask to see what's been done.
+**Triggers:** after any change to your files, or when you ask to see what's been done. A `Stop` hook also checks this when Claude finishes a turn in a paper workspace: if the recap is out of date, Claude is made to refresh it first, and to log your questions and facts of the session that are not in `research/user-facts.md` yet.
 
 **Does:** copies the recap page into `research/recap/` and writes its data from your files. It prints the page's path. Open it in a browser. See [Your workspace](workspace.md#the-recap-page).
 

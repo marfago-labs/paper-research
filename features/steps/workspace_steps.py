@@ -2,9 +2,13 @@
 
 import ast
 import json
+import os
 import re
+import shutil
+import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 from behave import given, then, when
 
@@ -103,17 +107,120 @@ def research_insight(context, title, ident):
     (research(context) / "insights.md").write_text(text, encoding="utf-8")
 
 
-@given('the user asked "{question}" on {date}')
-def research_question(context, question, date):
+@given('the user logged the {kind} "{text}" on {date}')
+def research_fact(context, kind, text, date):
     research(context).mkdir(parents=True, exist_ok=True)
     with open(research(context) / "user-facts.md", "a", encoding="utf-8") as handle:
-        handle.write(f"{date} | question | observed | {question}\n")
+        handle.write(f"{date} | {kind} | stated | {text}\n")
 
 
 @when("I refresh the recap")
 def refresh_recap(context):
     research(context).mkdir(parents=True, exist_ok=True)
     context.run_script("recap", [])
+
+
+@when("the turn ends")
+def turn_ends(context):
+    context.run_script("recap", ["--stop-hook"], stdin=json.dumps({"cwd": str(context.workspace)}))
+
+
+@when("the turn ends again after the hook already asked once")
+def turn_ends_again(context):
+    event = {"cwd": str(context.workspace), "stop_hook_active": True}
+    context.run_script("recap", ["--stop-hook"], stdin=json.dumps(event))
+
+
+@when('the hook is sent "{event}"')
+def hook_sent(context, event):
+    context.run_script("recap", ["--stop-hook"], stdin=event)
+
+
+@given('the file "{name}" holds bytes that are not UTF-8')
+def file_with_bad_bytes(context, name):
+    target = context.workspace / name
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(bytes([0xFF, 0xFE, 0x00, 0x80, 0x81]))
+
+
+@when("the recap page is refreshed")
+def page_refreshed(context):
+    context.run_script("recap", [])
+    data = research(context) / "recap" / "recap-data.js"
+    later = max(path.stat().st_mtime for path in research(context).rglob("*") if path.is_file()) + 10
+    os.utime(data, (later, later))
+
+
+@given("a workspace just set up by init")
+def workspace_set_up(context):
+    context.run_script("init", ["--workspace", "."])
+    assert context.result.code == 0, context.result.err
+
+
+@given('the user added the pin "{text}"')
+def added_pin(context, text):
+    with open(research(context) / "pins.md", "a", encoding="utf-8") as handle:
+        handle.write(f"- **[concept] {text}:** a fact. Added: 2026-11-15\n")
+
+
+@then("Claude is told to refresh the recap and log the questions")
+def told_to_refresh(context):
+    assert context.result.code == 0, context.result.err
+    answer = json.loads(context.result.out)
+    assert answer["decision"] == "block", answer
+    assert "recap skill" in answer["reason"] and "user-facts.md" in answer["reason"], answer
+    assert "from this session" in answer["reason"], answer
+
+
+@then("the turn is allowed to end")
+def turn_may_end(context):
+    assert context.result.code == 0, context.result.err
+    assert context.result.out == "", context.result.out
+
+
+@when("the turn ends through the registered hook command with python3 {state}")
+def turn_ends_through_command(context, state):
+    sh = shutil.which("sh")
+    assert sh, "these scenarios need a POSIX shell"
+    python = f'"{Path(sys.executable).as_posix()}"'
+    fake = context.workspace / "fake-python3.sh"
+    bodies = {
+        "crashing after it read the event": "cat > /dev/null; echo Traceback >&2; exit 3",
+        "only the Windows Store alias": "echo 'Python was not found' >&2; exit 49",
+    }
+    python3 = {"missing": "no-such-python3-anywhere", "failing": "false", "working": python}.get(state)
+    if python3 is None:
+        with fake.open("w", encoding="utf-8", newline="\n") as handle:
+            handle.write(bodies[state] + "\n")
+        python3 = f'sh "{fake.as_posix()}"'
+    manifest = json.loads((context.repo / "hooks" / "hooks.json").read_text(encoding="utf-8"))
+    command = manifest["hooks"]["Stop"][0]["hooks"][0]["command"]
+    command = command.replace("python3 ", f"{python3} ", 1).replace("|| python ", f"|| {python} ", 1)
+    env = {**os.environ, "CLAUDE_PLUGIN_ROOT": context.repo.as_posix(), "PYTHONIOENCODING": "utf-8"}
+    done = subprocess.run(
+        [sh, "-c", command],
+        cwd=context.workspace,
+        env=env,
+        input=json.dumps({"cwd": str(context.workspace)}),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=120,
+    )
+    context.result = SimpleNamespace(code=done.returncode, out=done.stdout, err=done.stderr)
+
+
+@then("the plugin runs that check when a turn ends")
+def plugin_has_stop_hook(context):
+    manifest = json.loads((context.repo / "hooks" / "hooks.json").read_text(encoding="utf-8"))
+    (entry,) = manifest["hooks"]["Stop"][0]["hooks"]
+    assert entry["type"] == "command", entry
+    assert "${CLAUDE_PLUGIN_ROOT}/skills/recap/scripts/recap.py" in entry["command"], entry
+    assert entry["command"].endswith("--stop-hook"), entry
+    first, second = entry["command"].split(" || ")
+    assert first.startswith("python3 ") and second.startswith("python "), entry
+    script = context.repo / "skills" / "recap" / "scripts" / "recap.py"
+    assert script.is_file()
 
 
 @then("the recap data lists {count:d} papers")
@@ -138,9 +245,10 @@ def recap_insight_link(context, ident):
     assert ident in recap_data(context)["insights"][0]["papers"]
 
 
-@then('the recap data has the question "{question}"')
-def recap_question(context, question):
-    assert question in [q["text"] for q in recap_data(context)["questions"]]
+@then('the recap data has the {kind} "{text}"')
+def recap_fact(context, kind, text):
+    facts = [(f["type"], f["text"]) for f in recap_data(context)["facts"]]
+    assert (kind, text) in facts, facts
 
 
 @then('the recap data says the graph cannot be shown because "{text}"')

@@ -83,7 +83,7 @@
         "insight",
         `Logged insight: <a href="#${esc(i.id)}">${inline(i.title)}</a>`,
       ]),
-      ...data.questions.map((q) => [q.added, "question", inline(q.text, known)]),
+      ...data.facts.map((f) => [f.added, esc(f.type), inline(f.text, known)]),
     ];
     if (!items.length) return '<p class="empty">Nothing recorded yet.</p>';
     const days = groupBy(items, (item) => item[0] || "");
@@ -275,7 +275,7 @@
       [data.papers.filter((p) => p.status === "read").length, "to read", "papers"],
       [data.insights.length, "insights", "insights"],
       [data.pins.length, "pins", "pins"],
-      [data.questions.length, "questions", "activity"],
+      [data.facts.length, "facts", "activity"],
       [data.graph.entities.length, "graph entities", "graph"],
     ]
       .map(([n, label, tab]) => `<a class="stat" href="#${tab}"><b>${n}</b><span>${label}</span></a>`)

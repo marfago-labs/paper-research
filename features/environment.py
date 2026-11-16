@@ -19,13 +19,14 @@ for folder in ("graph", "recap", "arxiv", "scholar", "init"):
     sys.path.insert(0, str(REPO / "skills" / folder / "scripts"))
 
 
-def run_script(context, name, args, cwd=None):
+def run_script(context, name, args, cwd=None, stdin=None):
     """Run one of the plugin's scripts as a user would, from the workspace root."""
     env = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONDONTWRITEBYTECODE": "1"}
     done = subprocess.run(
         [sys.executable, str(SCRIPTS[name]), *args],
         cwd=cwd or context.workspace,
         env=env,
+        input=stdin,
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -37,7 +38,7 @@ def run_script(context, name, args, cwd=None):
 
 def before_all(context):
     context.repo = REPO
-    context.run_script = lambda name, args, cwd=None: run_script(context, name, args, cwd)
+    context.run_script = lambda name, args, cwd=None, stdin=None: run_script(context, name, args, cwd, stdin)
 
 
 def before_scenario(context, scenario):
