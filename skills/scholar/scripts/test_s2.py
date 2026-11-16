@@ -14,6 +14,17 @@ from unittest import mock
 
 import s2
 
+
+@contextlib.contextmanager
+def workspace(module):
+    """A temporary workspace with a research/ folder, found by the module. Yields the research/ folder."""
+    with tempfile.TemporaryDirectory() as folder:
+        root = Path(folder).resolve()
+        (root / "research").mkdir()
+        with mock.patch.object(module, "find_workspace", return_value=root):
+            yield root / "research"
+
+
 _CACHE = tempfile.TemporaryDirectory()  # keep request pacing state out of the real .cache
 s2.CACHE_DIR = Path(_CACHE.name)
 
@@ -122,6 +133,22 @@ class RequestBehaviour(unittest.TestCase):
                     s2.request("GET", "/x")
             self.assertEqual(opened.call_count, 1, code)
 
+    def test_a_rate_limit_can_be_reported_at_once_instead_of_retried(self):
+        with mock.patch.object(s2.OPENER, "open", side_effect=[http_error(429), fake_response({})]) as opened:
+            with self.assertRaisesRegex(s2.ApiError, "HTTP 429 from /x: search is heavily rate-limited") as caught:
+                s2.request("GET", "/x", retry_rate_limit=False)
+        self.assertEqual(opened.call_count, 1)
+        self.assertIn("use the arxiv skill's search instead", str(caught.exception))
+        for code in (400, 404, 428):  # other refusals keep their own message, without the advice about arXiv
+            with mock.patch.object(s2.OPENER, "open", side_effect=[http_error(code)]):
+                with self.assertRaisesRegex(s2.ApiError, f"HTTP {code} from /x: detail") as caught:
+                    s2.request("GET", "/x", retry_rate_limit=False)
+            self.assertNotIn("arxiv", str(caught.exception), code)
+        for code in (500, 503):  # only a rate limit is reported at once: a server error is still retried
+            with mock.patch.object(s2.OPENER, "open", side_effect=[http_error(code), fake_response({})]) as opened:
+                self.assertEqual(s2.request("GET", "/x", retry_rate_limit=False), {}, code)
+            self.assertEqual(opened.call_count, 2, code)
+
     def test_an_error_keeps_the_first_300_characters_of_the_reply(self):
         long = urllib.error.HTTPError("https://api.semanticscholar.org/x", 400, "bad", {}, io.BytesIO(b"x" * 400))
         with mock.patch.object(s2.OPENER, "open", side_effect=[long]):
@@ -146,8 +173,8 @@ class Links(unittest.TestCase):
     """Each paper carries the ID column of a paper list as a ready link, so it doesn't depend on Claude's wording."""
 
     def test_a_link_prefers_the_arxiv_id_then_the_doi_then_the_page(self):
-        both = {"externalIds": {"ArXiv": "2611.14326", "DOI": "10.1/x"}, "url": "https://www.semanticscholar.org/p/a"}
-        self.assertEqual(s2.paper_link(both), "[ARXIV:2611.14326](https://arxiv.org/abs/2611.14326)")
+        both = {"externalIds": {"ArXiv": "2401.00006", "DOI": "10.1/x"}, "url": "https://www.semanticscholar.org/p/a"}
+        self.assertEqual(s2.paper_link(both), "[ARXIV:2401.00006](https://arxiv.org/abs/2401.00006)")
         doi = {"externalIds": {"DOI": "10.1145/3442188.3445922"}, "url": "https://www.semanticscholar.org/p/b"}
         self.assertEqual(s2.paper_link(doi), "[DOI:10.1145/3442188.3445922](https://doi.org/10.1145/3442188.3445922)")
         page = {"externalIds": {"CorpusId": 1}, "url": "https://www.semanticscholar.org/p/c"}
@@ -248,6 +275,26 @@ class Commands(unittest.TestCase):
             filtered.func(filtered)
         self.assertEqual(sent.call_args.args[2]["year"], "2025-")
         self.assertEqual(sent.call_args.args[2]["minCitationCount"], 0)
+
+    def test_search_retries_a_rate_limit_only_with_an_api_key(self):
+        search = s2.build_parser().parse_args(["search", "agents"])
+        for key, retried in (("", False), ("secret", True)):
+            with mock.patch.dict(os.environ, {"SEMANTIC_SCHOLAR_API_KEY": key}):
+                with mock.patch.object(s2, "request", return_value={}) as sent:
+                    search.func(search)
+            self.assertIs(sent.call_args.kwargs["retry_rate_limit"], retried, key)
+        with mock.patch.dict(os.environ, {}, clear=True):
+            with mock.patch.object(s2, "request", return_value={}) as sent:
+                search.func(search)
+        self.assertIs(sent.call_args.kwargs["retry_rate_limit"], False)
+
+    def test_other_commands_always_retry_a_rate_limit(self):
+        paper = s2.build_parser().parse_args(["paper", "2303.11366"])
+        with mock.patch.dict(os.environ, {}, clear=True):
+            with mock.patch.object(s2.OPENER, "open", side_effect=[http_error(429), fake_response({})]) as opened:
+                with mock.patch.object(s2.time, "sleep"), mock.patch.object(s2, "pace"):
+                    paper.func(paper)
+        self.assertEqual(opened.call_count, 2)
 
     def test_paper_only_fetches_the_lists_requested(self):
         args = s2.build_parser().parse_args(["paper", "2303.11366"])
@@ -673,6 +720,236 @@ class CommandLine(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertEqual(len(json.loads(out)), 500)
         self.assertIn("500 of 501 papers", err)
+
+    def test_a_keyless_search_that_is_refused_says_what_to_use_instead(self):
+        with mock.patch.dict(os.environ, {"SEMANTIC_SCHOLAR_API_KEY": ""}):
+            with mock.patch.object(s2.OPENER, "open", side_effect=[http_error(429), fake_response({})]) as opened:
+                with mock.patch.object(s2, "pace"), mock.patch.object(s2.time, "sleep") as slept:
+                    code, out, err = self.run_main(["search", "agents"])
+        self.assertEqual((code, out), (1, ""))
+        self.assertEqual(opened.call_count, 1)
+        slept.assert_not_called()
+        self.assertIn("HTTP 429", err)
+        self.assertIn("SEMANTIC_SCHOLAR_API_KEY", err)
+        self.assertIn("use the arxiv skill's search instead", err)
+
+    def test_out_saves_the_json_as_utf8_and_prints_only_the_path(self):
+        with workspace(s2) as research:
+            path = research / "found.json"
+            with mock.patch.object(s2, "request", return_value={"title": "τ²"}):
+                code, out, err = self.run_main(["search", "agents", "--out", str(path)])
+            saved = path.read_bytes()
+        self.assertEqual((code, out, err), (0, f"{path}\n", ""))
+        self.assertEqual(saved, (json.dumps({"title": "τ²"}, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
+
+    def test_a_partly_failed_batch_saved_with_out_still_exits_with_1(self):
+        with workspace(s2) as research:
+            ids, path = research / "ids.txt", research / "found.json"
+            ids.write_text("\n".join(f"ARXIV:2401.{n:05d}" for n in range(1, 502)), encoding="utf-8")
+            with mock.patch.object(s2, "request", side_effect=[[{}] * 500, s2.ApiError("HTTP 503")]):
+                code, out, err = self.run_main(["batch", "--ids-file", str(ids), "--out", str(path)])
+            saved = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual((code, out), (1, f"{path}\n"))
+        self.assertEqual(len(saved), 500)
+        self.assertIn("500 of 501 papers", err)
+
+    def test_out_that_cannot_be_written_is_reported(self):
+        with workspace(s2) as research:
+            path = research / "missing" / "found.json"
+            with mock.patch.object(s2, "request", return_value={"title": "x"}):
+                code, out, err = self.run_main(["search", "agents", "--out", str(path)])
+        self.assertEqual((code, out), (1, ""))
+        self.assertIn(f"error: can't write {path}", err)
+
+    def test_out_is_refused_outside_research_or_for_a_protected_file_before_any_request(self):
+        with workspace(s2) as research:
+            root = research.parent
+            for target in (
+                root / "CLAUDE.md",
+                root / ".claude" / "settings.json",
+                research / ".." / "CLAUDE.md",
+                research,
+                research / "lessons.md",
+                research / "profile.md",
+                research / "notes" / "profile.md",
+                research / "LESSONS.md",
+                research / "Profile.MD",
+                research / "notes" / "PROFILE.md",
+            ):
+                with mock.patch.object(s2, "request") as request:
+                    code, out, err = self.run_main(["search", "agents", "--out", str(target)])
+                self.assertEqual((code, out), (2, ""), target)
+                self.assertIn(f"--out must name a file inside {research}", err)
+                request.assert_not_called()
+            self.assertFalse((root / "CLAUDE.md").exists())
+
+    def test_every_command_refuses_a_path_outside_research_before_any_request(self):
+        with workspace(s2) as research:
+            target = str(research.parent / "CLAUDE.md")
+            for argv in (
+                ["search", "x"],
+                ["paper", "x"],
+                ["batch", "x"],
+                ["recommend", "--like", "x"],
+                ["authors", "1"],
+            ):
+                with mock.patch.object(s2, "request") as request:
+                    code, out, err = self.run_main([*argv, "--out", target])
+                self.assertEqual((code, out), (2, ""), argv)
+                self.assertIn("--out must name a file inside", err)
+                request.assert_not_called()
+            self.assertFalse(Path(target).exists())
+
+    def test_out_may_name_a_file_in_the_temporary_folder_outside_the_workspace(self):
+        with workspace(s2) as research, tempfile.TemporaryDirectory() as other:
+            self.assertIn(Path(tempfile.gettempdir()).resolve(), research.parents)  # so the workspace is in temp too
+            path = Path(other).resolve() / "found.json"
+            with mock.patch.object(s2, "request", return_value={"title": "x"}):
+                code, out, _ = self.run_main(["search", "agents", "--out", str(path)])
+            self.assertTrue(path.is_file())
+        self.assertEqual((code, out), (0, f"{path}\n"))
+
+    def test_the_temporary_folder_itself_and_protected_names_in_it_are_refused(self):
+        with workspace(s2) as research, tempfile.TemporaryDirectory() as other:
+            for target in (Path(tempfile.gettempdir()), Path(other) / "lessons.md", Path(other) / "PROFILE.md"):
+                with mock.patch.object(s2, "request") as called:
+                    code, out, err = self.run_main(["search", "agents", "--out", str(target)])
+                self.assertEqual((code, out), (2, ""), target)
+                self.assertIn(f"--out must name a file inside {research} or in", err)
+                called.assert_not_called()
+
+    def test_a_link_in_the_temporary_folder_does_not_lead_back_into_the_workspace(self):
+        with workspace(s2) as research, tempfile.TemporaryDirectory() as other:
+            link = Path(other) / "link"
+            try:
+                os.symlink(research.parent, link, target_is_directory=True)
+            except (OSError, NotImplementedError):
+                self.skipTest("this system can't create a directory link")
+            with mock.patch.object(s2, "request") as called:
+                code, _, _ = self.run_main(["search", "agents", "--out", str(link / "CLAUDE.md")])
+            self.assertEqual(code, 2)
+            called.assert_not_called()
+            self.assertFalse((research.parent / "CLAUDE.md").exists())
+
+    def test_other_projects_control_files_in_the_temporary_folder_are_refused(self):
+        with workspace(s2), tempfile.TemporaryDirectory() as other:
+            repo = Path(other).resolve() / "some repo"
+            for target in (
+                repo / "CLAUDE.md",
+                repo / "claude.MD",
+                repo / ".mcp.json",
+                repo / ".MCP.JSON",
+                repo / ".claude" / "settings.json",
+                repo / ".claude" / "deep" / "x.json",
+                repo / ".git" / "config",
+                repo / ".GIT" / "hooks" / "pre-commit",
+            ):
+                with mock.patch.object(s2, "request") as called:
+                    code, out, err = self.run_main(["search", "agents", "--out", str(target)])
+                self.assertEqual((code, out), (2, ""), target)
+                self.assertIn(
+                    "never CLAUDE.md, .mcp.json, lessons.md, profile.md, or a file inside .claude/ or .git/", err
+                )
+                called.assert_not_called()
+
+    def test_ordinary_files_in_the_temporary_folder_are_allowed_even_beside_those_folders(self):
+        with workspace(s2), tempfile.TemporaryDirectory() as other:
+            repo = Path(other).resolve() / "some repo"
+            (repo / ".git").mkdir(parents=True)
+            for target in (repo / "found.json", Path(other).resolve() / "claude" / "found.json"):
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with mock.patch.object(s2, "request", return_value={"title": "x"}):
+                    code, _, _ = self.run_main(["search", "agents", "--out", str(target)])
+                self.assertEqual(code, 0, target)
+                self.assertTrue(target.is_file(), target)
+
+    def test_only_json_and_txt_files_are_saved_in_the_temporary_folder(self):
+        with workspace(s2) as research, tempfile.TemporaryDirectory() as other:
+            repo = Path(other).resolve() / "some repo"
+            (repo / "skills").mkdir(parents=True)
+            for refused in (
+                repo / "skills" / "arxiv.py",
+                repo / ".github" / "ci.yml",
+                repo / "README.md",
+                repo / "Makefile",
+                repo / "found.json.py",
+            ):
+                with mock.patch.object(s2, "request") as called:
+                    code, out, err = self.run_main(["search", "agents", "--out", str(refused)])
+                self.assertEqual((code, out), (2, ""), refused)
+                self.assertIn("(a .json or .txt file there)", err)
+                called.assert_not_called()
+            for allowed in (repo / "found.JSON", repo / "ids.txt", repo / "ids.TXT"):
+                with mock.patch.object(s2, "request", return_value={"title": "x"}):
+                    code, _, _ = self.run_main(["search", "agents", "--out", str(allowed)])
+                self.assertEqual(code, 0, allowed)
+                self.assertTrue(allowed.is_file(), allowed)
+            note = research / "notes.md"
+            with mock.patch.object(s2, "request", return_value={"title": "x"}):
+                self.assertEqual(self.run_main(["search", "agents", "--out", str(note)])[0], 0)
+            self.assertTrue(note.is_file())  # inside research/ any kind of file is fine
+
+    def test_the_helper_names_the_kinds_of_file_that_may_be_saved_in_temp(self):
+        base = Path(tempfile.gettempdir()).resolve()
+        for name in ("a.json", "a.JSON", "a.txt", "a.Txt"):
+            self.assertTrue(s2.savable_in_temp(base / name), name)
+        for name in ("a.py", "a.md", "a", "a.json.py", ".json", "txt"):
+            self.assertFalse(s2.savable_in_temp(base / name), name)
+
+    def test_slash_tmp_is_allowed_outside_windows_only(self):
+        with (
+            workspace(s2),
+            tempfile.TemporaryDirectory() as system_temp,
+            tempfile.TemporaryDirectory() as slash_tmp,
+        ):
+            target = Path(slash_tmp).resolve() / "found.json"
+            for on_windows, expected in ((False, 0), (True, 2)):
+                with (
+                    mock.patch.object(s2.tempfile, "gettempdir", return_value=system_temp),
+                    mock.patch.object(s2, "OTHER_TEMP_FOLDERS", (slash_tmp,)),
+                    mock.patch.object(s2, "ON_WINDOWS", on_windows),
+                    mock.patch.object(s2, "request", return_value={"title": "x"}),
+                ):
+                    code, _, _ = self.run_main(["search", "agents", "--out", str(target)])
+                self.assertEqual(code, expected, on_windows)
+            self.assertTrue(target.is_file())
+
+    def test_the_helpers_name_what_steers_claude_and_where_temporary_files_go(self):
+        base = Path(tempfile.gettempdir()).resolve()
+        for steering in (
+            "CLAUDE.md",
+            "claude.md",
+            "lessons.md",
+            "PROFILE.md",
+            ".claude/x",
+            ".git/config",
+            ".claude/a/b",
+        ):
+            self.assertTrue(s2.steers_claude(base / "p" / steering), steering)
+        for plain in ("notes.json", "claude/x.json", "git/config", "claude.json", ".gitignore", "my.claude/x"):
+            self.assertFalse(s2.steers_claude(base / "p" / plain), plain)
+        with mock.patch.object(s2, "ON_WINDOWS", True):
+            self.assertEqual(s2.temp_folders(), [base])
+        with mock.patch.object(s2, "ON_WINDOWS", False), mock.patch.object(s2, "OTHER_TEMP_FOLDERS", (str(base),)):
+            self.assertEqual(s2.temp_folders(), [base, base])
+
+    def test_out_may_name_a_file_in_a_subfolder_of_research(self):
+        with workspace(s2) as research:
+            (research / "found").mkdir()
+            path = research / "found" / "lessons.json"
+            with mock.patch.object(s2, "request", return_value={"title": "x"}):
+                code, out, _ = self.run_main(["search", "agents", "--out", str(path)])
+            self.assertTrue(path.is_file())
+        self.assertEqual((code, out), (0, f"{path}\n"))
+
+    def test_without_out_no_workspace_is_needed(self):
+        self.assertIsNone(s2.checked_out(None))
+
+    def test_every_command_takes_out(self):
+        parser = s2.build_parser()
+        for argv in (["search", "x"], ["paper", "x"], ["batch", "x"], ["recommend", "--like", "x"], ["authors", "1"]):
+            self.assertIsNone(parser.parse_args(argv).out, argv)
+            self.assertEqual(parser.parse_args([*argv, "--out", "a.json"]).out, "a.json", argv)
 
     def test_success_prints_json_without_escaping_text(self):
         with mock.patch.object(s2, "request", return_value={"title": "τ²"}):

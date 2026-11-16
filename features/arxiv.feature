@@ -18,6 +18,135 @@ Feature: Finding and reading arXiv papers without any outside server
     And the search found 2 papers
     And paper 1 of the results is "Newer agents paper" published 2026-11-02
 
+  Scenario: Searching a date range includes both days
+    When I run arxiv search "agent memory" --since 2025-01-01 --until 2025-12-31
+    Then the command succeeds
+    And the request sent to arXiv contained "202501010000"
+    And the request sent to arXiv contained "202512312359"
+
+  Scenario: Searching up to a date has no start date
+    When I run arxiv search "agent memory" --until 2024-12-31
+    Then the command succeeds
+    And the request sent to arXiv contained "submittedDate:[000101010000 TO 202412312359]"
+
+  Scenario: A brief search leaves out the abstracts, and a normal one keeps them
+    Given arXiv knows the paper 2611.00002 titled "Newer agents paper" submitted on 2026-11-02
+    When I run arxiv search "agent memory" --brief
+    Then the command succeeds
+    And the search found 1 papers
+    And no result has an abstract
+    When I run arxiv search "agent memory"
+    Then every result has an abstract
+
+  Scenario: A long result can be saved to a file in research instead of printed
+    Given arXiv knows the paper 2611.00002 titled "Newer agents paper" submitted on 2026-11-02
+    And I am in a workspace
+    When I run arxiv search "agent memory" --out WORKSPACE/research/found.json
+    Then the command succeeds
+    And only the path of "research/found.json" is printed
+    And the file "research/found.json" holds 1 papers
+
+  Scenario: A brief search can be saved to a file
+    Given arXiv knows the paper 2611.00002 titled "Newer agents paper" submitted on 2026-11-02
+    And I am in a workspace
+    When I run arxiv search "agent memory" --brief --out WORKSPACE/research/found.json
+    Then the command succeeds
+    And the file "research/found.json" holds 1 papers
+    And the file "research/found.json" has no abstracts
+
+  Scenario: A result can be saved in the temporary folder outside the workspace
+    Given arXiv knows the paper 2611.00002 titled "Newer agents paper" submitted on 2026-11-02
+    And I am in a workspace
+    And a temporary folder outside the workspace
+    When I run arxiv search "agent memory" --brief --out ELSEWHERE/found.json
+    Then the command succeeds
+    And the file "found.json" in that folder holds 1 papers
+
+  Scenario Outline: Another project's control files in the temporary folder are never written
+    Given I am in a workspace
+    And a temporary folder outside the workspace
+    When I run arxiv search "agent memory" --out <path>
+    Then the command exits with code 2
+    And the error mentions "never CLAUDE.md, .mcp.json, lessons.md, profile.md, or a file inside .claude/ or .git/"
+    And nothing was requested from arXiv
+
+    Examples:
+      | path                              |
+      | ELSEWHERE/repo/CLAUDE.md          |
+      | ELSEWHERE/repo/claude.MD          |
+      | ELSEWHERE/repo/.mcp.json          |
+      | ELSEWHERE/repo/.claude/settings.json |
+      | ELSEWHERE/repo/.git/config        |
+
+  Scenario Outline: Only .json and .txt files are written in the temporary folder
+    Given I am in a workspace
+    And a temporary folder outside the workspace
+    When I run arxiv search "agent memory" --out <path>
+    Then the command exits with code 2
+    And the error mentions "(a .json or .txt file there)"
+    And nothing was requested from arXiv
+
+    Examples:
+      | path                               |
+      | ELSEWHERE/repo/scripts/tool.py     |
+      | ELSEWHERE/repo/README.md           |
+      | ELSEWHERE/repo/Makefile            |
+      | ELSEWHERE/repo/ci.yml              |
+
+  Scenario: A paper lookup is refused a bad path before any request
+    Given I am in a workspace
+    When I run arxiv paper 2611.00002 --out WORKSPACE/CLAUDE.md
+    Then the command exits with code 2
+    And the error mentions "--out must name a file inside"
+    And nothing was requested from arXiv
+
+  Scenario: A file that cannot be written is reported
+    Given arXiv knows the paper 2611.00002 titled "Newer agents paper" submitted on 2026-11-02
+    And I am in a workspace
+    When I run arxiv search "agent memory" --out WORKSPACE/research/missing/found.json
+    Then the command exits with code 1
+    And the error mentions "can't write"
+
+  Scenario Outline: A result is never saved outside research or over a file that steers Claude
+    Given I am in a workspace
+    When I run arxiv search "agent memory" --out <path>
+    Then the command exits with code 2
+    And the error mentions "--out must name a file inside"
+    And nothing was requested from arXiv
+
+    Examples:
+      | path                              |
+      | WORKSPACE/CLAUDE.md               |
+      | WORKSPACE/.claude/settings.json   |
+      | WORKSPACE/research/lessons.md     |
+      | WORKSPACE/research/profile.md     |
+      | WORKSPACE/research/LESSONS.md     |
+      | WORKSPACE/research/Profile.MD     |
+
+  Scenario Outline: A bad date range is refused before any request
+    When I run arxiv search "agent memory" <dates>
+    Then the command exits with code 2
+    And the error mentions "<message>"
+    And nothing was requested from arXiv
+
+    Examples:
+      | dates                                   | message                           |
+      | --since 2025-12-31 --until 2025-01-01   | --since must not be after --until |
+      | --until 31/12/2025                      | --until must be a real date       |
+      | --since 2025-1-1                        | --since must be a real date       |
+      | --since 2025-13-45                      | --since must be a real date       |
+      | --until 2025-02-30                      | --until must be a real date       |
+
+  Scenario: A long paper lists its sections, and its subsections only when asked
+    Given arXiv has an HTML version of 2611.00003 with the sections "1 Introduction, 1.1 Setup, 1.2 Runs, 2 Method"
+    When I run arxiv fetch 2611.00003 --dir WORKSPACE/fulltext
+    Then the command succeeds
+    And the saved text lists the sections "Abstract, 1 Introduction, 2 Method"
+    And the output does not list the section "1.1 Setup"
+    And the output counts 2 subsections
+    When I run arxiv fetch 2611.00003 --dir WORKSPACE/fulltext --all-sections
+    Then the saved text lists the sections "1.1 Setup, 1.2 Runs"
+
   Scenario: Each result carries the date and the link to show in paper lists
     Given arXiv knows the paper 2611.00002 titled "A paper" submitted on 2026-11-02
     When I run arxiv search "paper"

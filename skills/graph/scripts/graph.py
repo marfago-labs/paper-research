@@ -20,6 +20,7 @@ import json
 import os
 import re
 import sys
+import tempfile
 import time
 import unicodedata
 from collections import Counter, defaultdict, deque
@@ -1187,8 +1188,61 @@ def lookup_id(paper):
     return None
 
 
+# Files and folders that steer Claude: the ones Claude Code asks the user about before Claude edits them, and any
+# project's CLAUDE.md, .mcp.json, .claude/ settings, and .git/ hooks and config. A shell command that writes a
+# file skips those prompts, so standing-due never writes them, in any folder and whatever the case of the name: some
+# file systems ignore case.
+PROTECTED_FILES = ("lessons.md", "profile.md", "claude.md", ".mcp.json")
+PROTECTED_FOLDERS = (".claude", ".git")
+# A second temporary folder on Linux and macOS, where the system's own can be elsewhere, such as $TMPDIR on macOS.
+# /tmp is only a place a file may be saved, never one the script creates files in, so bandit's B108 does not apply.
+OTHER_TEMP_FOLDERS = ("/tmp",)  # nosec B108
+ON_WINDOWS = os.name == "nt"  # pragma: no mutate (the platform's value; the tests set it both ways)
+REFUSED = "never CLAUDE.md, .mcp.json, lessons.md, profile.md, or a file inside .claude/ or .git/"
+# Outside research/, only the kinds of file the skills save: the JSON that a command prints and a list of ids.
+TEMP_SUFFIXES = (".json", ".txt")
+
+
+def savable_in_temp(target):
+    """True if target is a kind of file that may be saved in a temporary folder, whatever the case of its suffix."""
+    return target.suffix.casefold() in TEMP_SUFFIXES
+
+
+def steers_claude(target):
+    """True if writing the resolved path target could change how Claude, or a tool Claude runs, behaves."""
+    return target.name.casefold() in PROTECTED_FILES or any(
+        folder.name.casefold() in PROTECTED_FOLDERS for folder in target.parents
+    )
+
+
+def temp_folders():
+    """The resolved temporary folders a script may write in: the system's, and /tmp outside Windows."""
+    return [
+        Path(tempfile.gettempdir()).resolve(),
+        *([] if ON_WINDOWS else map(Path.resolve, map(Path, OTHER_TEMP_FOLDERS))),
+    ]
+
+
+def checked_output(path):
+    """The resolved path standing-due may write: a file inside the workspace's research/ folder, or one in a
+    temporary folder outside the workspace, but never one that steers Claude. The workspace is the current folder or
+    the nearest parent with a research/ folder, if there is one."""
+    target = Path(path).resolve()
+    here = Path.cwd().resolve()
+    root = next((folder for folder in (here, *here.parents) if (folder / "research").is_dir()), None)
+    in_research = root is not None and root / "research" in target.parents
+    in_temp = any(temp in target.parents for temp in temp_folders()) and (root is None or root not in target.parents)
+    if not (in_research or (in_temp and savable_in_temp(target))) or steers_claude(target):
+        raise GraphError(
+            f"{path}: write the file inside research/ or in a temporary folder outside the workspace "
+            f"(a .json or .txt file there), {REFUSED}"
+        )
+    return target
+
+
 def cmd_standing_due(args):
     entities, _ = checked_load(args.data)
+    target = checked_output(args.file)
     cutoff = (datetime.date.today() - datetime.timedelta(days=args.days)).isoformat()
     due = [
         lookup_id(e)
@@ -1196,7 +1250,7 @@ def cmd_standing_due(args):
         if is_paper(e) and e.get("standing", {}).get("checked", "") <= cutoff and lookup_id(e)
     ]
     try:
-        Path(args.file).write_text("".join(f"{paper_id}\n" for paper_id in due), encoding="utf-8")
+        target.write_text("".join(f"{paper_id}\n" for paper_id in due), encoding="utf-8")
     except OSError as err:
         raise GraphError(f"can't write {args.file}: {err}") from None
     print(f"{count(len(due), 'paper')} due" if due else "no papers due")

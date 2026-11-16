@@ -561,6 +561,24 @@ def docs_skills(context):
         assert re.search(pattern, text, re.M), f"docs/skills.md has no section for {folder.name}"
 
 
+@then('only the path of "{name}" is printed')
+def only_the_path(context, name):
+    assert Path(context.result.out.strip()).resolve() == (context.workspace / name).resolve(), context.result.out[:200]
+
+
+@then('the file "{name}" holds {count:d} papers')
+def file_holds_papers(context, name, count):
+    saved = json.loads((context.workspace / name).read_text(encoding="utf-8"))
+    papers = saved["papers"] if isinstance(saved, dict) and "papers" in saved else saved
+    assert len(papers) == count, saved
+
+
+@then('the file "{name}" has no abstracts')
+def file_has_no_abstracts(context, name):
+    saved = json.loads((context.workspace / name).read_text(encoding="utf-8"))
+    assert all("abstract" not in paper for paper in saved["papers"]), saved
+
+
 @then("the command reference lists every command of {script}")
 def docs_commands(context, script):
     out = context.run_script(script, ["--help"]).out

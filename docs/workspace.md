@@ -56,7 +56,7 @@ One table row per link. Escape a `|` in a title as `\|`.
 One line per fact:
 
 ```markdown
-- **[dataset] Terminal-Bench 2.1:** Command-line work: 89 real tasks in sandboxed containers. Link: https://arxiv.org/abs/2601.11868. Source: ARXIV:2611.05306, §2.2. Status: verified. Tags: benchmark, agents. Added: 2026-11-05.
+- **[dataset] Terminal-Bench 2.1:** Command-line work: 89 real tasks in sandboxed containers. Link: https://arxiv.org/abs/2601.11868. Source: ARXIV:2401.00007, §2.2. Status: verified. Tags: benchmark, agents. Added: 2026-11-05.
 ```
 
 - **Type:** `concept`, `finding`, `method`, `tool`, `dataset`, or `idea`.

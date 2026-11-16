@@ -3,6 +3,7 @@
 import contextlib
 import io
 import json
+import os
 import runpy
 import sys
 import tempfile
@@ -1164,6 +1165,179 @@ class Citations(CommandLineBase):
             code, _, err = self.run_main("cites", *argv)
             self.assertEqual(code, 1)
             self.assertIn(expected, err)
+
+
+class OutputPath(CommandLineBase):
+    """standing-due writes only inside research/ or the temporary folder outside the workspace."""
+
+    def due_from(self, workspace_root, target):
+        with mock.patch.object(graph.Path, "cwd", return_value=workspace_root):
+            return self.run_main("standing-due", str(target))
+
+    def test_a_workspace_allows_research_and_the_temporary_folder_outside_it(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as other:
+            root = Path(tmp).resolve()
+            (root / "research").mkdir()
+            for target in (root / "research" / "due.txt", Path(other).resolve() / "due.txt"):
+                code, out, err = self.due_from(root, target)
+                self.assertEqual((code, err), (0, ""), target)
+                self.assertTrue(target.is_file(), target)
+
+    def test_a_workspace_refuses_its_own_files_and_the_protected_ones(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as other:
+            root = Path(tmp).resolve()
+            (root / "research").mkdir()
+            for target in (
+                root / "due.txt",
+                root / "CLAUDE.md",
+                root / ".claude" / "settings.json",
+                root / "research" / "lessons.md",
+                root / "research" / "Profile.MD",
+                Path(other) / "LESSONS.md",
+                Path(tempfile.gettempdir()),
+            ):
+                code, out, err = self.due_from(root, target)
+                self.assertEqual((code, out), (1, ""), target)
+                self.assertIn("write the file inside research/ or in", err)
+            self.assertFalse((root / "CLAUDE.md").exists())
+            self.assertFalse((root / "due.txt").exists())
+
+    def test_without_a_workspace_only_the_temporary_folder_is_allowed(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as fake_temp:
+            outside_folder = tempfile.TemporaryDirectory()
+            self.addCleanup(outside_folder.cleanup)
+            outside = outside_folder.name
+            nowhere = Path(tmp).resolve()
+            with (
+                mock.patch.object(graph.tempfile, "gettempdir", return_value=fake_temp),
+                mock.patch.object(graph, "OTHER_TEMP_FOLDERS", ()),
+            ):
+                outside_temp = Path(outside).resolve() / "due.txt"
+                code, _, err = self.due_from(nowhere, outside_temp)
+                self.assertEqual(code, 1)
+                self.assertIn("write the file inside research/ or in", err)
+                self.assertFalse(outside_temp.exists())
+                target = Path(fake_temp).resolve() / "due.txt"
+                self.assertEqual(self.due_from(nowhere, target)[0], 0)
+                self.assertTrue(target.is_file())
+
+    def test_other_projects_control_files_in_the_temporary_folder_are_refused(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as other:
+            root = Path(tmp).resolve()
+            (root / "research").mkdir()
+            repo = Path(other).resolve() / "some repo"
+            for target in (
+                repo / "CLAUDE.md",
+                repo / "claude.MD",
+                repo / ".mcp.json",
+                repo / ".MCP.JSON",
+                repo / ".claude" / "settings.json",
+                repo / ".claude" / "deep" / "x.json",
+                repo / ".git" / "config",
+                repo / ".GIT" / "hooks" / "pre-commit",
+            ):
+                code, out, err = self.due_from(root, target)
+                self.assertEqual((code, out), (1, ""), target)
+                self.assertIn(
+                    "never CLAUDE.md, .mcp.json, lessons.md, profile.md, or a file inside .claude/ or .git/", err
+                )
+
+    def test_ordinary_files_in_the_temporary_folder_are_allowed_even_beside_those_folders(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as other:
+            root = Path(tmp).resolve()
+            (root / "research").mkdir()
+            repo = Path(other).resolve() / "some repo"
+            (repo / ".git").mkdir(parents=True)
+            for target in (repo / "due.txt", Path(other).resolve() / "claude" / "due.txt"):
+                target.parent.mkdir(parents=True, exist_ok=True)
+                self.assertEqual(self.due_from(root, target)[0], 0, target)
+                self.assertTrue(target.is_file(), target)
+
+    def test_only_json_and_txt_files_are_saved_in_the_temporary_folder(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as other:
+            root = Path(tmp).resolve()
+            (root / "research").mkdir()
+            repo = Path(other).resolve() / "some repo"
+            (repo / "skills").mkdir(parents=True)
+            for refused in (
+                repo / "skills" / "arxiv.py",
+                repo / ".github" / "ci.yml",
+                repo / "README.md",
+                repo / "Makefile",
+                repo / "due.txt.py",
+            ):
+                code, out, err = self.due_from(root, refused)
+                self.assertEqual((code, out), (1, ""), refused)
+                self.assertIn("(a .json or .txt file there)", err)
+                self.assertFalse(refused.exists(), refused)
+            for allowed in (repo / "due.TXT", repo / "due.json", repo / "due.JSON"):
+                self.assertEqual(self.due_from(root, allowed)[0], 0, allowed)
+                self.assertTrue(allowed.is_file(), allowed)
+            note = root / "research" / "due.md"
+            self.assertEqual(self.due_from(root, note)[0], 0)
+            self.assertTrue(note.is_file())  # inside research/ any kind of file is fine
+
+    def test_the_helper_names_the_kinds_of_file_that_may_be_saved_in_temp(self):
+        base = Path(tempfile.gettempdir()).resolve()
+        for name in ("a.json", "a.JSON", "a.txt", "a.Txt"):
+            self.assertTrue(graph.savable_in_temp(base / name), name)
+        for name in ("a.py", "a.md", "a", "a.json.py", ".json", "txt"):
+            self.assertFalse(graph.savable_in_temp(base / name), name)
+
+    def test_slash_tmp_is_allowed_outside_windows_only(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as system_temp:
+            slash_tmp = self.make_folder()
+            root = Path(tmp).resolve()
+            (root / "research").mkdir()
+            target = Path(slash_tmp).resolve() / "due.txt"
+            for on_windows, expected in ((False, 0), (True, 1)):
+                with (
+                    mock.patch.object(graph.tempfile, "gettempdir", return_value=system_temp),
+                    mock.patch.object(graph, "OTHER_TEMP_FOLDERS", (slash_tmp,)),
+                    mock.patch.object(graph, "ON_WINDOWS", on_windows),
+                ):
+                    self.assertEqual(self.due_from(root, target)[0], expected, on_windows)
+            self.assertTrue(target.is_file())
+
+    def make_folder(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        return folder.name
+
+    def test_the_helpers_name_what_steers_claude_and_where_temporary_files_go(self):
+        base = Path(tempfile.gettempdir()).resolve()
+        for steering in (
+            "CLAUDE.md",
+            "claude.md",
+            "lessons.md",
+            "PROFILE.md",
+            ".claude/x",
+            ".git/config",
+            ".claude/a/b",
+        ):
+            self.assertTrue(graph.steers_claude(base / "p" / steering), steering)
+        for plain in ("notes.json", "claude/x.json", "git/config", "claude.json", ".gitignore", "my.claude/x"):
+            self.assertFalse(graph.steers_claude(base / "p" / plain), plain)
+        with mock.patch.object(graph, "ON_WINDOWS", True):
+            self.assertEqual(graph.temp_folders(), [base])
+        with (
+            mock.patch.object(graph, "ON_WINDOWS", False),
+            mock.patch.object(graph, "OTHER_TEMP_FOLDERS", (str(base),)),
+        ):
+            self.assertEqual(graph.temp_folders(), [base, base])
+
+    def test_a_link_in_the_temporary_folder_does_not_lead_back_into_the_workspace(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as other:
+            root = Path(tmp).resolve()
+            (root / "research").mkdir()
+            link = Path(other) / "link"
+            try:
+                os.symlink(root, link, target_is_directory=True)
+            except (OSError, NotImplementedError):
+                self.skipTest("this system can't create a directory link")
+            code, _, _ = self.due_from(root, link / "due.txt")
+            self.assertEqual(code, 1)
+            self.assertFalse((root / "due.txt").exists())
 
 
 class CommandEdges(CommandLineBase):

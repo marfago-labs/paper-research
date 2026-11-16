@@ -26,8 +26,8 @@ Run from the workspace root. `<skills>` is the folder that contains this skill's
 
 ```bash
 python <skills>/graph/scripts/graph.py add --type dataset --name "Terminal-Bench 2.1" --alias TB-2.1 --url https://arxiv.org/abs/2601.11868
-python <skills>/graph/scripts/graph.py link paper:2611.05306 evaluates-on "Terminal-Bench 2.1" --source "ARXIV:2611.05306, §2.2" --status verified
-python <skills>/graph/scripts/graph.py cites paper:2611.05306 <saved s2.py output>
+python <skills>/graph/scripts/graph.py link paper:2401.00007 evaluates-on "Terminal-Bench 2.1" --source "ARXIV:2401.00007, §2.2" --status verified
+python <skills>/graph/scripts/graph.py cites paper:2401.00007 <saved s2.py output>
 ```
 
 ## Rules

@@ -12,6 +12,7 @@ import json
 import os
 import re
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -43,6 +44,10 @@ TIMEOUT = 30  # pragma: no mutate
 DEADLINE = 90  # seconds for one command's request, retries included, to stay inside tool time limits
 MAX_BYTES = 20_000_000  # pragma: no mutate
 RETRYABLE = {429, 500, 502, 503, 504}
+NO_KEY_SEARCH = (
+    "search is heavily rate-limited without SEMANTIC_SCHOLAR_API_KEY, so it was not retried; use the arxiv"
+    " skill's search instead"
+)
 CACHE_DIR = None  # the workspace's .cache, found from the current folder when None
 STATE_NAME = "s2-last-request"
 LOCK_WAIT = 60  # pragma: no mutate
@@ -235,8 +240,9 @@ def read_json(req, path, started):
         raise ApiError(f"response from {path} was not valid JSON") from None
 
 
-def delay_before_retry(err, path, attempt):
-    """How long to wait before retrying after err. Raises if it shouldn't be retried."""
+def delay_before_retry(err, path, attempt, retry_rate_limit):
+    """How long to wait before retrying after err. Raises if it shouldn't be retried, or if it is a rate limit
+    and retry_rate_limit is False."""
     # pragma: no mutate below: attempt never passes MAX_ATTEMPTS - 1, small ints are shared objects so `is`
     # agrees, and 5 ^ 1 is 4.
     last_attempt = attempt == MAX_ATTEMPTS - 1  # pragma: no mutate
@@ -247,12 +253,14 @@ def delay_before_retry(err, path, attempt):
     detail = err.read(300).decode("utf-8", "replace")
     retry_after = err.headers.get("Retry-After") if err.headers else None
     err.close()
+    if err.code == 429 and not retry_rate_limit:
+        raise ApiError(f"HTTP 429 from {path}: {NO_KEY_SEARCH}") from None
     if err.code not in RETRYABLE or last_attempt:
         raise ApiError(f"HTTP {err.code} from {path}: {detail}") from None
     return retry_delay(retry_after, attempt)
 
 
-def request(method, path, params=None, body=None):
+def request(method, path, params=None, body=None, retry_rate_limit=True):
     req = build_request(method, path, params, body)
     started = time.monotonic()
     attempt = -1
@@ -265,7 +273,7 @@ def request(method, path, params=None, body=None):
         try:
             return read_json(req, path, started)
         except (urllib.error.URLError, TimeoutError) as err:
-            delay = delay_before_retry(err, path, attempt)
+            delay = delay_before_retry(err, path, attempt, retry_rate_limit)
         if time.monotonic() - started + delay > DEADLINE:
             raise ApiError(f"gave up on {path} after about {DEADLINE} seconds of retries")
         time.sleep(delay)
@@ -314,7 +322,9 @@ def cmd_search(args):
         params["year"] = args.year
     if args.min_citations is not None:
         params["minCitationCount"] = args.min_citations
-    return with_links(request("GET", f"{GRAPH}/paper/search", params), "data")
+    # Without a key, search is throttled hardest, and retrying only delays the arXiv search the skill falls back to.
+    keyed = bool(os.environ.get("SEMANTIC_SCHOLAR_API_KEY"))
+    return with_links(request("GET", f"{GRAPH}/paper/search", params, retry_rate_limit=keyed), "data")
 
 
 def linked_papers(paper_id, edge, key, limit):
@@ -399,11 +409,19 @@ def cmd_authors(args):
     ]
 
 
+def output_option():
+    """The --out option shared by every command, as a parent parser."""
+    parent = argparse.ArgumentParser(add_help=False)
+    parent.add_argument("--out", help="write the JSON to this file as UTF-8 and print only its path")
+    return parent
+
+
 def build_parser():
     parser = argparse.ArgumentParser(description="Read-only Semantic Scholar client.")
     commands = parser.add_subparsers(dest="command", required=True)
+    output = output_option()
 
-    search = commands.add_parser("search", help="find papers by keyword")
+    search = commands.add_parser("search", help="find papers by keyword", parents=[output])
     search.add_argument("query")
     search.add_argument("--year", help="e.g. 2025, 2024-2025 or 2025-")
     search.add_argument("--min-citations", type=int)
@@ -411,14 +429,14 @@ def build_parser():
     search.add_argument("--offset", type=int, default=0)
     search.set_defaults(func=cmd_search)
 
-    paper = commands.add_parser("paper", help="details for one paper")
+    paper = commands.add_parser("paper", help="details for one paper", parents=[output])
     paper.add_argument("id", help="arXiv ID or link, DOI, or Semantic Scholar ID")
     paper.add_argument("--citations", action="store_true", help="include citing papers")
     paper.add_argument("--references", action="store_true", help="include cited papers")
     paper.add_argument("--limit", type=int, default=20, help="maximum per citation list")
     paper.set_defaults(func=cmd_paper)
 
-    batch = commands.add_parser("batch", help="details for many papers, 500 to a request")
+    batch = commands.add_parser("batch", help="details for many papers, 500 to a request", parents=[output])
     batch.add_argument("ids", nargs="*")
     batch.add_argument("--ids-file", help="file of IDs separated by whitespace, for more than fit on the command line")
     batch.add_argument(
@@ -428,16 +446,85 @@ def build_parser():
     )
     batch.set_defaults(func=cmd_batch)
 
-    recommend = commands.add_parser("recommend", help="recommendations from example papers")
+    recommend = commands.add_parser("recommend", help="recommendations from example papers", parents=[output])
     recommend.add_argument("--like", nargs="+", required=True)
     recommend.add_argument("--dislike", nargs="*", default=[])
     recommend.add_argument("--limit", type=int, default=20, help="default 20, API maximum 500")
     recommend.set_defaults(func=cmd_recommend)
 
-    authors = commands.add_parser("authors", help="h-index and citation totals for authors")
+    authors = commands.add_parser("authors", help="h-index and citation totals for authors", parents=[output])
     authors.add_argument("ids", nargs="+", help="Semantic Scholar author IDs")
     authors.set_defaults(func=cmd_authors)
     return parser
+
+
+# Files and folders that steer Claude: the ones Claude Code asks the user about before Claude edits them, and any
+# project's CLAUDE.md, .mcp.json, .claude/ settings, and .git/ hooks and config. A shell command that writes a
+# file skips those prompts, so --out never writes them, in any folder and whatever the case of the name: some
+# file systems ignore case.
+PROTECTED_FILES = ("lessons.md", "profile.md", "claude.md", ".mcp.json")
+PROTECTED_FOLDERS = (".claude", ".git")
+# A second temporary folder on Linux and macOS, where the system's own can be elsewhere, such as $TMPDIR on macOS.
+# /tmp is only a place a file may be saved, never one the script creates files in, so bandit's B108 does not apply.
+OTHER_TEMP_FOLDERS = ("/tmp",)  # nosec B108
+ON_WINDOWS = os.name == "nt"  # pragma: no mutate (the platform's value; the tests set it both ways)
+REFUSED = "never CLAUDE.md, .mcp.json, lessons.md, profile.md, or a file inside .claude/ or .git/"
+# Outside research/, only the kinds of file the skills save: the JSON that a command prints and a list of ids.
+TEMP_SUFFIXES = (".json", ".txt")
+
+
+def savable_in_temp(target):
+    """True if target is a kind of file that may be saved in a temporary folder, whatever the case of its suffix."""
+    return target.suffix.casefold() in TEMP_SUFFIXES
+
+
+def steers_claude(target):
+    """True if writing the resolved path target could change how Claude, or a tool Claude runs, behaves."""
+    return target.name.casefold() in PROTECTED_FILES or any(
+        folder.name.casefold() in PROTECTED_FOLDERS for folder in target.parents
+    )
+
+
+def temp_folders():
+    """The resolved temporary folders a script may write in: the system's, and /tmp outside Windows."""
+    return [
+        Path(tempfile.gettempdir()).resolve(),
+        *([] if ON_WINDOWS else map(Path.resolve, map(Path, OTHER_TEMP_FOLDERS))),
+    ]
+
+
+def checked_out(out):
+    """The path --out may write, or None without --out. A file inside research/ is allowed, or one in a temporary
+    folder outside the workspace, but never one that steers Claude, so that text from a paper can't steer Claude into
+    overwriting settings or instructions. Both sides are resolved, so a link can't lead out."""
+    if out is None:
+        return None
+    target = Path(out).resolve()
+    root = find_workspace()
+    research = root / "research"
+    in_temp = any(temp in target.parents for temp in temp_folders()) and root not in target.parents
+    if not (research in target.parents or (in_temp and savable_in_temp(target))) or steers_claude(target):
+        raise ValueError(
+            f"--out must name a file inside {research} or in a temporary folder outside the workspace "
+            f"(a .json or .txt file there), {REFUSED}"
+        )
+    return target
+
+
+def write_output(result, out, code):
+    """Print the JSON, or with --out save it as UTF-8 and print only the path. Returns the exit code."""
+    text = json.dumps(result, ensure_ascii=False, indent=2)
+    if out is None:
+        print(text)
+        return code
+    try:
+        with open(out, "w", encoding="utf-8", newline="") as handle:  # newline="": the same bytes on every system
+            handle.write(text + "\n")
+    except OSError as err:
+        print(f"error: can't write {out}: {err}", file=sys.stderr)
+        return 1
+    print(out)
+    return code
 
 
 def main(argv=None):
@@ -445,6 +532,7 @@ def main(argv=None):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
     args = build_parser().parse_args(argv)
     try:
+        out = checked_out(args.out)
         result = args.func(args)
     except ValueError as err:
         print(f"error: {err}", file=sys.stderr)
@@ -452,10 +540,9 @@ def main(argv=None):
     except ApiError as err:
         print(f"error: {err}", file=sys.stderr)
         if isinstance(err, PartialBatch):
-            print(json.dumps(err.results, ensure_ascii=False, indent=2))
+            return write_output(err.results, out, 1)
         return 1
-    print(json.dumps(result, ensure_ascii=False, indent=2))
-    return 0
+    return write_output(result, out, 0)
 
 
 if __name__ == "__main__":  # pragma: no mutate (`is` and `<=` agree for the names a module can have)

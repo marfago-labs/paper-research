@@ -31,6 +31,31 @@ Feature: A plugin that installs cleanly and keeps its promises
     And the insight skill says "Give the paper and section as `source`"
     And the graph skill says "A verified link's source must name the document it was checked against"
 
+  Scenario: The skills say what was searched and read, and where dated lists come from
+    Then the read skill says "If you couldn't search a place"
+    And the read skill says "means you searched and nothing turned up"
+    And the read skill says "Mark any claim that rests on a part you didn't read as unverified"
+    And the read skill says "A search by title is yours, not a link taken from the paper"
+    And the add skill says "add that spelling with `update --alias`"
+    And the add skill says "An author with no `authorId` is added by name only, and you say so in your reply"
+    And the add skill says "If the alias is refused because another author already has that name, don't force it"
+    And the scholar skill says "the script reports it at once instead of retrying"
+    And the arxiv skill says "`--since` and `--until` limit the submission dates, both days included"
+    And the arxiv skill says "`--all-sections` to list the subsections too"
+    And the next skill says "use `scholar` `search` with `--year`"
+    And the scholar skill says "`recommend` can't be limited to a period"
+
+  Scenario: The skills say how to rank without an API key, and to check what a search found before reading it
+    Then the scholar skill says "all of their citation counts in one `batch` call"
+    And the scholar skill says "so the queries decide what can appear"
+    And the scholar skill says "a free `SEMANTIC_SCHOLAR_API_KEY` gives a better answer"
+    And the scholar skill says "show early traction, not influence"
+    And the arxiv skill says "`--brief` leaves out the abstracts"
+    And the read skill says "check each one before reading any of them"
+    And the read skill says "stop and ask the user whether to skip it or read it chapter by chapter"
+    And the read skill says "Say whether a download count is for all time or for the last 30 days"
+    And the next skill says "Check that each pick is a paper that fits"
+
   Scenario: Papers are always listed in the same table
     Then every place that lists papers uses the same paper-list table
     And the paper-list rule says what goes in each column
@@ -48,9 +73,9 @@ Feature: A plugin that installs cleanly and keeps its promises
     And the add skill says "--with-references"
     And the add skill says "run `graph.py standing <file>`"
     And the next skill says "run `graph.py standing <file>`, so the counts are kept"
-    And the recap skill says "graph.py standing-due ids.txt"
-    And the recap skill says "s2.py batch --ids-file ids.txt --with-references"
-    And the recap skill says "Run `graph.py standing counts.json` whether or not step 2 succeeded"
+    And the recap skill says "graph.py standing-due <tmp>/ids.txt"
+    And the recap skill says "s2.py batch --ids-file <tmp>/ids.txt --with-references"
+    And the recap skill says "Run `graph.py standing <tmp>/counts.json` whether or not step 2 succeeded"
     And the recap skill says "without reading the ids yourself"
 
   Scenario: A failed citation step is reported, not dropped

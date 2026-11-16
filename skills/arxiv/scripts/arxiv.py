@@ -13,9 +13,12 @@ Exit codes: 0 success, 1 network or API failure, 2 invalid input,
 
 import argparse
 import contextlib
+import datetime
 import json
+import os
 import re
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -297,8 +300,8 @@ def build_query(args):
         query = plain_query(query, "ti" if args.title else "all")
     if args.category:
         query = f"({query}) AND ({' OR '.join(f'cat:{c}' for c in args.category)})"
-    if args.since:
-        query = f"({query}) AND {submitted_since(args.since)}"
+    if args.since or args.until:
+        query = f"({query}) AND {submitted_between(args.since, args.until)}"
     return query
 
 
@@ -308,10 +311,33 @@ def plain_query(query, field):
     return " AND ".join(f'{field}:"{a}"' if a else f"{field}:{b}" for a, b in phrases)
 
 
-def submitted_since(date):
-    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
-        raise ValueError("--since must be YYYY-MM-DD")
-    return f"submittedDate:[{date.replace('-', '')}0000 TO 299912312359]"
+def valid_date(text):
+    """True for a calendar date written as YYYY-MM-DD, so 2025-13-45 is refused before any request."""
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
+        return False
+    try:
+        datetime.date.fromisoformat(text)
+    except ValueError:
+        return False
+    return True
+
+
+def submitted_between(since, until):
+    """arXiv's submittedDate range, from the start of since to the end of until, both included."""
+    for name, date in (("--since", since), ("--until", until)):
+        if date is not None and not valid_date(date):
+            raise ValueError(f"{name} must be a real date as YYYY-MM-DD")
+    if since and until and since > until:
+        raise ValueError("--since must not be after --until")
+    start = since.replace("-", "") + "0000" if since else "000101010000"
+    end = until.replace("-", "") + "2359" if until else "299912312359"
+    return f"submittedDate:[{start} TO {end}]"
+
+
+def without_abstract(paper):
+    brief = dict(paper)
+    brief.pop("abstract", None)
+    return brief
 
 
 def cmd_search(args):
@@ -326,6 +352,8 @@ def cmd_search(args):
         "sortOrder": sort[1],
     }
     papers, total = parse_feed(get(f"{API}?{urllib.parse.urlencode(params)}"))
+    if args.brief:
+        papers = [without_abstract(paper) for paper in papers]
     return {"query": params["search_query"], "total": total, "papers": papers}
 
 
@@ -628,12 +656,31 @@ def to_markdown(page):
     return convert(page)[0]
 
 
-def sections(markdown):
-    return [
+# Headings at these levels are the paper's title and its numbered sections. Deeper ones are listed only on request,
+# because a long paper with appendices has hundreds of them.
+TOP_LEVELS = 2
+SECTION_LEVELS = {2}  # a numbered section's heading: the first one ends the front matter
+
+
+def sections(markdown, deepest=None):
+    """Every Markdown heading with its line number and level, or only the outline down to the level deepest."""
+    found = [
         {"line": number, "heading": line.lstrip("#").strip(), "level": len(line) - len(line.lstrip("#"))}
         for number, line in enumerate(markdown.splitlines(), 1)
         if re.match(r"#{1,6} ", line)
     ]
+    return found if deepest is None else outline(found, deepest)
+
+
+def outline(found, deepest):
+    """The headings down to the level deepest, and every heading before the first section, such as the abstract's,
+    which LaTeXML writes as a small heading."""
+    shown, in_body = [], False
+    for heading in found:
+        in_body = in_body or heading["level"] in SECTION_LEVELS
+        if heading["level"] <= deepest or not in_body:
+            shown.append(heading)
+    return shown
 
 
 def save_fulltext(paper_id, path):
@@ -676,9 +723,11 @@ def cmd_fetch(args):
         "path": str(path),
         "lines": len(markdown.splitlines()),
         "warning": UNTRUSTED + (" " + HIDDEN_NOTE if hidden else ""),
-        "sections": sections(markdown),
+        "sections": sections(markdown, None if args.all_sections else TOP_LEVELS),
         "next": READ_NEXT,
     }
+    if not args.all_sections:
+        result["subsections"] = len(sections(markdown)) - len(result["sections"])
     if hidden:
         result["hiddenTextRemoved"] = hidden
     return result
@@ -700,20 +749,29 @@ def cmd_pdf(args):
     return {"id": paper_id, "path": str(path), "bytes": path.stat().st_size, "warning": UNTRUSTED, "next": READ_NEXT}
 
 
+def output_option():
+    """The --out option shared by the commands that print a lot, as a parent parser."""
+    parent = argparse.ArgumentParser(add_help=False)
+    parent.add_argument("--out", help="write the JSON to this file as UTF-8 and print only its path")
+    return parent
+
+
 def build_parser():
     parser = argparse.ArgumentParser(description="Read-only arXiv client.")
     commands = parser.add_subparsers(dest="command", required=True)
 
-    search = commands.add_parser("search", help="find papers")
+    search = commands.add_parser("search", help="find papers", parents=[output_option()])
     search.add_argument("query", help='words or "quoted phrases", or arXiv field syntax such as ti:agent AND cat:cs.AI')
     search.add_argument("--title", action="store_true", help="match words in titles only")
     search.add_argument("--category", action="append", help="arXiv category such as cs.AI; repeat for more")
     search.add_argument("--since", help="submitted on or after YYYY-MM-DD")
+    search.add_argument("--until", help="submitted on or before YYYY-MM-DD")
     search.add_argument("--sort", choices=["relevance", "new"], default="relevance")
     search.add_argument("--limit", type=int, default=10, help="1 to 200, default 10")
+    search.add_argument("--brief", action="store_true", help="leave out the abstracts, for choosing candidates")
     search.set_defaults(func=cmd_search)
 
-    paper = commands.add_parser("paper", help="metadata for one or more papers")
+    paper = commands.add_parser("paper", help="metadata for one or more papers", parents=[output_option()])
     paper.add_argument("ids", nargs="+", help="arXiv IDs or links")
     paper.set_defaults(func=cmd_paper)
 
@@ -726,7 +784,78 @@ def build_parser():
         command.add_argument("--dir", help=f"folder to save into, default {default}")
         command.add_argument("--force", action="store_true", help="download again even if saved")
         command.set_defaults(func=func)
+    fetch = commands.choices["fetch"]
+    fetch.add_argument("--all-sections", action="store_true", help="list subsections too, not only the sections")
     return parser
+
+
+# Files and folders that steer Claude: the ones Claude Code asks the user about before Claude edits them, and any
+# project's CLAUDE.md, .mcp.json, .claude/ settings, and .git/ hooks and config. A shell command that writes a
+# file skips those prompts, so --out never writes them, in any folder and whatever the case of the name: some
+# file systems ignore case.
+PROTECTED_FILES = ("lessons.md", "profile.md", "claude.md", ".mcp.json")
+PROTECTED_FOLDERS = (".claude", ".git")
+# A second temporary folder on Linux and macOS, where the system's own can be elsewhere, such as $TMPDIR on macOS.
+# /tmp is only a place a file may be saved, never one the script creates files in, so bandit's B108 does not apply.
+OTHER_TEMP_FOLDERS = ("/tmp",)  # nosec B108
+ON_WINDOWS = os.name == "nt"  # pragma: no mutate (the platform's value; the tests set it both ways)
+REFUSED = "never CLAUDE.md, .mcp.json, lessons.md, profile.md, or a file inside .claude/ or .git/"
+# Outside research/, only the kinds of file the skills save: the JSON that a command prints and a list of ids.
+TEMP_SUFFIXES = (".json", ".txt")
+
+
+def savable_in_temp(target):
+    """True if target is a kind of file that may be saved in a temporary folder, whatever the case of its suffix."""
+    return target.suffix.casefold() in TEMP_SUFFIXES
+
+
+def steers_claude(target):
+    """True if writing the resolved path target could change how Claude, or a tool Claude runs, behaves."""
+    return target.name.casefold() in PROTECTED_FILES or any(
+        folder.name.casefold() in PROTECTED_FOLDERS for folder in target.parents
+    )
+
+
+def temp_folders():
+    """The resolved temporary folders a script may write in: the system's, and /tmp outside Windows."""
+    return [
+        Path(tempfile.gettempdir()).resolve(),
+        *([] if ON_WINDOWS else map(Path.resolve, map(Path, OTHER_TEMP_FOLDERS))),
+    ]
+
+
+def checked_out(out):
+    """The path --out may write, or None without --out. A file inside research/ is allowed, or one in a temporary
+    folder outside the workspace, but never one that steers Claude, so that text from a paper can't steer Claude into
+    overwriting settings or instructions. Both sides are resolved, so a link can't lead out."""
+    if out is None:
+        return None
+    target = Path(out).resolve()
+    root = find_workspace()
+    research = root / "research"
+    in_temp = any(temp in target.parents for temp in temp_folders()) and root not in target.parents
+    if not (research in target.parents or (in_temp and savable_in_temp(target))) or steers_claude(target):
+        raise ValueError(
+            f"--out must name a file inside {research} or in a temporary folder outside the workspace "
+            f"(a .json or .txt file there), {REFUSED}"
+        )
+    return target
+
+
+def write_output(result, out, code):
+    """Print the JSON, or with --out save it as UTF-8 and print only the path. Returns the exit code."""
+    text = json.dumps(result, ensure_ascii=False, indent=2)
+    if out is None:
+        print(text)
+        return code
+    try:
+        with open(out, "w", encoding="utf-8", newline="") as handle:  # newline="": the same bytes on every system
+            handle.write(text + "\n")
+    except OSError as err:
+        print(f"error: can't write {out}: {err}", file=sys.stderr)
+        return 1
+    print(out)
+    return code
 
 
 def main(argv=None):
@@ -734,6 +863,7 @@ def main(argv=None):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
     args = build_parser().parse_args(argv)
     try:
+        out = checked_out(getattr(args, "out", None))
         result = args.func(args)
     except ValueError as err:
         print(f"error: {err}", file=sys.stderr)
@@ -744,8 +874,7 @@ def main(argv=None):
     except ApiError as err:
         print(f"error: {err}", file=sys.stderr)
         return 1
-    print(json.dumps(result, ensure_ascii=False, indent=2))
-    return 0
+    return write_output(result, out, 0)
 
 
 if __name__ == "__main__":  # pragma: no mutate (`is` and `<=` agree for the names a module can have)
