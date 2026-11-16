@@ -8,6 +8,9 @@ All notable changes to the plugin are listed here, newest first. The format foll
 
 ### Added
 
+- CI writes a complexity report to the job summary: for Python and JavaScript, the number of functions, the mean
+  and highest cyclomatic and cognitive complexity, and the ten functions closest to the limits, so one that is creeping
+  up is seen before it fails.
 - A `Stop` hook (`hooks/hooks.json`) that checks the recap when Claude finishes a turn in a paper workspace. If a
   file the recap is built from changed since the page was last written, or the page was never written but the
   starter files were changed, it stops Claude once. Claude is told to log the session's questions and facts that are

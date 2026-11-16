@@ -58,6 +58,25 @@ jobs:
       - name: Cognitive complexity of the Python code (at most 10)
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: complexipy skills tools features evals --max-complexity-allowed 10 --failed --plain --color no
+      # Writes the scores behind the two limits to the job summary, so a function close to them is seen before it
+      # fails. Each tool is run with a limit of 0, so it reports every function. ESLint then exits with 1, which is
+      # expected; if it can't run at all, its output isn't JSON and the report step fails.
+      - name: Complexity report (job summary)
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: |
+          ruff check skills tools features evals --select C901 --config 'lint.mccabe.max-complexity=0' \
+            --output-format json --exit-zero > "$RUNNER_TEMP/cyclomatic.json"
+          complexipy skills tools features evals --output-format json --output "$RUNNER_TEMP/cognitive.json" \
+            --ignore-complexity --quiet --color no
+          # The files are the ones the lint script names, so a file added to the lint run is in the report too.
+          js_files=$(node -p "require('./tools/js/package.json').scripts.lint.split(' --config ')[1].split(' ').slice(1).join(' ')")
+          # shellcheck disable=SC2086 # the names are split on purpose
+          tools/js/node_modules/.bin/eslint --config tools/js/eslint.config.js --format json \
+            --rule '{"complexity": ["error", 0], "sonarjs/cognitive-complexity": ["error", 0]}' \
+            $js_files > "$RUNNER_TEMP/eslint.json" || true
+          python tools/complexity_report.py --ruff "$RUNNER_TEMP/cyclomatic.json" \
+            --complexipy "$RUNNER_TEMP/cognitive.json" --eslint "$RUNNER_TEMP/eslint.json" \
+            --cyclomatic-limit 6 --cognitive-limit 10 >> "$GITHUB_STEP_SUMMARY"
       - name: mypy
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: >
@@ -83,7 +102,8 @@ jobs:
                       arxiv:skills/arxiv/scripts/test_arxiv.py s2:skills/scholar/scripts/test_s2.py \
                       init:skills/init/scripts/test_init.py \
                       build_dataset:evals/dedup/test_build_dataset.py audit_labels:evals/dedup/test_audit_labels.py \
-                      evaluate:evals/dedup/test_evaluate.py hand_check:evals/dedup/test_hand_check.py; do
+                      evaluate:evals/dedup/test_evaluate.py hand_check:evals/dedup/test_hand_check.py \
+                      complexity_report:tools/test_complexity_report.py; do
             module=${pair%%:*}
             echo "== $module"
             rm -f .coverage

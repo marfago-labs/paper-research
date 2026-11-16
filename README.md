@@ -150,7 +150,7 @@ for t in skills/*/scripts/test_*.py evals/*/test_*.py; do python "$t"; done
 
 The duplicate check is measured against a frozen set of labelled pairs, which [the analysis notebook](evals/dedup/analysis.ipynb) describes and replays.
 
-CI runs linters and formatters (ruff, ESLint, Prettier), complexity limits (cyclomatic 6, cognitive 10), static analysis (mypy, bandit, actionlint), a secret scan of every commit (gitleaks), unit tests on Linux with Python 3.9, 3.12, and 3.13 and on Windows with 3.13, coverage at 100%, and behaviour scenarios in Gherkin on Linux and Windows. Mutation tests run weekly and on request, because they take too long for every push. [CONTRIBUTING.md](CONTRIBUTING.md) says how to run each check.
+CI runs linters and formatters (ruff, ESLint, Prettier), complexity limits (cyclomatic 6, cognitive 10) with a report of the scores in the job summary, static analysis (mypy, bandit, actionlint), a secret scan of every commit (gitleaks), unit tests on Linux with Python 3.9, 3.12, and 3.13 and on Windows with 3.13, coverage at 100%, and behaviour scenarios in Gherkin on Linux and Windows. Mutation tests run weekly and on request, because they take too long for every push. [CONTRIBUTING.md](CONTRIBUTING.md) says how to run each check.
 
 ## Licence
 
