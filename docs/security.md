@@ -39,7 +39,7 @@ The rules in `CLAUDE.md` tell Claude to:
 
 `init` also adds matching rules for Claude Code's auto mode. They apply in auto mode only.
 
-One of these is also checked by a hook. When Claude finishes a turn, the plugin's `Stop` hook runs `recap.py --stop-hook`, which only reads your research files and prints a decision. If the recap page is out of date, Claude is stopped once and told to refresh it and to log your questions. The hook can see that files changed, but not whether you asked a question, so logging the questions is still an instruction. It also can't fire on a turn that changed no files, so the reminder to log asks for every question of the session that is not logged yet.
+Two other rules in `CLAUDE.md`, refreshing the recap and logging your questions, are also checked by a hook. When Claude finishes a turn, the plugin's `Stop` hook runs `recap.py --stop-hook`, which only reads your research files and prints a decision. If the recap page is out of date, Claude is stopped once and told to refresh it and to log your questions. The hook can see that files changed, but not whether you asked a question, so logging the questions is still an instruction. It also can't fire on a turn that changed no files, so the reminder to log asks for every question of the session that is not logged yet.
 
 Claude follows these reliably, but they are not a lock. A convincing enough injected text can sometimes talk a model into ignoring them. That is why the enforced layer exists, and why you should treat the instructions as a second line, not the first.
 

@@ -58,9 +58,9 @@ flowchart TD
     B --> C["Converted to Markdown<br/>scripts and hidden text removed"]
     C --> D["Claude reads it by section<br/>as untrusted data"]
     D --> P["Paper added to the graph<br/>with its Semantic Scholar id"]
-    P --> E["Entities the paper uses, evaluates on,<br/>builds on, or proposes"]
-    E --> F["graph.py add"]
-    F -->|"no match"| G["Added as new"]
+    P --> E["Authors and every entity with a role:<br/>datasets, models, methods, tools, concepts"]
+    E --> F["graph.py add, with its first link<br/>section as source, verified or inferred"]
+    F -->|"no match"| G["Added as new, already linked"]
     F -->|"same name or id"| H["Existing entity reused<br/>new name saved as an alias"]
     F -->|"possible duplicate, exit 3"| I{"Same thing?"}
     I -->|"yes"| H
@@ -68,11 +68,12 @@ flowchart TD
     I -->|"can't tell"| K["Claude asks you"]
     K --> H
     K --> J
-    G --> L["graph.py link<br/>section as source, verified or inferred"]
-    H --> L
-    J --> L
-    L --> M["graph.py cites<br/>citation links from Semantic Scholar"]
-    M --> N["graph.py dupes<br/>merge, or mark as distinct"]
+    H --> L["graph.py link<br/>refused if the relation can't join the two types"]
+    G --> M["graph.py standing<br/>citation counts and links from Semantic Scholar"]
+    J --> M
+    L --> M
+    M --> V["graph.py validate<br/>no entity without links, no paper without authors"]
+    V --> N["graph.py dupes<br/>merge, or mark as distinct"]
     N --> O["Short report: what was added,<br/>linked, and decided"]
 ```
 
@@ -109,7 +110,7 @@ Updates can't quietly widen your permissions. `init` adds no allow rules, and it
 
 The plugin keeps a record of you as a reader, in plain files you can read and edit, and uses it every time it searches, triages, or recommends:
 
-- **It listens.** Your questions and stated preferences go into a running log in `research/user-facts.md`, each marked as something you said, something you did, or something Claude inferred. Claude proposes changes to your reader profile in one line and you approve them, so it never decides who you are on its own.
+- **It listens.** Your questions and stated preferences go into a running log in `research/user-facts.md`, each marked as something you said, something you did, or something Claude inferred. Claude proposes changes to your reader profile in one line and you approve them, so it never decides who you are on its own. When a turn ends with research files changed and the recap page out of date, a hook stops Claude once to log the session's questions and refresh the page.
 - **Your ratings steer recommendations.** After a paper, you give it 1 to 5. Papers you rate 4 or 5 become examples of what to find more of, and papers you rate 1 or 2 become examples of what to avoid, in Semantic Scholar's recommendations.
 - **Searches start from your interests.** `next` builds its arXiv searches from the topics in your profile and the questions you keep asking, then picks papers by fit with you first. It also checks each pick's standing in the research community, with the evidence, so a good match isn't taken for a good paper.
 - **Triage knows your priorities.** When you save a stack of links, `add` suggests whether each is worth a deep read, a skim, or an archive, based on your profile.
@@ -145,7 +146,7 @@ After `init`:
 ## Develop
 
 ```bash
-for t in skills/*/scripts/test_*.py evals/*/test_*.py; do python "$t"; done
+for t in skills/*/scripts/test_*.py evals/*/test_*.py tools/test_*.py; do python "$t"; done
 ```
 
 The duplicate check is measured against a frozen set of labelled pairs, which [the analysis notebook](evals/dedup/analysis.ipynb) describes and replays.

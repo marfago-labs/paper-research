@@ -11,7 +11,7 @@ Each entity has an `id` of the form `type:slug`, a `type`, a `name`, a list of `
 | Type | What it is | Example id |
 |---|---|---|
 | `paper` | A paper or post. arXiv papers use the arXiv ID as the slug. | `paper:2401.00007` |
-| `author` | A person | `author:peter-belcak` |
+| `author` | A person | `author:ann-lee` |
 | `concept` | An idea | `concept:semantic-state-space-model` |
 | `method` | A technique | `method:retrieval-augmented-generation` |
 | `model` | A trained model | `model:qwen-3-coder-next` |
