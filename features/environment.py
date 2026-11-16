@@ -1,9 +1,11 @@
 """Behave hooks: a fresh workspace per scenario, and helpers to run the plugin's scripts."""
 
 import os
+import re
 import subprocess
 import sys
 import tempfile
+import unicodedata
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -36,6 +38,33 @@ def run_script(context, name, args, cwd=None, stdin=None):
     return context.result
 
 
+def unescaped(text):
+    """Text with [U+XXXX] written out as the character it names, so a scenario can carry an invisible one.
+
+    The characters themselves are not written in the feature files, because they show as nothing in a review, and a
+    console that isn't UTF-8 cannot print them in the report.
+    """
+    return re.sub(r"\[U\+([0-9A-Fa-f]{4,6})\]", lambda m: chr(int(m.group(1), 16)), text)
+
+
+def hidden_characters(text):
+    """The characters in text that show nothing but that a model reads: format characters, tags, and selectors.
+
+    Found from the Unicode tables and the known ranges, not with the pattern the scripts use, so a scenario can
+    fail if that pattern is wrong. Joiners and the emoji selector are not counted, since text needs them. It is
+    stricter than the script on a few format characters that show or shape text, such as the soft hyphen, which no
+    scenario uses.
+    """
+    found = []
+    for char in text:
+        code = ord(char)
+        in_tags = 0xE0000 <= code <= 0xE007F or 0xE0100 <= code <= 0xE01EF
+        formatting = unicodedata.category(char) == "Cf" and code not in (0x200C, 0x200D)
+        if in_tags or formatting:
+            found.append(f"U+{code:04X}")
+    return found
+
+
 def before_all(context):
     context.repo = REPO
     context.run_script = lambda name, args, cwd=None, stdin=None: run_script(context, name, args, cwd, stdin)
@@ -54,6 +83,8 @@ def before_scenario(context, scenario):
         return part.replace("ELSEWHERE", str(context.elsewhere)) if hasattr(context, "elsewhere") else part
 
     context.place = place
+    context.unescaped = unescaped
+    context.hidden_characters = hidden_characters
 
 
 def after_scenario(context, scenario):

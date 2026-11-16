@@ -41,6 +41,18 @@ def error_does_not_mention(context, text):
     assert text not in context.result.err, f"{text!r} found in error:\n{context.result.err}"
 
 
+@then("the output holds no hidden characters")
+def output_has_no_hidden_characters(context):
+    found = context.hidden_characters(context.result.out)
+    assert found == [], found
+
+
+@then('the file "{name}" holds no hidden characters')
+def file_has_no_hidden_characters(context, name):
+    found = context.hidden_characters((context.workspace / name).read_text(encoding="utf-8"))
+    assert found == [], found
+
+
 @then("nothing is written to the error output")
 def no_error_output(context):
     assert context.result.err.strip() == "", context.result.err

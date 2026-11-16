@@ -66,6 +66,57 @@ def scholar_paper(context, title):
     context.s2_answers.append({"paperId": "abc", "title": title})
 
 
+@given('Semantic Scholar then answers with a paper titled "{title}" whose abstract reads "{abstract}"')
+def scholar_paper_with_abstract(context, title, abstract):
+    context.s2_answers.append(
+        {
+            "paperId": "abc",
+            "title": context.unescaped(title),
+            "abstract": context.unescaped(abstract),
+            "tldr": {"text": "Short\u200b summary"},
+            "authors": [{"name": "Ann\u2060 Author"}],
+        }
+    )
+
+
+@then('the printed paper has the abstract "{abstract}"')
+def scholar_abstract(context, abstract):
+    assert json.loads(context.result.out)["abstract"] == context.unescaped(abstract), context.result.out
+
+
+@then('the printed paper has the summary "{text}" and the author "{name}"')
+def scholar_summary_and_author(context, text, name):
+    paper = json.loads(context.result.out)
+    assert (paper["tldr"]["text"], paper["authors"][0]["name"]) == (text, name), paper
+
+
+@given('Semantic Scholar then answers a search with a paper titled "{title}"')
+def scholar_search_titled(context, title):
+    context.s2_answers.append(
+        {"total": 1, "offset": 0, "data": [{"paperId": "abc", "title": context.unescaped(title)}]}
+    )
+
+
+@given('Semantic Scholar then answers a recommendation with a paper titled "{title}"')
+def scholar_recommendation_titled(context, title):
+    context.s2_answers.append({"recommendedPapers": [{"paperId": "abc", "title": context.unescaped(title)}]})
+
+
+@given('Semantic Scholar then answers about an author named "{name}"')
+def scholar_author_named(context, name):
+    context.s2_answers.append([{"authorId": "1", "name": context.unescaped(name)}])
+
+
+@given('Semantic Scholar then answers with {count:d} papers titled "{title}"')
+def scholar_many_titled(context, count, title):
+    context.s2_answers.append([{"paperId": f"p{n}", "title": context.unescaped(title)} for n in range(count)])
+
+
+@then('the first search result is titled "{title}"')
+def scholar_search_titled_result(context, title):
+    assert json.loads(context.result.out)["data"][0]["title"] == title, context.result.out
+
+
 @given("Semantic Scholar then answers with an unknown paper")
 def scholar_unknown(context):
     context.s2_answers.append([None])

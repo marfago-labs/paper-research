@@ -19,6 +19,10 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+# The arxiv skill's script cleans every output of invisible characters. This one uses it, so there is one copy.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "arxiv" / "scripts"))
+from arxiv import write_output  # noqa: E402  (after the path is set)
+
 API_ROOT = "https://api.semanticscholar.org"
 GRAPH = "/graph/v1"
 RECOMMENDATIONS = "/recommendations/v1"
@@ -509,22 +513,6 @@ def checked_out(out):
             f"(a .json or .txt file there), {REFUSED}"
         )
     return target
-
-
-def write_output(result, out, code):
-    """Print the JSON, or with --out save it as UTF-8 and print only the path. Returns the exit code."""
-    text = json.dumps(result, ensure_ascii=False, indent=2)
-    if out is None:
-        print(text)
-        return code
-    try:
-        with open(out, "w", encoding="utf-8", newline="") as handle:  # newline="": the same bytes on every system
-            handle.write(text + "\n")
-    except OSError as err:
-        print(f"error: can't write {out}: {err}", file=sys.stderr)
-        return 1
-    print(out)
-    return code
 
 
 def main(argv=None):

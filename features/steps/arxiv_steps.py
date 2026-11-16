@@ -21,11 +21,11 @@ FEED_HEAD = (
 )
 
 
-def entry(ident, title, date):
+def entry(ident, title, date, summary="An abstract."):
     return (
         f"<entry><id>http://arxiv.org/abs/{ident}v1</id><title>{title}</title>"
         f"<published>{date}T10:00:00Z</published><updated>{date}T10:00:00Z</updated>"
-        "<summary>An abstract.</summary><author><name>Ann Author</name></author>"
+        f"<summary>{summary}</summary><author><name>Ann Author</name></author>"
         '<arxiv:primary_category term="cs.AI"/><category term="cs.AI"/></entry>'
     )
 
@@ -76,7 +76,19 @@ def arxiv_reachable(context):
 
 @given('arXiv knows the paper {ident} titled "{title}" submitted on {date}')
 def arxiv_knows(context, ident, title, date):
-    context.papers.append((ident, title, date))
+    context.papers.append((ident, context.unescaped(title), date))
+
+
+@given('that paper\'s abstract reads "{abstract}"')
+def arxiv_abstract(context, abstract):
+    ident, title, date = context.papers[-1][:3]
+    context.papers[-1] = (ident, title, date, context.unescaped(abstract))
+
+
+@then('paper {number:d} of the results has the abstract "{abstract}"')
+def result_abstract(context, number, abstract):
+    paper = printed(context)["papers"][number - 1]
+    assert paper["abstract"] == context.unescaped(abstract), paper["abstract"]
 
 
 @given('arXiv has an HTML version of {ident} with the sections "{sections}"')
@@ -95,6 +107,19 @@ def hidden_warning(context):
     result = printed(context)
     assert result["hiddenTextRemoved"] == 1, result
     assert "prompt-injection" in result["warning"], result["warning"]
+
+
+@given('the saved text of {ident} has the heading "{heading}"')
+def saved_text_with_heading(context, ident, heading):
+    folder = context.workspace / "fulltext"
+    folder.mkdir(exist_ok=True)
+    (folder / f"{ident}.md").write_text(f"# A paper\n\n## {context.unescaped(heading)}\n\ntext\n", encoding="utf-8")
+
+
+@then('the section headings printed are "{headings}"')
+def printed_headings(context, headings):
+    found = [section["heading"] for section in printed(context)["sections"]]
+    assert found == [part.strip() for part in headings.split(",")], found
 
 
 @given("arXiv has no HTML version of {ident}")
@@ -170,7 +195,7 @@ def search_found(context, count):
 @then('paper {number:d} of the results is "{title}" published {date}')
 def result_title(context, number, title, date):
     paper = printed(context)["papers"][number - 1]
-    assert (paper["title"], paper["published"]) == (title, date), paper
+    assert (paper["title"], paper["published"]) == (context.unescaped(title), date), paper
 
 
 @then('paper {number:d} of the results links to "{link}"')
