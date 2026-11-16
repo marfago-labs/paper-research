@@ -494,6 +494,12 @@ def sandbox_excludes(context, host):
     assert host in network["deniedDomains"], network
 
 
+@then('the sandbox cannot write "{path}"')
+def sandbox_denies_write(context, path):
+    denied = settings_json(context)["sandbox"]["filesystem"]["denyWrite"]
+    assert path in denied, denied
+
+
 @then("every file the settings protect exists")
 def protected_files_exist(context):
     settings = settings_json(context)

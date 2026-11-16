@@ -3,7 +3,7 @@
     "enabled": true,
     "allowUnsandboxedCommands": false,
     "filesystem": {
-      "denyWrite": ["./research/lessons.md", "./research/profile.md", "./CLAUDE.md"]
+      "denyWrite": ["./research/lessons.md", "./research/profile.md", "./CLAUDE.md", "./.claude"]
     },
     "network": {
       "allowedDomains": [

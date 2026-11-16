@@ -8,4 +8,4 @@ One row per link. Escape any `|` in a title as `\|`.
 - **Added:** date in YYYY-MM-DD format.
 
 | Added | Title | ID | Status | Rating | Tags | Summary |
-|---|---|---|---|---|---|---|
+| ----- | ----- | -- | ------ | ------ | ---- | ------- |

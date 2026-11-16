@@ -8,4 +8,3 @@ One entry per fact, in this format:
 - **Status:** `verified` (checked against the source), `from-skim` (not checked), or `user-note` (the user's own idea or statement).
 
 ## Entries
-

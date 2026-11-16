@@ -37,6 +37,9 @@ All notable changes to the plugin are listed here, newest first. The format foll
   and `--source` and `--status`. Every type but a paper needs one, so an entity can no longer be left with no
   link when a later `link` is skipped or fails. `graph.py validate` lists any entity other than a paper with no
   links, and the `read` skill runs it after each extraction.
+- With the sandbox on, `init` also stops sandboxed shell commands from writing anything in `.claude/`, where the
+  settings and approval rules live. Run `init` again to add it to an existing sandbox. Claude Code's file tools were
+  already covered by an approval prompt.
 - Without an API key, the `scholar` skill says how to rank papers when `search` is refused: find candidates with
   `arxiv` `search`, look up their citation counts in one `batch` call, and say that the queries decided what could
   appear. It also says that a free API key gives a better answer, and that counts for recent papers show early
