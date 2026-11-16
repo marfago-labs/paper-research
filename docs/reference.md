@@ -130,6 +130,8 @@ Copies the recap page into the workspace's `research/recap/` and writes `recap-d
 
 `--workspace` is the workspace root, and defaults to the current folder.
 
+`--stop-hook` is for the plugin's own `Stop` hook, not for you. It reads the hook event from standard input, writes nothing to your files, and prints a block decision when a file the page is built from is newer than `research/recap/recap-data.js` (or, with no page yet, differs from its starter), so Claude is told to log your questions and facts from the session that are not logged yet, and refresh the page before it stops. It does nothing in a folder without `research/user-facts.md`, and does nothing on the second stop of a turn.
+
 **Exit codes:** 0 success. 2 the workspace has no `research/` folder.
 
 ## init

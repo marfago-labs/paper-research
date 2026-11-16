@@ -26,7 +26,7 @@ const DATA = {
   ],
   pins: [],
   insights: [],
-  questions: [],
+  facts: [],
   graph: { entities: [{ id: "paper:x", type: "paper", name: "X", aliases: [] }], relations: [], error: "" },
 };
 

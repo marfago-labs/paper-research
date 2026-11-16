@@ -76,9 +76,10 @@ const DATA = {
     },
     { title: "Second", id: "insight:second", kind: "", papers: [] },
   ],
-  questions: [
-    { added: "2026-01-02", text: "Asked about <i>it</i>" },
-    { added: "2026-01-02", text: "Again" },
+  facts: [
+    { added: "2026-01-02", type: "question", text: "Asked about <i>it</i>" },
+    { added: "2026-01-02", type: "interest", text: "Again" },
+    { added: "2026-01-02", type: "<b>odd</b>", text: "Typed oddly" },
   ],
   graph: { entities: [{ id: "paper:x" }], relations: [], error: "" },
 };
@@ -149,7 +150,8 @@ test("buildRecap renders every view with escaped text", () => {
     assert.match(html, new RegExp(`data-view="${view}" id="${view}" hidden`));
   assert.ok(!html.includes("<script>"), "paper text must be escaped");
   assert.ok(!html.includes("<b>bold</b>"), "titles must be escaped");
-  assert.ok(!html.includes("<i>it</i>"), "questions must be escaped");
+  assert.ok(!html.includes("<i>it</i>"), "facts must be escaped");
+  assert.ok(!html.includes("<b>odd</b>"), "types must be escaped");
   assert.ok(!html.includes("javascript:"), "unsafe links must be dropped");
   assert.match(html, /href="https:\/\/arxiv.org\/abs\/2601.00001" target="_blank" rel="noopener noreferrer"/);
   assert.match(html, /Needs graph extraction \(2\)/);
@@ -157,7 +159,7 @@ test("buildRecap renders every view with escaped text", () => {
   assert.match(html, /<span class="tag warn">nothing extracted yet<\/span>/);
   assert.ok(!html.includes("[object Object]"));
   assert.match(html, /<details open><summary><strong>2026-01-03<\/strong> · 1 paper<\/summary>/);
-  assert.match(html, /1 insight, 1 paper, 2 pins, 2 questions/);
+  assert.match(html, /1 &lt;b&gt;odd&lt;\/b&gt;, 1 insight, 1 interest, 1 paper, 2 pins, 1 question/);
   assert.match(html, /<strong>No date<\/strong>/);
   assert.match(html, /<h3 class="group">read \(3\)<\/h3>/);
   assert.ok(html.indexOf("A &lt;b&gt;bold") < html.indexOf("Earlier read"), "newest first");
@@ -241,7 +243,7 @@ test("buildRecap handles an empty research folder and a broken graph", () => {
     papers: [],
     pins: [],
     insights: [],
-    questions: [],
+    facts: [],
     graph: { entities: [], relations: [], error: "invalid <graph>" },
   };
   const { html, counts } = lib.buildRecap(empty);
