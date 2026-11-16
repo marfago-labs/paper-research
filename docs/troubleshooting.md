@@ -74,6 +74,15 @@ Something edited the graph files by hand and broke them. Read the listed errors 
 **`add` exits with 3 and says `possible duplicates`.**
 Not an error. The new entity looks like an existing one, and Claude decides whether to reuse the old one or confirm they're different. If it can't tell, it asks you. See [Knowledge graph](knowledge-graph.md#duplicates).
 
+**`graph`: `can't link ...: <relation> goes from ... to ..., not ...`.**
+The relation can't join those two types of entity, such as a concept `authored-by` an author. Use the relation that fits, or link the right entities. The types each relation joins are in [the knowledge graph](knowledge-graph.md#relations). Nothing was written.
+
+**`graph`: `a new <type> needs its first link`.**
+Every entity but a paper is added with a link to where it came from, in the same `add` command: `--link-from` or `--link-to`, with `--source` and `--status`. Nothing was written.
+
+**`validate`: `found ... with no links` or `found ... with no authors`.**
+Not an error in the graph, which still loads, though `validate` exits with 1 until they are fixed. An entity other than a paper should be linked to the paper it came from, or removed if it was added by mistake. A paper should have its authors, or a reason it has none, given with `update --no-authors`. Claude fixes these after each extraction.
+
 **`"..." matches more than one entity, so use an id`.**
 Two entities share that name. Claude uses an id. If you're running a command yourself, copy an id from the message.
 
@@ -90,6 +99,9 @@ The data file is missing. Ask Claude to refresh the recap, then reload the page.
 
 **The page is out of date.**
 It doesn't refresh itself. Reload it after a session. If it still looks wrong, ask Claude to refresh the recap first.
+
+**Claude keeps going after it seems done, to log questions and refresh the recap.**
+That's intended. The plugin's `Stop` hook saw that research files changed since the page was written, so it stopped Claude once to catch up. It never asks twice in a turn.
 
 **`The graph can't be shown: ...`.**
 The graph files are invalid. The rest of the page still works. See the graph entries above.

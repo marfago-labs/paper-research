@@ -37,6 +37,8 @@ Claude updates these in every conversation, not at the end of a session, because
 
 `lessons.md` is loaded as instructions in every session, so a lesson must come from your own words, never from a paper.
 
+The plugin's `Stop` hook backs this up. When Claude finishes a turn after the research files changed and the recap page is out of date, the hook stops it once, to log the session's questions and facts that aren't in `user-facts.md` yet and to refresh the page.
+
 ## papers.md
 
 One table row per link. Escape a `|` in a title as `\|`.
@@ -73,7 +75,7 @@ One section per takeaway:
 - **Kind:** `practice`
 - **Insight:** What to do or remember, in one or two sentences.
 - **Why:** The evidence or reasoning. Reasoning that isn't a finding of the paper is marked as such.
-- **Sources:** `ARXIV:2610.34577`, §4, Figure 31.
+- **Sources:** `ARXIV:2401.00006`, §4, Figure 3.
 - **Evidence:** `verified`
 - **User's view:** What you said about it, in your terms. `not stated` if nothing.
 - **Tags:** agents, code-review

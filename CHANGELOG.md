@@ -74,6 +74,12 @@ All notable changes to the plugin are listed here, newest first. The format foll
 - The `next` and `scholar` skills use a search with a year or date range for "similar papers from a period",
   because recommendations can't be limited to dates.
 
+### Fixed
+
+- The docs describe the current graph flow (each entity added with its first link, relation types checked,
+  `validate` after each extraction), the `Stop` hook, and the invisible characters the scripts remove from what they
+  print. Troubleshooting covers the new graph messages, and the test commands include `tools/test_*.py`.
+
 ## [0.2.0] - 2026-11-12
 
 ### Added

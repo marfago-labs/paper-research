@@ -8,6 +8,7 @@ Each skill is a folder in `skills/` with a `SKILL.md`. Scripts live in the skill
 |---|---|
 | `skills/` | The skills, their scripts, and the unit tests beside the scripts |
 | `skills/recap/page/` | The recap page, its rendering library, and their Node tests |
+| `hooks/` | `hooks.json`, the plugin's one hook: a `Stop` hook that runs `recap.py --stop-hook` |
 | `docs/` | The user documentation. Keep it in step with the skills and scripts: a scenario checks that its links resolve and that every skill and command is covered |
 | `features/` | Behaviour scenarios in Gherkin, run with `behave` |
 | `evals/dedup/` | The duplicate-detection evaluation, not shipped to users: its specification (`SPEC.md`), the dataset builder, `audit_labels.py` (asks Jev, through OpenRouter, whether second names are the same thing; run by hand with `build_dataset.py --audit`, never in CI), `evaluate.py` (replays the pairs through `graph.py`'s check and reports the rates), `hand_check.py` (the sheet for the hand check of the labels, and its scorer), the frozen pairs in `data/`, and `analysis.ipynb`, which describes the dataset and what the evaluation finds. The notebook needs pandas and matplotlib, which the project doesn't install, and CI doesn't run it: run it by hand after any change to the dataset |
@@ -47,7 +48,7 @@ complexipy skills tools features evals --max-complexity-allowed 10              
 npm run lint --prefix tools/js                                                   # ESLint, complexity
 npm run format:check --prefix tools/js                                           # Prettier (npm run format fixes)
 
-for t in skills/*/scripts/test_*.py evals/*/test_*.py; do python "$t"; done      # unit tests
+for t in skills/*/scripts/test_*.py evals/*/test_*.py tools/test_*.py; do python "$t"; done   # unit tests
 python evals/dedup/evaluate.py --split dev                                       # duplicate detection
 npm test --prefix tools/js && npm run coverage --prefix tools/js                 # page tests, 100%
 coverage run --branch --include="*/graph.py" skills/graph/scripts/test_graph.py && coverage report --fail-under=100
@@ -90,6 +91,7 @@ The version in `.claude-plugin/plugin.json` changes only in a release, never in 
 
 - **Semantic Scholar (2026-11-05):** a read-only standard-library script with a fixed host and an optional API key from `SEMANTIC_SCHOLAR_API_KEY`, not an MCP server. Without a key, `search` is heavily rate-limited.
 - **arXiv (2026-11-07):** a standard-library script, not an MCP server. It reads arXiv's HTML version as Markdown, and falls back to the PDF read by Claude Code's Read tool, so it needs no PDF converter.
-- **Distribution (2026-11-07):** a Claude Code plugin, without hooks. Plugins can't carry permission rules or `CLAUDE.md` content, so the `init` skill writes them into the workspace.
+- **Distribution (2026-11-07):** a Claude Code plugin. Plugins can't carry permission rules or `CLAUDE.md` content, so the `init` skill writes them into the workspace.
+- **Stop hook (2026-11-15):** one `Stop` hook, because rules in `CLAUDE.md` to refresh the recap and log questions were dropped after long chains of skills. It only reads the research files, asks at most once a turn, and lets the turn end on any error.
 - **Graph storage:** two JSONL files changed only through `graph.py`, which locks, checks for duplicates, validates, and saves crash-safely. Names and external ids are unique within a type, not across types.
 - **Recap page:** a fixed page copied into the workspace, with all rendering in `recap-lib.js` so it can be tested in Node.
