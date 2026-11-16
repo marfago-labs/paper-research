@@ -45,6 +45,15 @@ Feature: A plugin that installs cleanly and keeps its promises
     And the next skill says "use `scholar` `search` with `--year`"
     And the scholar skill says "`recommend` can't be limited to a period"
 
+  Scenario: The read skill extracts everything with a role in the paper, and its authors
+    Then the read skill says "the baselines it compares against, the models it runs, and the models it uses as judges"
+    And the read skill says "A passing mention is a name with no role in this paper"
+    And the read skill says "the systems it compares in its tables"
+    And the read skill says "A paper read without `add` still gets its authors"
+    And the read skill says "Never make up an author"
+    And the add skill says "Never make up an author"
+    And the read skill says "a paper with no authors"
+
   Scenario: The skills say how to rank without an API key, and to check what a search found before reading it
     Then the scholar skill says "all of their citation counts in one `batch` call"
     And the scholar skill says "so the queries decide what can appear"
@@ -55,6 +64,15 @@ Feature: A plugin that installs cleanly and keeps its promises
     And the read skill says "stop and ask the user whether to skip it or read it chapter by chapter"
     And the read skill says "Say whether a download count is for all time or for the last 30 days"
     And the next skill says "Check that each pick is a paper that fits"
+
+  Scenario: The docs and the graph skill say which entity types each relation joins
+    Then the documented relation table matches the rules the script enforces
+    And the graph skill says "Each joins only some entity types"
+    And the graph skill says "`authored-by` goes from a paper, method, model, dataset, or tool to an author or organisation"
+    And the graph skill says "`cites` from a paper to a paper"
+    And the graph skill says "`related-to` joins anything"
+    And the graph skill says "`link` refuses other pairs and says which types fit"
+    And the graph skill says "`validate` lists older links that break this rule"
 
   Scenario: Papers are always listed in the same table
     Then every place that lists papers uses the same paper-list table

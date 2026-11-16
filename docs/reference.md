@@ -16,18 +16,18 @@ python <skills>/graph/scripts/graph.py [--data FOLDER] COMMAND ...
 
 | Command | What it does |
 |---|---|
-| `validate` | Checks the graph files. It also lists any verified link whose source names no document, and exits with 1 if there is one. |
+| `validate` | Checks the graph files. It also lists any verified link whose source names no document, any link between entity types its relation can't join, any entity other than a paper with no links, and any paper with no `authored-by` link and no `--no-authors` reason, and exits with 1 if there is one. It also shows each paper that gives a reason instead of authors, with the first 200 characters of the reason, so a weak one such as "unknown" is seen. |
 | `stats` | Counts entities and relations by type. |
 | `search TEXT` | Finds entities whose id, name, note, or alias contains the text. A paper with a saved standing also shows its citation count and the date it was checked. |
 | `neighbours ENTITY [--depth N]` | Lists connections within N steps (default 1), with their sources and status. |
 | `path A B` | Shows the shortest chain of connections between two entities, ignoring direction. |
 | `dupes` | Lists pairs of entities that might be duplicates. |
 | `islands` | Lists papers with only author, citation, or insight connections. |
-| `add --type TYPE --name NAME [options]` | Adds an entity after checking for duplicates. |
-| `update ENTITY [options]` | Adds aliases, ids, a url, a note, or a distinct mark to an entity. |
-| `link START REL END --source TEXT --status STATUS` | Adds a relation. Nothing happens if it already exists. |
-| `unlink START REL END` | Removes one relation. |
-| `remove ENTITY` | Removes an entity and all its relations. |
+| `add --type TYPE --name NAME [options]` | Adds an entity after checking for duplicates, with its first link. Every type but a paper needs one: `--link-from` or `--link-to`, with `--source` and `--status`. |
+| `update ENTITY [options]` | Adds aliases, ids, a url, a note, a reason it has no authors, or a distinct mark to an entity. |
+| `link START REL END --source TEXT --status STATUS` | Adds a relation. Nothing happens if it already exists. It refuses a relation between entity types it can't join, such as a concept `authored-by` an author; the types each relation joins are listed in [the knowledge graph](knowledge-graph.md). |
+| `unlink START REL END` | Removes one relation. It warns about an entity other than a paper that is left with no links. |
+| `remove ENTITY` | Removes an entity and all its relations. It warns about each entity other than a paper that is left with no links. |
 | `merge KEEP DROP` | Folds a duplicate into the entity to keep, with its names, ids, and connections. |
 | `cites PAPER FILE` | Adds `cites` links from saved `s2.py paper ID --references --citations` output, and saves the paper's standing from it. |
 | `standing FILE` | Saves the standing of each paper in saved `s2.py batch` output that is in the graph: citations, influential citations, venue, year, and the date checked. A paper Semantic Scholar has no data for gets only the date checked. If the output was made with `--with-references`, it also adds a `cites` link from each paper to every paper in the graph that it cites. Prints one line with the number of papers updated, the number without data, the number of links added, and the number of records that matched no paper in the graph. |
@@ -45,7 +45,11 @@ An `ENTITY` is an id, a name, or an alias. If a name matches more than one entit
 | `--alias` | Another name. Repeat for more. |
 | `--id KIND=VALUE` | An external id. `KIND` is `arxiv`, `doi`, `github`, `hf`, `orcid`, or `s2`. |
 | `--url`, `--note` | Optional details. |
+| `--no-authors REASON` | Why a paper has no author to record, such as an anonymous submission. `validate` then doesn't ask for its authors. Only a paper with no authors takes it, and a reason with no visible character is refused. It is dropped when the paper gets an author. |
 | `--distinct ENTITY` | Confirms the new entity is different from this possible duplicate. Repeat for more. |
+| `--link-from ENTITY REL` | The first link, from another entity to the new one: `ENTITY REL NEW`, such as the paper that proposes it. `add` only. |
+| `--link-to REL ENTITY` | The first link, from the new entity to another one: `NEW REL ENTITY`, such as an insight `derived-from` a paper. `add` only. |
+| `--source`, `--status` | The first link's source and status, with the same rules as `link`. `add` only. |
 
 **Options for `link`:** `REL` is one of `authored-by`, `builds-on`, `cites`, `contradicts`, `derived-from`, `evaluates-on`, `proposes`, `related-to`, `uses`. `--status` is `verified` or `inferred`. A `verified` link's `--source` must start with a document: an `ARXIV:` or `DOI:` id, a `paper:` id followed by a comma and a place in it, a link, or `Semantic Scholar`. Anything else is refused, including a reason that only mentions an id, so a reason in prose goes with `inferred`.
 

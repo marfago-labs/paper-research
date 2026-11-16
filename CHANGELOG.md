@@ -17,9 +17,26 @@ All notable changes to the plugin are listed here, newest first. The format foll
   outside Windows; a `.json` or `.txt` file there). It is never `CLAUDE.md`, `.mcp.json`, `lessons.md`, `profile.md`, or a file
   inside `.claude/` or `.git/`, in any letter case and in any project. `graph.py standing-due` follows the same rule
   for the file it writes.
+- `graph.py link` refuses a relation between entity types it can't join, such as a concept `authored-by` an author,
+  and says which types the relation joins. `graph.py validate` lists older links between the wrong types without
+  blocking the graph.
 
 ### Changed
 
+- The `read` skill extracts every dataset, model, method, tool, and concept with a role in the paper, including the
+  baselines it compares against and the models it runs or uses as judges, and adds the paper's authors if they're
+  missing. A name cited only in related work is still skipped. `graph.py validate` lists any paper with no
+  `authored-by` link, and `read` runs it, so missing authors are caught in the same turn. A work with no author to
+  record, such as an anonymous submission, says why with `graph.py update --no-authors`. `validate` shows each
+  such reason, and the reason is dropped when the paper gets an author. In a graph with papers saved
+  without authors, the first `read` adds the authors of all of them, which can take one longer turn.
+
+- `graph.py unlink` and `graph.py remove` warn about each entity other than a paper that they leave with no links.
+  They still succeed, and `graph.py validate` lists any that are left.
+- `graph.py add` saves an entity with its first link, given with `--link-from ENTITY REL` or `--link-to REL ENTITY`
+  and `--source` and `--status`. Every type but a paper needs one, so an entity can no longer be left with no
+  link when a later `link` is skipped or fails. `graph.py validate` lists any entity other than a paper with no
+  links, and the `read` skill runs it after each extraction.
 - Without an API key, the `scholar` skill says how to rank papers when `search` is refused: find candidates with
   `arxiv` `search`, look up their citation counts in one `batch` call, and say that the queries decided what could
   appear. It also says that a free API key gives a better answer, and that counts for recent papers show early
