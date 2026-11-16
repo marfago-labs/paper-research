@@ -579,6 +579,33 @@ def file_has_no_abstracts(context, name):
     assert all("abstract" not in paper for paper in saved["papers"]), saved
 
 
+def documented_types(cell):
+    """The entity types a docs cell names: a list of types, "a work", or "any type"."""
+    import graph
+
+    if cell.startswith("a work"):
+        return graph.WORKS
+    if cell.startswith("any type"):
+        return graph.ENTITY_TYPES
+    return {name.strip() for name in cell.split(",")}
+
+
+@then("the documented relation table matches the rules the script enforces")
+def documented_relation_table(context):
+    """docs/knowledge-graph.md says which entity types each relation joins; graph.RELATION_ENDS must agree."""
+    import graph
+
+    text = (context.repo / "docs" / "knowledge-graph.md").read_text(encoding="utf-8")
+    start = text.index("| Relation | From | To |")
+    table = text[start : text.index("\n\n", start)]
+    documented = {}
+    for row in table.splitlines()[2:]:
+        relations, source, target = [cell.strip() for cell in row.strip("|").split("|")]
+        for rel in re.findall(r"`([a-z-]+)`", relations):
+            documented[rel] = (documented_types(source), documented_types(target))
+    assert documented == dict(graph.RELATION_ENDS), (documented, graph.RELATION_ENDS)
+
+
 @then("the command reference lists every command of {script}")
 def docs_commands(context, script):
     out = context.run_script(script, ["--help"]).out

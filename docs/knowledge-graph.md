@@ -6,7 +6,7 @@ It lives in two files, `research/graph/entities.jsonl` and `research/graph/relat
 
 ## Entities
 
-Each entity has an `id` of the form `type:slug`, a `type`, a `name`, a list of `aliases`, and optionally a `url`, a `note`, external `ids`, and a `distinct_from` list.
+Each entity has an `id` of the form `type:slug`, a `type`, a `name`, a list of `aliases`, and optionally a `url`, a `note`, external `ids`, a `distinct_from` list, and, for a paper with no author to record, a `no_authors` reason.
 
 | Type | What it is | Example id |
 |---|---|---|
@@ -36,10 +36,25 @@ A relation connects two entities and says where it comes from.
 
 A verified link's source must start with a document you can look up: an `ARXIV:` or `DOI:` id with the section, a place in a paper of the graph such as `paper:2401.00004, §5.1`, a link, or `Semantic Scholar`. The script refuses a reason in prose, such as "same research group" or "same group as paper:2401.00004", as verified, so that kind of link has to be marked `inferred`. `graph.py validate` lists any older link that breaks the rule, without blocking the rest of the graph. The rule can't tell whether the cited section really says what the link claims. The recap page's Graph tab shows each link's source so you can check.
 
+Each relation joins only the entity types that make sense for it. A "work" here is any type except `author` and `organisation`.
+
+| Relation | From | To |
+|---|---|---|
+| `authored-by` | paper, method, model, dataset, tool | author, organisation |
+| `cites` | paper | paper |
+| `evaluates-on` | paper, method, model, tool | dataset |
+| `proposes` | paper, author, organisation | concept, method, model, dataset, tool |
+| `uses`, `builds-on`, `contradicts`, `derived-from` | a work | a work, such as a model derived from another model |
+| `related-to` | any type | any type |
+
+So a model can be `authored-by` the lab that made it, but a concept or an insight can't be `authored-by` anyone. `graph.py link` refuses a link between other types and says which types the relation joins. `graph.py validate` lists any older link between the wrong types, again without blocking the rest of the graph.
+
+Every entity but a paper is added with its first link, in the same `graph.py add` command, so nothing is saved floating with no link to where it came from. A paper may wait in the reading list with no links until it is read. `graph.py unlink` and `graph.py remove` warn about any other entity they leave with no links, and `graph.py validate` lists any that are left. It also lists any paper with no `authored-by` link. A work with no author to record, such as an anonymous submission or a post with no byline, says why with `graph.py update <paper> --no-authors "<reason>"`, and isn't listed. `validate` shows each such reason instead, so you can check it. The reason is dropped when the paper gets an author, such as an anonymous submission that is later published.
+
 ## How papers get in
 
 - **`add` saves a paper and its authors** with their Semantic Scholar ids, and adds `authored-by` links and any citation links to papers you already have.
-- **`read` extracts the rest, immediately,** without waiting for you to ask: the datasets, models, methods, tools, and concepts the paper uses, evaluates on, builds on, or proposes. It links each one to an existing entity when there is one, and adds a new entity when there isn't.
+- **`read` extracts the rest, immediately,** without waiting for you to ask: every dataset, model, method, tool, and concept with a role in the paper, including the baselines it compares against and the models it runs or uses as judges, and the paper's authors if `add` didn't save them. It links each one to an existing entity when there is one, and adds a new entity when there isn't.
 - **Citation links come from Semantic Scholar.** One batch request fetches the reference lists of many papers, and a `cites` link is added from each paper to every paper it cites that is also in your graph. These are marked `verified`. A link joins two papers only if both are already in the graph, so the links grow with it. The `recap` skill repeats the request for papers that were last checked more than 30 days ago, and that picks up links to papers added since.
 
 - **Each paper's standing is saved with it.** `standing` holds its citations, influential citations, venue, and year from Semantic Scholar, and the date they were checked. `add` and `read` save it from the requests they already make, and the `recap` skill checks again any paper whose counts are more than 30 days old, in one batch request. A paper Semantic Scholar has no data for yet, such as a brand-new one, keeps only the date it was checked and is tried again after 30 days.

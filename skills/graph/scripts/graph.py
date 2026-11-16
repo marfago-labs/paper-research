@@ -39,17 +39,32 @@ ENTITY_TYPES = {
     "organisation",
     "insight",
 }
-RELATION_TYPES = {
-    "uses",
-    "evaluates-on",
-    "builds-on",
-    "proposes",
-    "cites",
-    "authored-by",
-    "contradicts",
-    "related-to",
-    "derived-from",
+PEOPLE = {"author", "organisation"}
+# A paper may wait in the reading list with no links until it is read. Every other entity comes from one.
+MAY_STAND_ALONE = {"paper"}
+PROPOSED = "--link-from <paper> proposes"
+# The first link to suggest when an entity is added with none: one that its type can have with a paper.
+FIRST_LINK_EXAMPLE = {
+    "author": "--link-from <paper> authored-by",
+    "organisation": "--link-from <paper> authored-by",
+    "insight": "--link-to derived-from <paper>",
 }
+WORKS = {kind for kind in ENTITY_TYPES if kind not in PEOPLE}
+# The entity types each relation may join, as (from, to). Only the relations whose meaning is clear are narrowed:
+# the ones between works join any two works, such as a model derived from another model, and related-to joins anything.
+# A work that people make, such as a paper or a model, can be authored-by an author or an organisation.
+RELATION_ENDS = {
+    "authored-by": ({"paper", "method", "model", "dataset", "tool"}, PEOPLE),
+    "cites": ({"paper"}, {"paper"}),
+    "evaluates-on": ({"paper", "method", "model", "tool"}, {"dataset"}),
+    "proposes": ({"paper", *PEOPLE}, {"concept", "method", "model", "dataset", "tool"}),
+    "uses": (WORKS, WORKS),
+    "builds-on": (WORKS, WORKS),
+    "contradicts": (WORKS, WORKS),
+    "derived-from": (WORKS, WORKS),
+    "related-to": (ENTITY_TYPES, ENTITY_TYPES),
+}
+RELATION_TYPES = set(RELATION_ENDS)
 STATUSES = {"verified", "inferred"}
 STRENGTH = ["inferred", "verified"]  # weakest first: when two links merge into one, the stronger stays
 VERIFIED = {"verified"}
@@ -62,6 +77,10 @@ OUTGOING = {"references"}  # a paper cites its references; its citations cite it
 FILES = ("entities.jsonl", "relations.jsonl")
 LOCK_FILE, COMMIT_FILE = ".lock", ".commit"
 LOCK_WAIT = 15  # seconds; pragma: no mutate (a tuning value: tests use the name)
+# The free-text details an entity may have. no_authors says why a paper has no author to record, such as an
+# anonymous submission, so validate doesn't ask for its authors.
+DETAILS = ("url", "note", "no_authors")
+REASON_SHOWN = 200  # pragma: no mutate (a display length: tests use the name)
 FIELD_TYPES = {
     "id": str,
     "type": str,
@@ -69,6 +88,7 @@ FIELD_TYPES = {
     "aliases": list,
     "url": str,
     "note": str,
+    "no_authors": str,
     "ids": dict,
     "distinct_from": list,
     "standing": dict,
@@ -601,19 +621,138 @@ def checked_load(directory):
     return entities, relations
 
 
+def wrong_ends(rel, start_type, end_type):
+    """Why rel can't join an entity of start_type to one of end_type, or an empty string if it can."""
+    starts, ends = RELATION_ENDS[rel]
+    if start_type in starts and end_type in ends:
+        return ""
+    return f"{rel} goes from {kinds(starts)} to {kinds(ends)}, not {start_type} to {end_type}"
+
+
+def kinds(types):
+    """The entity types, for a message: the works as one phrase rather than a list of seven."""
+    if types == WORKS:
+        return f"any type except {' and '.join(sorted(PEOPLE))}"
+    return " or ".join(sorted(types))
+
+
+def mistyped(entities, relations):
+    """Each relation that joins entity types its relation can't, with the reason."""
+    types = {entity["id"]: entity["type"] for entity in entities}
+    found = [(r, wrong_ends(r["rel"], types[r["from"]], types[r["to"]])) for r in relations]
+    return [(relation, why) for relation, why in found if why]
+
+
+def unlinked(entities, relations):
+    """Entities other than papers with no link at all. A paper may wait in the reading list before it is extracted."""
+    ends = {relation["from"] for relation in relations} | {relation["to"] for relation in relations}
+    return [entity for entity in entities if entity["type"] not in MAY_STAND_ALONE and entity["id"] not in ends]
+
+
+def authored(relations):
+    """The ids of the entities that have an authored-by link."""
+    # pragma: no mutate below: no relation name sorts before authored-by, so `<=` acts the same as `==`.
+    return {relation["from"] for relation in relations if relation["rel"] == "authored-by"}  # pragma: no mutate
+
+
+def authorless(entities, relations):
+    """Papers with no authored-by link, unless they say why they have none, such as an anonymous submission."""
+    written = authored(relations)
+    return [e for e in entities if e["type"] == "paper" and e["id"] not in written and not reason_for_no_authors(e)]
+
+
+def without_authors_by_reason(entities, relations):
+    """Papers with no authors that give a reason, so validate can show each reason for a check by eye."""
+    written = authored(relations)
+    return [e for e in entities if e["type"] == "paper" and e["id"] not in written and reason_for_no_authors(e)]
+
+
+def drop_outdated_reasons(entities, relations):
+    """A paper that now has an author no longer needs its reason for having none, such as one published after review."""
+    written = authored(relations)
+    for entity in entities:
+        if entity["id"] in written:
+            entity.pop("no_authors", None)
+
+
+def reason_for_no_authors(entity):
+    """The reason a paper gives for having no authors, or an empty string. Blank or invisible text is no reason."""
+    reason = entity.get("no_authors", "")
+    return reason.strip() if shows_text(reason) else ""
+
+
+def shows_text(text):
+    """Whether text has a character that shows: not only spaces, controls, or invisible format characters."""
+    return any(unicodedata.category(char)[0] not in "CZ" for char in text)
+
+
+def report(found, heading, line, advice):
+    """Print one kind of finding from validate: a heading with the count, one line for each, and how to fix them."""
+    if found:
+        print(heading)
+        for item in found:
+            print(f"  {line(item)}")
+        print(advice)
+
+
 def cmd_validate(args):
     entities, relations = checked_load(args.data)
-    # Not a load error: an old link must not lock the user out of the graph, so it is listed here to be fixed.
+    # Not load errors: an old link must not lock the user out of the graph, so these are listed here to be fixed.
     found = [relation for relation in relations if unsourced(relation)]
-    if not found:
+    wrong = mistyped(entities, relations)
+    alone = unlinked(entities, relations)
+    anonymous = authorless(entities, relations)
+    if not found and not wrong and not alone and not anonymous:
         print(f"OK: {len(entities)} entities, {len(relations)} relations")
+        show_reasons(entities, relations)
         return 0
     print(f"checked: {len(entities)} entities, {len(relations)} relations")
-    print(f"found {count(len(found), 'verified link')} with no document it was checked against:")
-    for relation in found:
-        print(f"  {relation['from']} {relation['rel']} {relation['to']}  [{relation['source']}]")
-    print(f"For each, unlink it and link it again: {SOURCE_FIX}.")
+    report(
+        found,
+        f"found {count(len(found), 'verified link')} with no document it was checked against:",
+        lambda r: f"{r['from']} {r['rel']} {r['to']}  [{r['source']}]",
+        f"For each, unlink it and link it again: {SOURCE_FIX}.",
+    )
+    report(
+        wrong,
+        f"found {count(len(wrong), 'link')} between entity types its relation can't join:",
+        lambda pair: f"{pair[0]['from']} {pair[0]['rel']} {pair[0]['to']}  ({pair[1]})",
+        "For each, unlink it, then link the right entities or use another relation.",
+    )
+    report(
+        alone,
+        f"found {count(len(alone), 'entity', 'entities')} with no links:",
+        lambda entity: f"{entity['id']}  {entity['name']}",
+        "For each, link it to the paper it came from, or remove it if it was added by mistake.",
+    )
+    report(
+        anonymous,
+        f"found {count(len(anonymous), 'paper')} with no authors:",
+        lambda entity: f"{entity['id']}  {entity['name']}",
+        "For each, add its authors as the add skill does, from Semantic Scholar or from the paper itself. If it has "
+        "none to record, such as an anonymous submission, say why with update --no-authors REASON.",
+    )
+    show_reasons(entities, relations)
     return 1
+
+
+def show_reasons(entities, relations):
+    """List each paper that gives a reason instead of authors, so a reason such as "unknown" is seen at every check.
+
+    The reason is printed as a JSON string, on one line with any control or invisible characters escaped.
+    """
+    papers = without_authors_by_reason(entities, relations)
+    if papers:
+        print(f"{count(len(papers), 'paper')} with a reason instead of authors (check that each reason holds):")
+        for entity in papers:
+            print(f"  {entity['id']}  {shown_reason(reason_for_no_authors(entity))}")
+
+
+def shown_reason(reason):
+    """The reason as a JSON string, cut to REASON_SHOWN characters so a long one doesn't flood every check."""
+    if len(reason) <= REASON_SHOWN:
+        return json.dumps(reason)
+    return f"{json.dumps(reason[:REASON_SHOWN])} and {len(reason) - REASON_SHOWN} more characters"
 
 
 def cmd_stats(args):
@@ -673,6 +812,7 @@ def cmd_path(args):
 
 def save(directory, entities, relations):
     """Validate the whole graph, then replace both files. Nothing is written if it's invalid."""
+    drop_outdated_reasons(entities, relations)
     errors = validate(entities, relations)
     if errors:
         raise GraphError("change refused, the graph would be invalid:\n" + "\n".join(f"  {e}" for e in errors))
@@ -795,12 +935,23 @@ def describe_candidate(entity, reasons):
     return f"  {entity['id']}  {entity['name']}  ({', '.join(reasons)})"
 
 
+def check_no_authors(entity_type, reason):
+    """Refuse a reason for no authors on anything but a paper, or one that is blank."""
+    if reason is None:
+        return
+    if entity_type != "paper":
+        raise GraphError(f"--no-authors is for a paper, not a {entity_type}")
+    if not shows_text(reason):
+        raise GraphError("--no-authors needs a reason, such as 'anonymous submission under review'")
+
+
 def new_entity(args, entities):
     """The entity that add would create, from its arguments."""
     entity_id = f"{args.type}:{args.slug}" if args.slug else free_id(entities, f"{args.type}:{slugify(args.name)}")
+    check_no_authors(args.type, args.no_authors)
     new = {"id": entity_id, "type": args.type, "name": args.name, "aliases": []}
     add_aliases(new, args.alias)
-    for field in ("url", "note"):
+    for field in DETAILS:
         if getattr(args, field):
             new[field] = getattr(args, field)
     merge_ids(new, parse_ids(args.id))
@@ -808,6 +959,47 @@ def new_entity(args, entities):
     if distinct:
         new["distinct_from"] = distinct
     return new
+
+
+def checked_link(first, rel, second, source, status):
+    """The (start, rel, end) ids of a link between two entities, after the checks that link and add both make."""
+    start, end = first["id"], second["id"]
+    why = wrong_ends(rel, first["type"], second["type"])
+    if why:
+        raise GraphError(f"can't link {start} {rel} {end}: {why}")
+    if unsourced({"source": source, "status": status}):
+        raise GraphError(f"a verified link must name the document it was checked against: {SOURCE_FIX}")
+    return start, rel, end
+
+
+def first_link(args, entities, new):
+    """The (start, rel, end) of the link that add saves with the new entity, or None for a paper added alone.
+
+    Every entity but a paper needs one, so nothing is saved with no link to where it came from. A paper may wait in
+    the reading list until it is read.
+    """
+    if args.link_to and args.link_from:
+        raise GraphError("give one first link: --link-to or --link-from, not both")
+    if not (args.link_to or args.link_from):
+        if new["type"] in MAY_STAND_ALONE:
+            return None
+        raise GraphError(
+            f"a new {new['type']} needs its first link, such as {FIRST_LINK_EXAMPLE.get(new['type'], PROPOSED)},"
+            " with --source and --status. Link it to the paper it came from"
+        )
+    if not (args.source and args.status):
+        raise GraphError("the first link needs --source and --status, as link does")
+    rel, first, second = first_link_ends(args, entities, new)
+    return checked_link(first, rel, second, args.source, args.status)
+
+
+def first_link_ends(args, entities, new):
+    """The relation and the two entities of add's first link, in the order the link runs."""
+    rel, other = args.link_to or args.link_from[::-1]
+    if rel not in RELATION_TYPES:
+        raise GraphError(f"unknown relation {rel!r}: use one of {', '.join(sorted(RELATION_TYPES))}")
+    ends = (new, resolve(entities, other)) if args.link_to else (resolve(entities, other), new)
+    return rel, *ends
 
 
 def report_possible_duplicates(found):
@@ -824,6 +1016,9 @@ def report_possible_duplicates(found):
 def cmd_add(args):
     entities, relations = checked_load(args.data)
     new = new_entity(args, entities)
+    first = first_link(args, entities, new)  # before the duplicate check, so a wrong link is found on the first try
+    if args.no_authors and first and first[:2] == (new["id"], "authored-by"):
+        raise GraphError("a paper added with its author needs no --no-authors; leave it out")
     found = candidates(entities, new)
     strong = [describe_candidate(entity, reasons) for entity, reasons, is_strong in found if is_strong]
     if strong:
@@ -839,17 +1034,23 @@ def cmd_add(args):
     taken = next((entity for entity in entities if entity["id"] == new["id"]), None)
     if taken:  # only an explicit --slug can be taken: a generated id is always free
         raise GraphError(f"{new['id']} is already used by {taken['name']!r}; pick another --slug")
+    if first:
+        start, rel, end = first
+        link(relations, start, rel, end, args.source, args.status)
     save(args.data, entities + [new], relations)
-    print(f"added {new['id']}")
+    print(f"added {new['id']}" + (f" and linked {' '.join(first)}" if first else ""))
     return 0
 
 
 def cmd_update(args):
     entities, relations = checked_load(args.data)
     entity = resolve(entities, args.entity)
+    check_no_authors(entity["type"], args.no_authors)
+    if args.no_authors and entity["id"] in authored(relations):
+        raise GraphError(f"{entity['id']} has authors already; unlink them first if they are wrong")
     add_aliases(entity, args.alias)
     merge_ids(entity, parse_ids(args.id))
-    for field in ("url", "note"):
+    for field in DETAILS:
         if getattr(args, field):
             entity[field] = getattr(args, field)
     for text in args.distinct:
@@ -871,15 +1072,28 @@ def link(relations, start, rel, end, source, status):
 
 def cmd_link(args):
     entities, relations = checked_load(args.data)
-    start, end = resolve(entities, args.start)["id"], resolve(entities, args.end)["id"]
-    if unsourced({"source": args.source, "status": args.status}):
-        raise GraphError(f"a verified link must name the document it was checked against: {SOURCE_FIX}")
+    first, second = resolve(entities, args.start), resolve(entities, args.end)
+    start, _, end = checked_link(first, args.rel, second, args.source, args.status)
     if link(relations, start, args.rel, end, args.source, args.status):
         save(args.data, entities, relations)
         print(f"linked {start} {args.rel} {end}")
     else:
         print(f"already linked: {start} {args.rel} {end}")
     return 0
+
+
+def warn_left_alone(entities, before, after):
+    """Warn about each entity that the change from the relations before to the relations after left with no links.
+
+    The change is valid, so it still succeeds; the warning is so the entity isn't left floating unnoticed.
+    """
+    already = {entity["id"] for entity in unlinked(entities, before)}
+    for entity in unlinked(entities, after):
+        if entity["id"] not in already:
+            print(
+                f"warning: {entity['id']} now has no links: link it to the paper it came from, or remove it",
+                file=sys.stderr,
+            )
 
 
 def cmd_unlink(args):
@@ -891,6 +1105,7 @@ def cmd_unlink(args):
     kept = [r for r in relations if (r["from"], r["rel"], r["to"]) != target]
     save(args.data, entities, kept)
     print(f"unlinked {start} {args.rel} {end}")
+    warn_left_alone(entities, relations, kept)
     return 0
 
 
@@ -908,6 +1123,7 @@ def cmd_remove(args):
     links = [r for r in relations if target not in (r["from"], r["to"])]
     save(args.data, kept, links)
     print(f"removed {target} and {len(relations) - len(links)} relations")
+    warn_left_alone(kept, relations, links)
     return 0
 
 
@@ -929,13 +1145,13 @@ def merge(entities, relations, keep, drop):
 
 
 def absorb(keep, drop):
-    """Give keep the distinct marks, ids, names, url, and note of drop."""
+    """Give keep the distinct marks, ids, names, and details of drop."""
     for other in drop.get("distinct_from", []):
         if other not in keep.setdefault("distinct_from", []):
             keep["distinct_from"].append(other)
     merge_ids(keep, drop.get("ids", {}))
     add_aliases(keep, [drop["name"], *drop.get("aliases", [])])
-    for field in ("url", "note"):
+    for field in DETAILS:
         if field in drop and field not in keep:
             keep[field] = drop[field]
     if "standing" in drop and drop["standing"]["checked"] > keep.get("standing", {}).get("checked", ""):
@@ -1109,8 +1325,8 @@ def read_batch(file):
     return records
 
 
-def count(number, word):
-    return f"{number} {word}{'' if number == 1 else 's'}"
+def count(number, word, plural=""):
+    return f"{number} {word if number == 1 else plural or word + 's'}"
 
 
 def requested_keys(record):
@@ -1301,6 +1517,9 @@ def build_parser():
         command.add_argument("--url")
         command.add_argument("--note")
         command.add_argument(
+            "--no-authors", metavar="REASON", help="why a paper has no author to record, such as anonymous"
+        )
+        command.add_argument(
             "--distinct",
             action="append",
             default=[],
@@ -1313,6 +1532,14 @@ def build_parser():
     add_cmd.add_argument("--name", required=True)
     add_cmd.add_argument("--slug", help="id after the type prefix; default: made from the name")
     entity_fields(add_cmd)
+    add_cmd.add_argument(
+        "--link-to", nargs=2, metavar=("REL", "ENTITY"), help="first link, from the new entity: NEW REL ENTITY"
+    )
+    add_cmd.add_argument(
+        "--link-from", nargs=2, metavar=("ENTITY", "REL"), help="first link, to the new entity: ENTITY REL NEW"
+    )
+    add_cmd.add_argument("--source", help="the first link's source, such as ARXIV:2401.00001, section 3")
+    add_cmd.add_argument("--status", choices=sorted(STATUSES), help="the first link's status")
     add_cmd.set_defaults(func=cmd_add)
 
     update_cmd = commands.add_parser("update", help="add aliases, ids, or details to an entity")

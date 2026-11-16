@@ -32,6 +32,24 @@ def entity(kind, name, ident=None, **extra):
     return {"id": ident or f"{kind}:{graph.slugify(name)}", "type": kind, "name": name, "aliases": [], **extra}
 
 
+ALL_TYPES = ("paper", "author", "concept", "method", "model", "dataset", "tool", "organisation", "insight")
+
+
+@given("a graph with two entities of every type")
+def graph_of_every_type(context):
+    """Two entities of each type, with the ids TYPE:sample and TYPE:other, so a scenario can name the two ends of a
+    link by type, even when both ends have the same type."""
+    write_all(
+        context,
+        [
+            entity(kind, f"{name} {kind}", f"{kind}:{name.lower()}")
+            for kind in ALL_TYPES
+            for name in ("Sample", "Other")
+        ],
+        [],
+    )
+
+
 @given("an empty graph")
 def empty_graph(context):
     write_all(context, [], [])
@@ -41,6 +59,25 @@ def empty_graph(context):
 def graph_has(context, kind, name):
     entities, relations = read_all(context)
     entities[f"{kind}:{graph.slugify(name)}"] = entity(kind, name)
+    write_all(context, list(entities.values()), relations)
+
+
+@given('every paper in the graph has the author "{name}"')
+def graph_papers_authored(context, name):
+    entities, relations = read_all(context)
+    author = entity("author", name)
+    entities[author["id"]] = author
+    papers = [ident for ident, found in entities.items() if found["type"] == "paper"]
+    link = {"rel": "authored-by", "to": author["id"], "source": "Semantic Scholar", "status": "verified"}
+    relations.extend({"from": paper, **link} for paper in papers)
+    write_all(context, list(entities.values()), relations)
+
+
+@given('the files give "{ident}" the reason for no authors "{reason}"')
+def graph_no_authors_by_hand(context, ident, reason):
+    # Written straight to the files, as a hand edit might: the command refuses a blank reason.
+    entities, relations = read_all(context)
+    entities[ident]["no_authors"] = {"<empty>": "", "<spaces>": "   ", "<tab>": "\t\n"}[reason]
     write_all(context, list(entities.values()), relations)
 
 
@@ -151,14 +188,18 @@ def run_graph(context, command):
     context.run_script("graph", [context.place(part) for part in shlex.split(command)])
 
 
-@when("{count:d} processes each add a different method at the same moment")
-def concurrent_adds(context, count):
+@when("{count:d} processes each add a different method proposed by {paper} at the same moment")
+def concurrent_adds(context, count, paper):
     context.entities_before = len(read_all(context)[0])
     script = str(context.repo / "skills" / "graph" / "scripts" / "graph.py")
     names = ["Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot", "Golf", "Hotel", "India", "Juliet"][:count]
     processes = [
         subprocess.Popen(
-            [sys.executable, script, "add", "--type", "method", "--name", f"Zq{name}", "--slug", name.lower()],
+            [
+                *(sys.executable, script, "add", "--type", "method", "--name", f"Zq{name}", "--slug", name.lower()),
+                *("--link-from", paper, "proposes", "--source", f"ARXIV:{paper.split(':')[1]}, section 3"),
+                *("--status", "verified"),
+            ],
             cwd=context.workspace,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -215,6 +256,16 @@ def entity_distinct(context, ident, other):
 def graph_has_relation(context, start, rel, end):
     found = [r for r in read_all(context)[1] if (r["from"], r["rel"], r["to"]) == (start, rel, end)]
     assert len(found) == 1, read_all(context)[1]
+
+
+@when("I note how many relations the graph has")
+def note_relations(context):
+    context.relations_before = len(read_all(context)[1])
+
+
+@then("the graph has the same number of relations as before")
+def graph_relations_unchanged(context):
+    assert len(read_all(context)[1]) == context.relations_before, read_all(context)[1]
 
 
 @then("the graph has {count:d} relations")

@@ -36,6 +36,11 @@ def error_mentions(context, text):
     assert text in context.result.err, f"{text!r} not in error:\n{context.result.err}"
 
 
+@then('the error does not mention "{text}"')
+def error_does_not_mention(context, text):
+    assert text not in context.result.err, f"{text!r} found in error:\n{context.result.err}"
+
+
 @then("nothing is written to the error output")
 def no_error_output(context):
     assert context.result.err.strip() == "", context.result.err
