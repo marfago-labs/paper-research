@@ -1241,7 +1241,12 @@ def citation_pairs(index, paper_id, record):
     for edge in CITATION_SOURCES:
         for match in papers_in_graph(index, record.get(edge) or []):
             if match != paper_id:  # pragma: no mutate (the paper's own id is the very string it matches)
-                yield (edge, paper_id, match) if edge in OUTGOING else (edge, match, paper_id)
+                yield citation_edge(edge, paper_id, match)
+
+
+def citation_edge(edge, paper_id, match):
+    """(edge, citing id, cited id): a paper cites its references, and its citations cite it."""
+    return (edge, paper_id, match) if edge in OUTGOING else (edge, match, paper_id)
 
 
 def papers_in_graph(index, papers):
