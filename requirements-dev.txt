@@ -377,9 +377,9 @@ complexipy==8.3.0 \
     --hash=sha256:fc812ef7dc8b0cd565e1e447e2029a7f40ef64b0b09d0af23c2eaf101e5e7380 \
     --hash=sha256:fd76ed9d4f6d83afa8b984d3b867c2eeeccc746473ed1fa9e842e96eba1a219d
     # via -r requirements-dev.in
-cosmic-ray==8.8.0 \
-    --hash=sha256:ca5a89ef425311fc3e1e9ace16136bc3e3da15396144dd1d87f4dfbeb3285ace \
-    --hash=sha256:d8fcec8ec9b3954a47b6232d5b629e5b9875862c87fdd936fecf90c79b69468b
+cosmic-ray==8.9.0 \
+    --hash=sha256:3a37732939e1119e459c7b21f7ff6b62d0d1d0ff18ef2b9ea1e3e90e7e7829c6 \
+    --hash=sha256:632737cbb3ea3965634ef275abadaeabef6c61ba895d0f3eb796947f555904b9
     # via -r requirements-dev.in
 coverage==7.17.2 \
     --hash=sha256:01303d9e68b6e6bdc5459b54e3bd0e3539c94c25b50ac7362b7cbcacbc815fbc \
