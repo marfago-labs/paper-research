@@ -6,6 +6,8 @@ All notable changes to the plugin are listed here, newest first. The format foll
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-17
+
 ### Added
 
 - CI writes a complexity report to the job summary: for Python and JavaScript, the number of functions, the mean
@@ -128,6 +130,7 @@ All notable changes to the plugin are listed here, newest first. The format foll
 First release: the `arxiv`, `scholar`, `read`, `add`, `next`, `pin`, `insight`, `graph`, `recap`, and `init`
 skills, with plain-file notes in the workspace, a knowledge graph with duplicate checks, and the recap page.
 
-[Unreleased]: https://github.com/marfago-labs/paper-research/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/marfago-labs/paper-research/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/marfago-labs/paper-research/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/marfago-labs/paper-research/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/marfago-labs/paper-research/releases/tag/v0.1.0
