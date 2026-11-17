@@ -4,7 +4,7 @@
 [![Coverage 100%](https://img.shields.io/badge/coverage-100%25-brightgreen)](CONTRIBUTING.md)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org)
 [![Dependencies: none](https://img.shields.io/badge/dependencies-none-brightgreen)](#why-its-different)
-[![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue)](LICENSE)
+[![Licence: Apache 2.0](https://img.shields.io/badge/licence-Apache%202.0-blue)](LICENSE)
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-d97757)](https://docs.claude.com/en/docs/claude-code/plugins)
 
 A Claude Code plugin for finding, reading, and discussing research papers with Claude, and keeping what matters: facts you pin, insights tied to their source papers, a knowledge graph of what papers use and build on, and a recap page you open in a browser.
@@ -100,4 +100,4 @@ CI runs linters and formatters, complexity limits, static analysis, a secret sca
 
 ## Licence
 
-MIT. See [LICENSE](LICENSE).
+Apache 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE). Versions 0.1.0 and 0.2.0 were released under MIT, and are also available under Apache 2.0.
