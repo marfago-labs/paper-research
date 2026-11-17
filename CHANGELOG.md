@@ -33,6 +33,8 @@ All notable changes to the plugin are listed here, newest first. The format foll
 
 ### Changed
 
+- The plugin is licensed under Apache 2.0 instead of MIT, with a `NOTICE` file. Versions 0.1.0 and 0.2.0,
+  released under MIT, are also available under Apache 2.0.
 - The docs gain `docs/architecture.md`, with a component diagram, what each part writes, the trust boundaries,
   and the design decisions. The README is shorter and shows the recap page's graph: the paper-to-graph diagram
   moved to `docs/knowledge-graph.md`, and the protections table and workspace layout to `docs/security.md` and

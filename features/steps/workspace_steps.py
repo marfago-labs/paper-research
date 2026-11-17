@@ -519,7 +519,7 @@ def manifests(context):
     market = json.loads((context.repo / ".claude-plugin" / "marketplace.json").read_text(encoding="utf-8"))
     assert plugin["name"] == market["plugins"][0]["name"] == "paper-research"
     assert re.fullmatch(r"\d+\.\d+\.\d+", plugin["version"]), plugin["version"]
-    assert plugin["license"] == "MIT"
+    assert plugin["license"] == "Apache-2.0"
 
 
 @then("the rules written by init name every skill")
