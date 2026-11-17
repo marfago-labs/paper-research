@@ -11,6 +11,8 @@ A Claude Code plugin for finding, reading, and discussing research papers with C
 
 Everything the plugin learns about you and your papers stays in plain files in your own workspace, where you can read, edit, and version it.
 
+![The recap page's graph tab: papers, their authors, and the concepts, datasets, methods, models, and tools they use, with one paper's links listed beside the graph](docs/images/recap-graph.png)
+
 ## Install
 
 In a terminal:
@@ -48,37 +50,6 @@ Paste a paper link and Claude starts a discussion. Paste several, or say "for la
 | `scholar`, `arxiv` | Read-only clients for Semantic Scholar and arXiv, used by the other skills |
 | `init` | Sets up or updates the workspace |
 
-## How a paper gets into the graph
-
-When you read or skim a paper, `read` fetches it through the plugin's own clients, then extracts it into the knowledge graph without waiting to be asked. If Claude reads a paper in plain chat instead, the recap page lists it under **Needs graph extraction**, and you can ask Claude to run `read` on it. Every change goes through `graph.py`, which checks for duplicates, validates the graph, and saves crash-safely.
-
-```mermaid
-flowchart TD
-    A["Paper link"] --> B["arxiv and scholar clients<br/>fixed hosts, size and time limits"]
-    B --> C["Converted to Markdown<br/>scripts and hidden text removed"]
-    C --> D["Claude reads it by section<br/>as untrusted data"]
-    D --> P["Paper added to the graph<br/>with its Semantic Scholar id"]
-    P --> E["Authors and every entity with a role:<br/>datasets, models, methods, tools, concepts"]
-    E --> F["graph.py add, with its first link<br/>section as source, verified or inferred"]
-    F -->|"no match"| G["Added as new, already linked"]
-    F -->|"same name or id"| H["Existing entity reused<br/>new name saved as an alias"]
-    F -->|"possible duplicate, exit 3"| I{"Same thing?"}
-    I -->|"yes"| H
-    I -->|"no"| J["Added with --distinct"]
-    I -->|"can't tell"| K["Claude asks you"]
-    K --> H
-    K --> J
-    H --> L["graph.py link<br/>refused if the relation can't join the two types"]
-    G --> M["graph.py standing<br/>citation counts and links from Semantic Scholar"]
-    J --> M
-    L --> M
-    M --> V["graph.py validate<br/>no entity without links, no paper without authors"]
-    V --> N["graph.py dupes<br/>merge, or mark as distinct"]
-    N --> O["Short report: what was added,<br/>linked, and decided"]
-```
-
-See [Knowledge graph](docs/knowledge-graph.md) for the duplicate rules and what each relation means.
-
 ## Why it's different
 
 ### It reads papers through a retriever built to distrust them
@@ -94,17 +65,7 @@ Papers come in through small, purpose-built clients for arXiv and Semantic Schol
 - **Labelled as data.** Everything the retriever returns is marked as untrusted. Claude's rules say to treat it as data, never to follow links found inside papers without asking, and never to send your notes anywhere.
 - **Sections you can check.** Papers are read by section, and Claude cites the section, page, or figure behind each claim, so you can verify it against the paper.
 
-Claude Code's permission system enforces the rest. The table shows what is enforced, what is only instructions, and where the gaps are. [Security](docs/security.md) has the full detail.
-
-| Protection | Strength | Limits |
-|---|---|---|
-| Approval prompt before Claude fetches a page from arXiv, Semantic Scholar, Hugging Face, or GitHub, even in auto mode | Enforced | You see the address of every fetch from those sites. Other sites prompt too, unless you've allowed them |
-| No deny rules, so other skills and agents in the workspace can use any tool, such as `curl` or `gh`. Claude Code asks before a shell command you haven't allowed | Enforced, by Claude Code's default | A command you've allowed everywhere, such as `curl`, runs without a prompt here too. In auto mode, only its rules against fetching links found inside papers and sending workspace content out stand in the way |
-| Approval prompt before Claude's file-edit tools change `lessons.md`, `profile.md`, `CLAUDE.md`, or `.claude/` | Enforced | Stops injected text from quietly making itself permanent through those tools. A shell command can still write these files without a prompt, unless `init --sandbox` is on |
-| Rules to treat outside text as data and to propose changes to `profile.md` or `lessons.md` before making them | Instructions only | Reduce the risk, don't remove it. Auto mode gets matching rules that apply in auto mode only |
-| `init --sandbox`: sandboxed shell commands that reach only arXiv and the Semantic Scholar API, with no unsandboxed escape. GitHub and Hugging Face are blocked outright, because a shell command there could publish your notes using your own login | Strongest | Off by default. Not supported on native Windows, where `init --sandbox` has no effect: use WSL2, macOS, or Linux. It can stop some shell commands from working |
-
-Updates can't quietly widen your permissions. `init` adds no allow rules, and its only ask rules are approval prompts for editing a file and for fetching from a named host. If the settings template in an update contains any allow rule, or any other ask rule, `init` stops and changes nothing. It never removes a rule. With `--sandbox`, `init` also adds the sandbox's network hosts from the update, so run `init --dry-run` and read the diff before accepting an update.
+Around the retriever, Claude Code asks you before Claude fetches a web page and before its file tools edit the files that steer every session. An optional sandbox cuts shell commands off from everything but arXiv and Semantic Scholar, and `init` refuses an update that would widen your permissions. [Security](docs/security.md) says what is enforced, what is only instructions, and what isn't covered.
 
 ### It gets better at finding what you care about
 
@@ -119,25 +80,15 @@ The plugin keeps a record of you as a reader, in plain files you can read and ed
 
 There is no hidden model. The personalization is in files you control, and it is Claude's judgement applied to them. See [Your workspace](docs/workspace.md) for the files and [Skills](docs/skills.md#next) for how `next` works.
 
-## Your workspace
-
-After `init`:
-
-| Path | Holds |
-|---|---|
-| `CLAUDE.md` | A block of the plugin's rules, refreshed by `init`. Add your own notes outside the block |
-| `research/` | Your facts, profile, papers, pins, insights, lessons, and graph |
-| `.claude/settings.json` | The approval prompts and auto-mode rules that `init` adds |
-| `.claude/settings.local.json` | Your own settings, such as denying MCP servers you don't want here. `init` never touches it |
-
 ## Documentation
 
 | Read | To |
 |---|---|
 | [Getting started](docs/getting-started.md) | Install the plugin, set up a workspace, and read your first paper |
 | [Skills](docs/skills.md) | See what each skill does, step by step, and what it changes |
-| [Your workspace](docs/workspace.md) | Understand every file, its format, and the recap page |
-| [Knowledge graph](docs/knowledge-graph.md) | See how entities, links, and duplicate checks work |
+| [Your workspace](docs/workspace.md) | Understand every file `init` creates, its format, and the recap page |
+| [Knowledge graph](docs/knowledge-graph.md) | See how a paper gets into the graph, and how entities, links, and duplicate checks work |
+| [Architecture](docs/architecture.md) | See the components, what each one writes, and the design decisions |
 | [Security](docs/security.md) | Know what protects you from a malicious paper, and what doesn't |
 | [Command reference](docs/reference.md) | Run the scripts yourself, with every option and exit code |
 | [Troubleshooting](docs/troubleshooting.md) | Fix a message you didn't expect |
@@ -145,13 +96,7 @@ After `init`:
 
 ## Develop
 
-```bash
-for t in skills/*/scripts/test_*.py evals/*/test_*.py tools/test_*.py; do python "$t"; done
-```
-
-The duplicate check is measured against a frozen set of labelled pairs, which [the analysis notebook](evals/dedup/analysis.ipynb) describes and replays.
-
-CI runs linters and formatters (ruff, ESLint, Prettier), complexity limits (cyclomatic 6, cognitive 10) with a report of the scores in the job summary, static analysis (mypy, bandit, actionlint), a secret scan of every commit (gitleaks), unit tests on Linux with Python 3.9, 3.12, and 3.13 and on Windows with 3.13, coverage at 100%, and behaviour scenarios in Gherkin on Linux and Windows. Mutation tests run weekly and on request, because they take too long for every push. [CONTRIBUTING.md](CONTRIBUTING.md) says how to run each check.
+CI runs linters and formatters, complexity limits, static analysis, a secret scan, unit tests on Linux with Python 3.9, 3.12, and 3.13 and on Windows with 3.13, 100% coverage, and behaviour scenarios. Mutation tests run locally. [CONTRIBUTING.md](CONTRIBUTING.md) says how to run each check.
 
 ## Licence
 

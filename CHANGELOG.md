@@ -33,6 +33,10 @@ All notable changes to the plugin are listed here, newest first. The format foll
 
 ### Changed
 
+- The docs gain `docs/architecture.md`, with a component diagram, what each part writes, the trust boundaries,
+  and the design decisions. The README is shorter and shows the recap page's graph: the paper-to-graph diagram
+  moved to `docs/knowledge-graph.md`, and the protections table and workspace layout to `docs/security.md` and
+  `docs/workspace.md`. CONTRIBUTING says mutation tests run locally.
 - The `read` skill extracts every dataset, model, method, tool, and concept with a role in the paper, including the
   baselines it compares against and the models it runs or uses as judges, and adds the paper's authors if they're
   missing. A name cited only in related work is still skipped. `graph.py validate` lists any paper with no
