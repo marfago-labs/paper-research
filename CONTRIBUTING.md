@@ -15,7 +15,7 @@ Each skill is a folder in `skills/` with a `SKILL.md`. Scripts live in the skill
 | `mutation/` | One cosmic-ray configuration per script |
 | `tools/` | Development helpers that are not shipped to users, including the gitleaks wrapper and the pre-commit hook |
 | `.github/workflows/ci.yml` | Lint, static analysis, unit tests, coverage, and behaviour scenarios, on every push and pull request |
-| `.github/workflows/mutation.yml` | Mutation tests, weekly and on request |
+| `.github/workflows/mutation.yml` | The survival limits of the mutation tests. The workflow is disabled: mutation tests run locally |
 
 ## Rules for changes
 
@@ -69,9 +69,8 @@ python tools/run_mutation.py init --max-survival 0 --workers 4                  
   In PowerShell, write the volume as `"${PWD}:/src:ro"` and put the whole command on one line, or end each line with a backtick instead of a backslash. In Git Bash, set `MSYS_NO_PATHCONV=1` before `docker run`, or it rewrites the paths.
 
   `--workers N` tests N mutants at once, each in its own copy of the repo, so give the container N CPUs. Four workers ran `init` about three times faster than one. Each worker gets a free port chosen by the operating system.
-- **While the mutation workflow is paused, nothing checks the 0% limits.** A change to a module's script or its tests therefore runs that module in the container, and its pull request reports the survival rate.
-- **The survival limits in `.github/workflows/mutation.yml` are a ratchet.** Lower them when you kill survivors, and never raise them. Mutation tests run weekly and on request, not on every push, because the graph script alone takes about 45 minutes with one worker, or about 8 with four. The workflow is paused for now to save Actions minutes: run `gh workflow enable "Mutation tests"` to turn it back on, or run `tools/run_mutation.py` locally.
-- **Unchanged modules are skipped.** A module runs again only when its script, its tests, the files they read, the tooling, or its limit has changed. Each pass uploads a marker artifact named after a hash of those files, and a later run with the same hash skips the module. Run the workflow by hand with `force` to re-test everything. If a module reads a new file, add it to that module's `paths` in the workflow.
+- **Mutation tests run locally, not in GitHub Actions.** The graph script alone takes about 45 minutes with one worker, or about 8 with four, so the workflow is disabled and CI doesn't check the 0% limits. A change to a module's script or its tests therefore runs that module in the container, and its pull request reports the survival rate.
+- **Run each module with `--max-survival 0`.** The limits in `.github/workflows/mutation.yml` stay at 0 too, and are never raised.
 - **A mutant that runs longer than 20 seconds counts as caught.** A normal test run takes about 2 seconds, so only a hang gets that far. Raise the `timeout` in `mutation/<module>.toml` if a test file ever gets that slow.
 - **Changing a tool version:** edit `requirements-dev.in`, then run `uv pip compile requirements-dev.in --universal --generate-hashes --python-version 3.12 -o requirements-dev.txt`.
 - **CI is kept to a few jobs,** because billing rounds each job up to a whole minute and bills Windows at 2x and macOS at 10x in private repos. Quick checks share one Linux job, and macOS isn't tested on every push. Add a check as a step of the `checks` job rather than a new job.
@@ -89,9 +88,4 @@ The version in `.claude-plugin/plugin.json` changes only in a release, never in 
 
 ## Design decisions
 
-- **Semantic Scholar (2026-11-05):** a read-only standard-library script with a fixed host and an optional API key from `SEMANTIC_SCHOLAR_API_KEY`, not an MCP server. Without a key, `search` is heavily rate-limited.
-- **arXiv (2026-11-07):** a standard-library script, not an MCP server. It reads arXiv's HTML version as Markdown, and falls back to the PDF read by Claude Code's Read tool, so it needs no PDF converter.
-- **Distribution (2026-11-07):** a Claude Code plugin. Plugins can't carry permission rules or `CLAUDE.md` content, so the `init` skill writes them into the workspace.
-- **Stop hook (2026-11-15):** one `Stop` hook, because rules in `CLAUDE.md` to refresh the recap and log questions were dropped after long chains of skills. It only reads the research files, asks at most once a turn, and lets the turn end on any error.
-- **Graph storage:** two JSONL files changed only through `graph.py`, which locks, checks for duplicates, validates, and saves crash-safely. Names and external ids are unique within a type, not across types.
-- **Recap page:** a fixed page copied into the workspace, with all rendering in `recap-lib.js` so it can be tested in Node.
+The design decisions, with their dates, are in [Architecture](docs/architecture.md#design-decisions), next to the component diagram.

@@ -53,6 +53,33 @@ Every entity but a paper is added with its first link, in the same `graph.py add
 
 ## How papers get in
 
+This is what happens when you read or skim a paper with `read`. Every change goes through `graph.py`, which checks for duplicates, validates the graph, and saves crash-safely.
+
+```mermaid
+flowchart TD
+    A["Paper link"] --> B["arxiv and scholar clients<br/>fixed hosts, size and time limits"]
+    B --> C["Converted to Markdown<br/>scripts and hidden text removed"]
+    C --> D["Claude reads it by section<br/>as untrusted data"]
+    D --> P["Paper added to the graph<br/>with its Semantic Scholar id"]
+    P --> E["Authors and every entity with a role:<br/>datasets, models, methods, tools, concepts"]
+    E --> F["graph.py add, with its first link<br/>section as source, verified or inferred"]
+    F -->|"no match"| G["Added as new, already linked"]
+    F -->|"same name or id"| H["Existing entity reused<br/>new name saved as an alias"]
+    F -->|"possible duplicate, exit 3"| I{"Same thing?"}
+    I -->|"yes"| H
+    I -->|"no"| J["Added with --distinct"]
+    I -->|"can't tell"| K["Claude asks you"]
+    K --> H
+    K --> J
+    H --> L["graph.py link<br/>refused if the relation can't join the two types"]
+    G --> M["graph.py standing<br/>citation counts and links from Semantic Scholar"]
+    J --> M
+    L --> M
+    M --> V["graph.py validate<br/>no entity without links, no paper without authors"]
+    V --> N["graph.py dupes<br/>merge, or mark as distinct"]
+    N --> O["Short report: what was added,<br/>linked, and decided"]
+```
+
 - **`add` saves a paper and its authors** with their Semantic Scholar ids, and adds `authored-by` links and any citation links to papers you already have.
 - **`read` extracts the rest, immediately,** without waiting for you to ask: every dataset, model, method, tool, and concept with a role in the paper, including the baselines it compares against and the models it runs or uses as judges, and the paper's authors if `add` didn't save them. It links each one to an existing entity when there is one, and adds a new entity when there isn't.
 - **Citation links come from Semantic Scholar.** One batch request fetches the reference lists of many papers, and a `cites` link is added from each paper to every paper it cites that is also in your graph. These are marked `verified`. A link joins two papers only if both are already in the graph, so the links grow with it. The `recap` skill repeats the request for papers that were last checked more than 30 days ago, and that picks up links to papers added since.
