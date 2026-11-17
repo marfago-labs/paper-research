@@ -1,6 +1,6 @@
 # Development and CI tools only. The plugin itself has no runtime dependencies.
 # After changing this file: uv pip compile requirements-dev.in --universal --generate-hashes --python-version 3.12 -o requirements-dev.txt
-ruff==0.17.4
+ruff==0.17.5
 mypy==2.4.1
 bandit==1.9.4
 complexipy==8.3.0
