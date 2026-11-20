@@ -1,8 +1,13 @@
 """Offline tests for run_mutation.py. Run: python tools/test_run_mutation.py"""
 
 import contextlib
+import io
+import json
 import socket
+import subprocess
+import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
 
 import run_mutation
@@ -66,6 +71,98 @@ class Workers(unittest.TestCase):
             self.assertEqual(ports, [])
 
 
+class Fingerprint(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+        for folder in ("mutation", "tools", "s", "dep/sub", ".github/workflows"):
+            (self.root / folder).mkdir(parents=True)
+        run_mutation.run(["git", "init", "-q"], self.root)
+        self.write(
+            ".github/workflows/mutation.yml", b'- {module: m, limit: 0, paths: "s dep"}\n- {module: o, paths: "x"}\n'
+        )
+        self.write("mutation/m.toml", b"[cosmic-ray]\n")
+        self.write("tools/run_tests.py", b"run\n")
+        self.write("s/m.py", b"a = 1\n")
+        self.write("dep/sub/helper.py", b"b = 2\n")
+        self.write("other.py", b"c = 3\n")
+
+    def write(self, name, data):
+        (self.root / name).write_bytes(data)
+        run_mutation.run(["git", "add", "-f", name], self.root)
+
+    def hash(self):
+        return run_mutation.fingerprint(self.root, "m")
+
+    def test_the_paths_the_workflow_lists_are_what_it_depends_on(self):
+        self.assertEqual(run_mutation.dependencies(self.root, "m"), ["s", "dep"])
+
+    def test_the_configuration_the_test_runner_and_every_listed_file_each_change_the_hash(self):
+        before = self.hash()
+        for name in ("mutation/m.toml", "tools/run_tests.py", "s/m.py", "dep/sub/helper.py"):
+            original = (self.root / name).read_bytes()
+            self.write(name, original + b"# changed\n")
+            self.assertNotEqual(self.hash(), before, name)
+            self.write(name, original)
+        self.assertEqual(self.hash(), before)
+
+    def test_a_file_outside_those_paths_does_not(self):
+        before = self.hash()
+        self.write("other.py", b"changed\n")
+        self.assertEqual(self.hash(), before)
+
+    def test_a_file_git_does_not_track_does_not(self):
+        before = self.hash()
+        (self.root / "dep/scratch.py").write_bytes(b"x\n")
+        (self.root / "dep/.coverage").write_bytes(b"x\n")
+        (self.root / "dep/node_modules").mkdir()
+        (self.root / "dep/node_modules/pkg.js").write_bytes(b"x\n")
+        self.assertEqual(self.hash(), before)
+
+    def test_skill_instructions_are_not_read_by_a_test_and_do_not_count(self):
+        before = self.hash()
+        self.write("dep/SKILL.md", b"how Claude uses this\n")
+        self.write("s/SKILL.md", b"how Claude uses this\n")
+        self.assertEqual(self.hash(), before)
+
+    def test_a_file_listed_by_name_counts(self):
+        self.write(".github/workflows/mutation.yml", b'- {module: m, paths: "other.py"}\n')
+        before = self.hash()
+        self.write("other.py", b"changed\n")
+        self.assertNotEqual(self.hash(), before)
+
+    def test_line_endings_do_not_change_the_hash(self):
+        before = self.hash()
+        self.write("s/m.py", b"a = 1\r\n")
+        self.assertEqual(self.hash(), before)
+
+    def test_a_tracked_file_deleted_before_the_commit_changes_the_hash_instead_of_failing(self):
+        before = self.hash()
+        (self.root / "dep/sub/helper.py").unlink()
+        self.assertNotEqual(self.hash(), before)
+
+    def test_a_missing_git_is_reported_with_what_to_do(self):
+        with mock.patch.object(run_mutation, "run", side_effect=FileNotFoundError("git")):
+            with self.assertRaisesRegex(SystemExit, "install git, and trust the repository"):
+                self.hash()
+
+    def test_a_repository_git_refuses_is_reported_the_same_way(self):
+        refused = subprocess.CalledProcessError(128, "git", stderr="detected dubious ownership")
+        with mock.patch.object(run_mutation, "run", side_effect=refused):
+            with self.assertRaisesRegex(SystemExit, "safe.directory"):
+                self.hash()
+
+    def test_the_hash_is_taken_before_any_mutant_runs(self):
+        with (
+            mock.patch.object(run_mutation, "fingerprint", side_effect=SystemExit("no git")),
+            mock.patch.object(run_mutation.shutil, "copytree") as copied,
+            self.assertRaisesRegex(SystemExit, "no git"),
+        ):
+            run_mutation.main(["init"])
+        copied.assert_not_called()
+
+
 class Limit(unittest.TestCase):
     def test_a_limit_of_zero_fails_on_any_survivor(self):
         # cr-rate --fail-over 0 let 4.09% through, so the limit is compared here.
@@ -76,6 +173,42 @@ class Limit(unittest.TestCase):
     def test_a_rate_at_the_limit_passes(self):
         self.assertTrue(run_mutation.within_limit("5.00", 5.0))
         self.assertFalse(run_mutation.within_limit("5.01", 5.0))
+
+
+REPORT = "total jobs: 367\nsurviving mutants: 2 (0.54%)\n"
+
+
+class Record(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+
+    def test_the_counts_of_the_run_are_kept(self):
+        run_mutation.record(self.root, "init", REPORT, "2026-11-20", "0123abcd")
+        kept = json.loads((self.root / "mutation/results/init.json").read_text())
+        self.assertEqual(
+            kept, {"module": "init", "total": 367, "survivors": 2, "date": "2026-11-20", "hash": "0123abcd"}
+        )
+
+    def test_the_badge_adds_up_every_module_that_has_run(self):
+        clean = "total jobs: {}\nsurviving mutants: 0 (0.00%)\n"
+        run_mutation.record(self.root, "init", clean.format(10), "2026-11-20", "a")
+        run_mutation.record(self.root, "graph", clean.format(20), "2026-11-18", "b")
+        badge = json.loads((self.root / "mutation/badge.json").read_text())
+        self.assertEqual(badge["message"], "0 survivors, 2 modules, 2026-11-18")
+        self.assertEqual(badge["color"], "brightgreen")
+
+    def test_a_repository_that_cannot_be_written_does_not_fail_the_run(self):
+        (self.root / "mutation").write_text("a file where the folder should be", encoding="utf-8")
+        with contextlib.redirect_stderr(io.StringIO()) as warned:
+            run_mutation.record(self.root, "init", REPORT, "2026-11-20", "a")
+        self.assertIn("the result of init was not kept", warned.getvalue())
+
+    def test_a_report_without_the_counts_is_refused(self):
+        for report in ("nothing here", "total jobs: 3\n"):
+            with self.assertRaisesRegex(SystemExit, "did not print the number of mutants"):
+                run_mutation.record(self.root, "init", report, "2026-11-20", "a")
 
 
 if __name__ == "__main__":

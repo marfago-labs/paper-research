@@ -1,11 +1,10 @@
 name: Mutation tests
 
 # Mutation testing changes the code in small ways and checks that a test notices each change. It takes a
-# long time (about 35 minutes for the graph script), so it runs weekly and on request, not on every push.
+# long time (about 35 minutes for the graph script), so it is disabled in this repository's settings and has no
+# schedule: it runs locally, and this file holds the limits and the paths that tools/run_mutation.py hashes.
 # A module whose code, tests, and tooling haven't changed since it last passed is skipped.
 on:
-  schedule:
-    - cron: "17 3 * * 1"
   workflow_dispatch:
     inputs:
       force:
@@ -36,11 +35,11 @@ jobs:
           # Survival limits in percent. Every module is held at 0, so any surviving mutant fails the run.
           # They are a ratchet: never raise them.
           # paths: everything besides the shared tooling that can change the module's result.
-          - {module: init, limit: 0, paths: "skills/init skills/debug .claude-plugin/plugin.json"}
+          - {module: init, limit: 0, paths: "skills/init skills/debug"}
           - {module: debuglog, limit: 0, paths: "skills/debug"}
           - {module: recap, limit: 0, paths: "skills/recap skills/graph/scripts/graph.py skills/debug"}
           - {module: arxiv, limit: 0, paths: "skills/arxiv/scripts skills/debug"}
-          - {module: s2, limit: 0, paths: "skills/scholar/scripts skills/debug"}
+          - {module: s2, limit: 0, paths: "skills/scholar/scripts skills/arxiv/scripts skills/debug"}
           - {module: graph, limit: 0, paths: "skills/graph/scripts skills/debug"}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

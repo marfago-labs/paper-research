@@ -1,10 +1,13 @@
 # paper-research
 
 [![CI](https://github.com/marfago-labs/paper-research/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/marfago-labs/paper-research/actions/workflows/ci.yml)
-[![Coverage 100%](https://img.shields.io/badge/coverage-100%25-brightgreen)](CONTRIBUTING.md)
+[![Unit coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fmarfago-labs%2Fpaper-research%2Fbadges%2Fcoverage.json)](CONTRIBUTING.md)
+[![Scenarios](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fmarfago-labs%2Fpaper-research%2Fbadges%2Fscenarios.json)](features)
+[![Mutation](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fmarfago-labs%2Fpaper-research%2Fmain%2Fmutation%2Fbadge.json)](CONTRIBUTING.md)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org)
 [![Dependencies: none](https://img.shields.io/badge/dependencies-none-brightgreen)](#why-its-different)
-[![Licence: Apache 2.0](https://img.shields.io/badge/licence-Apache%202.0-blue)](LICENSE)
+[![Licence](https://img.shields.io/github/license/marfago-labs/paper-research?label=licence)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/marfago-labs/paper-research)](https://github.com/marfago-labs/paper-research/releases)
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-d97757)](https://docs.claude.com/en/docs/claude-code/plugins)
 
 A Claude Code plugin for finding, reading, and discussing research papers with Claude, and keeping what matters: facts you pin, insights tied to their source papers, a knowledge graph of what papers use and build on, and a recap page you open in a browser.
