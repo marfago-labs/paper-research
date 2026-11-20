@@ -6,6 +6,12 @@ All notable changes to the plugin are listed here, newest first. The format foll
 
 ## [Unreleased]
 
+### Added
+
+- A local telemetry stack for debugging: `telemetry/docker-compose.yml` runs Grafana with an OpenTelemetry
+  collector on `127.0.0.1`, and [Telemetry](docs/telemetry.md) shows how to send Claude Code's events, metrics, and
+  traces to it, and what to look for.
+
 ### Changed
 
 - Setting up a workspace is one step that Claude runs: `/paper-research:init` creates the starter files in
