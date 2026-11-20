@@ -6,9 +6,16 @@ This is optional and only for debugging. The plugin works the same without it.
 
 ## Start the stack
 
-You need Docker, and the plugin's `telemetry/` folder: the Compose file and a dashboard. Copy the folder to a place of its own. Get it from the repository, or from the plugin as Claude Code installed it, in `~/.claude/plugins/cache/<marketplace>/paper-research/<version>/telemetry/`. Copy it rather than run it there, because that folder changes with every update of the plugin.
+You need Docker, and the plugin's whole `telemetry/` folder: the Compose file, `dashboards.yaml`, and the three dashboards in `dashboards/`. The Compose file alone starts a stack without them. Fetch only that folder from the repository:
 
-Then, in the copy:
+```bash
+git clone --depth 1 --filter=blob:none --sparse https://github.com/marfago-labs/paper-research
+cd paper-research && git sparse-checkout set telemetry && cd telemetry
+```
+
+Or copy it from the plugin as Claude Code installed it, in `~/.claude/plugins/cache/<marketplace>/paper-research/<version>/telemetry/`, to a place of its own. Copy it rather than run it there, because that folder changes with every update of the plugin.
+
+Then, in the `telemetry` folder:
 
 ```bash
 docker compose up -d

@@ -15,7 +15,8 @@ All notable changes to the plugin are listed here, newest first. The format foll
   this machine. Events hold names, hosts, statuses, and timings, never notes or search text.
 - A local telemetry stack for debugging: `telemetry/docker-compose.yml` runs Grafana with an OpenTelemetry
   collector on `127.0.0.1`, and [Telemetry](docs/telemetry.md) shows how to send Claude Code's events, metrics, and
-  traces to it, and what to look for. It loads a Grafana dashboard of tool calls, hooks, skills, and model calls.
+  traces to it, and what to look for. It loads three Grafana dashboards: usage and security, service details, and
+  the plugin's debug log.
 
 ### Changed
 
