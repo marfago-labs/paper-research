@@ -75,7 +75,7 @@ Open Grafana, then **Explore**.
 - **Traces (Tempo):** search for `claude_code.interaction`. Each prompt is one trace, with its model calls, tool calls, and hooks as child spans, and the time spent waiting for your approval.
 - **Metrics (Prometheus):** search for `claude_code_`, such as session, token, and cost counts.
 
-Events arrive within about five seconds. Metrics are sent once a minute by default.
+Events arrive within about five seconds. Metrics are sent once a minute by default. Events are stored by their `service_name`, with each attribute attached to the event, so filter with `{service_name="claude-code"} | event_name="tool_result"`.
 
 The full list of events and attributes is in Claude Code's [monitoring documentation](https://code.claude.com/docs/en/monitoring-usage).
 
