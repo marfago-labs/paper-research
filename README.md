@@ -92,6 +92,7 @@ There is no hidden model. The personalization is in files you control, and it is
 | [Security](docs/security.md) | Know what protects you from a malicious paper, and what doesn't |
 | [Command reference](docs/reference.md) | Run the scripts yourself, with every option and exit code |
 | [Troubleshooting](docs/troubleshooting.md) | Fix a message you didn't expect |
+| [Telemetry](docs/telemetry.md) | Watch every tool call, hook, and skill of a session in a local Grafana |
 | [Contributing](CONTRIBUTING.md) | Change the plugin, and run its tests |
 
 ## Develop

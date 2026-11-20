@@ -1,0 +1,17 @@
+# A local telemetry stack for watching what Claude Code and the plugin do. See docs/telemetry.md.
+# Copy this file into a folder of its own and run `docker compose up -d` there.
+# One container: an OpenTelemetry collector, Prometheus (metrics), Loki (logs and events), Tempo (traces), and Grafana.
+# Every port is bound to 127.0.0.1, so nothing outside this machine can send data to it or read it.
+services:
+  lgtm:
+    image: grafana/otel-lgtm:0.41.0
+    ports:
+      - "127.0.0.1:3000:3000" # Grafana
+      - "127.0.0.1:4317:4317" # OTLP over gRPC
+      - "127.0.0.1:4318:4318" # OTLP over HTTP
+    volumes:
+      - lgtm-data:/data
+    restart: unless-stopped
+
+volumes:
+  lgtm-data:
