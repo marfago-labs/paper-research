@@ -578,6 +578,49 @@ class StopHook(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertEqual(done.stdout.count('"decision"'), 1)
 
+    def debug_events(self):
+        path = self.research / ".debug.log"
+        lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+        return [{key: value for key, value in json.loads(line).items() if key != "time"} for line in lines]
+
+    def stop_event(self, decision, reason):
+        return {"source": "recap", "event": "stop_hook", "decision": decision, "reason": reason}
+
+    def test_every_decision_is_recorded_with_its_reason_while_debug_is_on(self):
+        self.changed_pins()
+        (self.research / ".debug").write_text("on", encoding="utf-8")
+        self.blocked()
+        self.page(newer_than=[self.research / "pins.md"])
+        self.blocked()
+        self.blocked({"cwd": str(self.root), "stop_hook_active": True})
+        (self.research / "pins.md").write_bytes(b"\xff\xfe\x00 not utf-8 \x80\x81")
+        (self.research / "recap" / "recap-data.js").unlink()
+        self.blocked()
+        (self.research / "user-facts.md").unlink()
+        self.blocked()
+        self.assertEqual(
+            self.debug_events(),
+            [
+                self.stop_event("block", "the recap page is out of date"),
+                self.stop_event("pass", "the recap page is up to date"),
+                self.stop_event("pass", "already stopped once this turn"),
+                self.stop_event("pass", "a research file can't be read"),
+                self.stop_event("pass", "not a paper workspace"),
+            ],
+        )
+
+    def test_nothing_is_recorded_while_debug_is_off(self):
+        self.changed_pins()
+        self.blocked()
+        self.assertEqual(self.debug_events(), [])
+
+    def test_an_event_that_is_not_an_object_records_nothing(self):
+        self.changed_pins()
+        (self.research / ".debug").write_text("on", encoding="utf-8")
+        for event in ("[1]", "7", "not json"):
+            self.assertEqual(self.hook(event), (0, ""))
+        self.assertEqual(self.debug_events(), [])
+
 
 class Cli(unittest.TestCase):
     def run_main(self, argv):

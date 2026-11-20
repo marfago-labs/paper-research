@@ -20,8 +20,12 @@ import urllib.request
 from pathlib import Path
 
 # The arxiv skill's script cleans every output of invisible characters. This one uses it, so there is one copy.
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "arxiv" / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "arxiv" / "scripts"))  # pragma: no mutate
 from arxiv import write_output  # noqa: E402  (after the path is set)
+
+# The debug skill's helper records events while debugging is on.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "debug" / "scripts"))  # pragma: no mutate
+import debuglog  # noqa: E402  (after the path is set)
 
 API_ROOT = "https://api.semanticscholar.org"
 GRAPH = "/graph/v1"
@@ -234,8 +238,10 @@ def build_request(method, path, params, body):
 def read_json(req, path, started):
     """One request, with the time left before the deadline and the size cap, decoded from JSON."""
     remaining = DEADLINE - (time.monotonic() - started)
+    began = time.monotonic()
     with OPENER.open(req, timeout=max(1, min(TIMEOUT, remaining))) as response:
         body = response.read(MAX_BYTES + 1)
+    debuglog.fetched("s2", API_ROOT + path, 200, began)
     if len(body) > MAX_BYTES:
         raise ApiError(f"response from {path} is larger than {MAX_BYTES} bytes")
     try:
@@ -247,6 +253,7 @@ def read_json(req, path, started):
 def delay_before_retry(err, path, attempt, retry_rate_limit):
     """How long to wait before retrying after err. Raises if it shouldn't be retried, or if it is a rate limit
     and retry_rate_limit is False."""
+    debuglog.fetch_failed("s2", API_ROOT + path, err)
     # pragma: no mutate below: attempt never passes MAX_ATTEMPTS - 1, small ints are shared objects so `is`
     # agrees, and 5 ^ 1 is 4.
     last_attempt = attempt == MAX_ATTEMPTS - 1  # pragma: no mutate
@@ -519,6 +526,7 @@ def main(argv=None):
     sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
     args = build_parser().parse_args(argv)
+    debuglog.note(command=args.command)
     try:
         out = checked_out(args.out)
         result = args.func(args)
@@ -534,4 +542,4 @@ def main(argv=None):
 
 
 if __name__ == "__main__":  # pragma: no mutate (`is` and `<=` agree for the names a module can have)
-    sys.exit(main())
+    sys.exit(debuglog.run("s2", main, sys.argv[1:]))

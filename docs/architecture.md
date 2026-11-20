@@ -10,7 +10,7 @@ flowchart LR
     end
 
     subgraph plugin["Plugin"]
-        skills["Skills<br/>add, next, read, pin, insight,<br/>graph, recap, scholar, arxiv, init"]
+        skills["Skills<br/>add, next, read, pin, insight,<br/>graph, recap, scholar, arxiv, init, debug"]
         hooks["Hooks<br/>hooks/hooks.json<br/>SessionStart, PreToolUse, Stop"]
         subgraph scripts["Scripts (Python standard library)"]
             arxivpy["arxiv.py"]
@@ -64,6 +64,7 @@ flowchart LR
 | **`recap.py`** | Builds the recap page's data from your research files and the graph. With `--stop-hook`, decides whether Claude should refresh the page before ending a turn. | `research/recap/`. Nothing with `--stop-hook`. |
 | **`init.py`** | Sets up a workspace. With `--hook`, gives Claude the rules and lessons when a session starts, and decides whether an edit or a fetch needs your approval. | The starter files in `research/`, and `.gitignore` entries. Nothing with `--hook`. |
 | **Hooks** (`hooks/hooks.json`) | Two `SessionStart` hooks print the rules and `research/lessons.md` into Claude's context. A `PreToolUse` hook asks you before an edit to `lessons.md` or `profile.md` and before a fetch from the paper sites. A `Stop` hook runs `recap.py --stop-hook` and stops Claude once if the recap is out of date. All act only in a workspace, and never fail a session. | Nothing. |
+| **`debuglog.py`** | Records what the scripts and hooks do, while `research/.debug` exists. Every other script imports it. Also turns the log on and off, and prints it. | `research/.debug.log`, at most 2 MB, then `.debug.log.1`. Nothing while the log is off. |
 | **Recap page** (`skills/recap/page/`) | A fixed page with all its rendering in `recap-lib.js`, and the graph drawn with a vendored copy of Cytoscape.js. It loads only files next to it, so it works offline. | Nothing. |
 
 ## Trust boundaries

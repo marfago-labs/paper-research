@@ -837,8 +837,10 @@ class CommandLine(unittest.TestCase):
         folder = Path(s2.__file__).resolve().parents[2] / "arxiv" / "scripts"
         self.assertIs(s2.write_output, arxiv.write_output)
         self.assertEqual(Path(arxiv.__file__).resolve().parent, folder)
-        # first on the path, so no other package called arxiv can stand in for the script
-        self.assertEqual(sys.path[0], str(folder))
+        # at the front of the path, behind only the plugin's own debug folder, so no other package called arxiv
+        # can stand in for the script
+        self.assertIn(str(folder), sys.path[:3])
+        self.assertEqual({sys.path[0], *sys.path[1:3]} - {str(folder)}, {str(folder.parents[1] / "debug" / "scripts")})
 
     def test_a_partly_failed_batch_prints_what_it_fetched_and_exits_with_1(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -1112,6 +1114,80 @@ class CommandLine(unittest.TestCase):
                 with self.assertRaises(SystemExit) as stopped:
                     runpy.run_path(s2.__file__, run_name="__main__")
         self.assertEqual(stopped.exception.code, 2)
+
+
+class DebugEvents(unittest.TestCase):
+    def setUp(self):
+        for patcher in (mock.patch.object(s2.time, "sleep"), mock.patch.object(s2, "pace")):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.root = Path(folder.name).resolve()
+        (self.root / "research").mkdir()
+        (self.root / "research" / ".debug").write_text("on", encoding="utf-8")
+        before = Path.cwd()
+        os.chdir(self.root)
+        self.addCleanup(os.chdir, before)
+
+    def events(self):
+        path = self.root / "research" / ".debug.log"
+        lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+        return [{key: value for key, value in json.loads(line).items() if key != "time"} for line in lines]
+
+    def test_a_request_is_recorded_without_its_query_or_key(self):
+        with mock.patch.dict(os.environ, {"SEMANTIC_SCHOLAR_API_KEY": "secret-key"}):
+            with mock.patch.object(s2.OPENER, "open", return_value=fake_response({})):
+                s2.request("GET", "/graph/v1/paper/search", {"query": "private topic"})
+        (event,) = self.events()
+        self.assertEqual(
+            {key: event[key] for key in ("source", "event", "host", "path", "status")},
+            {
+                "source": "s2",
+                "event": "http",
+                "host": "api.semanticscholar.org",
+                "path": "/graph/v1/paper/search",
+                "status": 200,
+            },
+        )
+        self.assertIn("duration_ms", event)
+        self.assertNotIn("private", json.dumps(event))
+        self.assertNotIn("secret-key", json.dumps(event))
+
+    def test_each_failed_attempt_is_recorded_with_its_status(self):
+        responses = [http_error(429), urllib.error.URLError("down"), http_error(503), fake_response({})]
+        with mock.patch.object(s2.OPENER, "open", side_effect=responses):
+            s2.request("GET", "/x")
+        self.assertEqual([event["status"] for event in self.events()], [429, "network error", 503, 200])
+
+    def test_a_refused_search_is_recorded_as_429(self):
+        with mock.patch.object(s2.OPENER, "open", side_effect=[http_error(429)]):
+            with self.assertRaises(s2.ApiError):
+                s2.request("GET", "/x", retry_rate_limit=False)
+        self.assertEqual([event["status"] for event in self.events()], [429])
+
+    def test_nothing_is_recorded_while_debug_is_off(self):
+        (self.root / "research" / ".debug").unlink()
+        with mock.patch.object(s2.OPENER, "open", return_value=fake_response({})):
+            s2.request("GET", "/x")
+        self.assertEqual(self.events(), [])
+
+    def test_a_command_records_its_name_and_exit_code(self):
+        argv = ["s2.py", "paper", "bad id"]
+        with (
+            mock.patch.object(sys, "argv", argv),
+            contextlib.redirect_stdout(io.TextIOWrapper(io.BytesIO(), encoding="utf-8")),
+            contextlib.redirect_stderr(io.TextIOWrapper(io.BytesIO(), encoding="utf-8")),
+        ):
+            with self.assertRaises(SystemExit) as stopped:
+                runpy.run_path(s2.__file__, run_name="__main__")
+        self.assertEqual(stopped.exception.code, 2)
+        (event,) = self.events()
+        self.assertEqual(
+            {key: event[key] for key in ("source", "event", "command", "exit")},
+            {"source": "s2", "event": "command", "command": "paper", "exit": 2},
+        )
+        self.assertIn("duration_ms", event)
 
 
 if __name__ == "__main__":

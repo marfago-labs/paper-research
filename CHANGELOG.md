@@ -8,9 +8,15 @@ All notable changes to the plugin are listed here, newest first. The format foll
 
 ### Added
 
+- A `debug` skill and a debug log for finding out what the plugin did. `debuglog.py on` starts it and `off` stops it:
+  it is off by default, and never turns itself off. While it is on, every script and hook records its commands,
+  requests to arXiv and Semantic Scholar, and approval decisions in `research/.debug.log` (at most 4 MB, ignored by
+  git), and sends the same events to a local OpenTelemetry collector when `OTEL_EXPORTER_OTLP_ENDPOINT` points at
+  this machine. Events hold names, hosts, statuses, and timings, never notes or search text.
 - A local telemetry stack for debugging: `telemetry/docker-compose.yml` runs Grafana with an OpenTelemetry
   collector on `127.0.0.1`, and [Telemetry](docs/telemetry.md) shows how to send Claude Code's events, metrics, and
-  traces to it, and what to look for.
+  traces to it, and what to look for. It loads three Grafana dashboards: usage and security, service details, and
+  the plugin's debug log.
 
 ### Changed
 

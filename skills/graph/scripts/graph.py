@@ -26,6 +26,10 @@ import unicodedata
 from collections import Counter, defaultdict, deque
 from pathlib import Path
 
+# The debug skill's helper records events while debugging is on.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "debug" / "scripts"))  # pragma: no mutate
+import debuglog  # noqa: E402  (after the path is set)
+
 DEFAULT_DATA_DIR = Path("research") / "graph"
 
 ENTITY_TYPES = {
@@ -1598,6 +1602,7 @@ def main(argv=None):
     sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
     args = build_parser().parse_args(argv)
+    debuglog.note(command=args.command)
     try:
         if not args.data.is_dir():
             raise GraphError(f"graph folder not found: {args.data}")
@@ -1609,4 +1614,4 @@ def main(argv=None):
 
 
 if __name__ == "__main__":  # pragma: no mutate (`is` and `<=` agree for the names a module can have)
-    sys.exit(main())
+    sys.exit(debuglog.run("graph", main, sys.argv[1:]))

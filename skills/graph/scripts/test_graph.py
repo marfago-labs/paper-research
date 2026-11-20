@@ -2248,5 +2248,50 @@ class FirstLink(CommandLineBase):
         self.assertEqual(graph.unlinked(ENTITIES, [relation("paper:a", "proposes", "concept:d")])[0]["id"], "tool:b")
 
 
+class DebugEvents(CommandLineBase):
+    def setUp(self):
+        super().setUp()
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.root = Path(folder.name).resolve()
+        (self.root / "research").mkdir()
+        (self.root / "research" / ".debug").write_text("on", encoding="utf-8")
+        before = Path.cwd()
+        os.chdir(self.root)
+        self.addCleanup(os.chdir, before)
+
+    def events(self):
+        path = self.root / "research" / ".debug.log"
+        lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+        return [{key: value for key, value in json.loads(line).items() if key != "time"} for line in lines]
+
+    def run_script(self, *argv):
+        with mock.patch.object(sys, "argv", ["graph.py", *argv]):
+            with contextlib.redirect_stdout(io.TextIOWrapper(io.BytesIO(), encoding="utf-8")):
+                with contextlib.redirect_stderr(io.TextIOWrapper(io.BytesIO(), encoding="utf-8")):
+                    with self.assertRaises(SystemExit) as stopped:
+                        runpy.run_path(graph.__file__, run_name="__main__")
+        return stopped.exception.code
+
+    def test_a_command_records_its_name_and_exit_code(self):
+        self.assertEqual(self.run_script("--data", str(self.folder), "stats"), 0)
+        (event,) = self.events()
+        self.assertEqual(
+            {key: event[key] for key in ("source", "event", "command", "exit")},
+            {"source": "graph", "event": "command", "command": "stats", "exit": 0},
+        )
+        self.assertIn("duration_ms", event)
+
+    def test_a_failed_command_records_its_exit_code(self):
+        self.assertEqual(self.run_script("--data", str(self.folder / "missing"), "validate"), 1)
+        (event,) = self.events()
+        self.assertEqual((event["command"], event["exit"]), ("validate", 1))
+
+    def test_nothing_is_recorded_while_debug_is_off(self):
+        (self.root / "research" / ".debug").unlink()
+        self.run_script("--data", str(self.folder), "stats")
+        self.assertEqual(self.events(), [])
+
+
 if __name__ == "__main__":
     unittest.main()

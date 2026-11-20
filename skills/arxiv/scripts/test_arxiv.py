@@ -1388,5 +1388,78 @@ class Cli(unittest.TestCase):
         self.assertEqual(stopped.exception.code, 2)
 
 
+class DebugEvents(unittest.TestCase):
+    def setUp(self):
+        for patcher in (mock.patch.object(arxiv.time, "sleep"), mock.patch.object(arxiv, "pace")):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.root = Path(folder.name).resolve()
+        (self.root / "research").mkdir()
+        (self.root / "research" / ".debug").write_text("on", encoding="utf-8")
+        before = Path.cwd()
+        os.chdir(self.root)
+        self.addCleanup(os.chdir, before)
+
+    def events(self):
+        path = self.root / "research" / ".debug.log"
+        lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+        return [{key: value for key, value in json.loads(line).items() if key != "time"} for line in lines]
+
+    def test_a_request_is_recorded_without_its_query(self):
+        opener = mock.Mock()
+        opener.open.return_value = response("body")
+        with mock.patch.object(arxiv, "OPENER", opener):
+            arxiv.get("https://export.arxiv.org/api/query?search_query=private+topic")
+        (event,) = self.events()
+        self.assertEqual(
+            {key: event[key] for key in ("source", "event", "host", "path", "status")},
+            {"source": "arxiv", "event": "http", "host": "export.arxiv.org", "path": "/api/query", "status": 200},
+        )
+        self.assertIn("duration_ms", event)
+        self.assertNotIn("private", json.dumps(event))
+
+    def test_each_failed_attempt_is_recorded_with_its_status(self):
+        opener = mock.Mock()
+        opener.open.side_effect = [http_error(503), urllib.error.URLError("down"), http_error(429), response("ok")]
+        with mock.patch.object(arxiv, "OPENER", opener):
+            arxiv.get("https://arxiv.org/html/2401.00001")
+        self.assertEqual([event["status"] for event in self.events()], [503, "network error", 429, 200])
+        self.assertEqual({event["path"] for event in self.events()}, {"/html/2401.00001"})
+
+    def test_a_missing_page_is_recorded_as_404(self):
+        opener = mock.Mock()
+        opener.open.side_effect = http_error(404)
+        with mock.patch.object(arxiv, "OPENER", opener), self.assertRaises(arxiv.NotFound):
+            arxiv.get("https://arxiv.org/html/2401.00001")
+        self.assertEqual([event["status"] for event in self.events()], [404])
+
+    def test_nothing_is_recorded_while_debug_is_off(self):
+        (self.root / "research" / ".debug").unlink()
+        opener = mock.Mock()
+        opener.open.return_value = response("body")
+        with mock.patch.object(arxiv, "OPENER", opener):
+            arxiv.get("https://arxiv.org/x")
+        self.assertEqual(self.events(), [])
+
+    def test_a_command_records_its_name_and_exit_code(self):
+        argv = ["arxiv.py", "paper", "bad id"]
+        with (
+            mock.patch.object(sys, "argv", argv),
+            contextlib.redirect_stdout(io.TextIOWrapper(io.BytesIO(), encoding="utf-8")),
+            contextlib.redirect_stderr(io.TextIOWrapper(io.BytesIO(), encoding="utf-8")),
+        ):
+            with self.assertRaises(SystemExit) as stopped:
+                runpy.run_path(arxiv.__file__, run_name="__main__")
+        self.assertEqual(stopped.exception.code, 2)
+        (event,) = self.events()
+        self.assertEqual(
+            {key: event[key] for key in ("source", "event", "command", "exit")},
+            {"source": "arxiv", "event": "command", "command": "paper", "exit": 2},
+        )
+        self.assertIn("duration_ms", event)
+
+
 if __name__ == "__main__":
     unittest.main()

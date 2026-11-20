@@ -1,0 +1,767 @@
+{
+  "uid": "paper-research-service",
+  "title": "paper-research: service details",
+  "tags": [
+    "paper-research"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 50,
+      "type": "text",
+      "title": "",
+      "transparent": true,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 3
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**How to read this.** Claude Code sends one event per prompt, model call, tool call, hook, and so on. Use the time picker above. Each row has its own help, and every panel queries on its own, so an empty panel doesn't affect the others. Hover the **i** in a panel's corner for what it counts. An empty panel usually means that event hasn't happened in the range. The links above open the other two dashboards."
+      }
+    },
+    {
+      "id": 51,
+      "type": "row",
+      "title": "Model calls",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 3,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 52,
+      "type": "text",
+      "title": "",
+      "transparent": true,
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 24,
+        "h": 3
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**Cache hit rate** is the share of input served from the prompt cache. A drop after a change to the plugin's rules or lessons means the change broke the cache and costs more. **Latency** is the time to the full answer; **first token** is the wait before it starts."
+      }
+    },
+    {
+      "id": 53,
+      "type": "timeseries",
+      "title": "Model calls by model",
+      "description": "Model calls per interval, by model.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 7,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (model) (count_over_time({service_name=\"claude-code\"} | event_name=\"api_request\" | query_source=~\"$query_source\" [$__interval]))",
+          "legendFormat": "{{model}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data in this time range"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 54,
+      "type": "timeseries",
+      "title": "Model calls by source",
+      "description": "sdk is the main conversation. The others run in the background: titles, suggestions, compaction.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 7,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (query_source) (count_over_time({service_name=\"claude-code\"} | event_name=\"api_request\" [$__interval]))",
+          "legendFormat": "{{query_source}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data in this time range"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 55,
+      "type": "timeseries",
+      "title": "API errors",
+      "description": "Failed model calls, such as 429 and 5xx responses.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 7,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (model, status_code) (count_over_time({service_name=\"claude-code\"} | event_name=\"api_error\" [$__interval]))",
+          "legendFormat": "{{model}} {{status_code}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data in this time range"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 56,
+      "type": "timeseries",
+      "title": "Tokens by type",
+      "description": "Tokens per interval. Cache reads are cheap; cache writes and output are what cost the most.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 15,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum(sum_over_time({service_name=\"claude-code\"} | event_name=\"api_request\" | unwrap input_tokens [$__interval]))",
+          "legendFormat": "input",
+          "refId": "A",
+          "queryType": "range"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum(sum_over_time({service_name=\"claude-code\"} | event_name=\"api_request\" | unwrap output_tokens [$__interval]))",
+          "legendFormat": "output",
+          "refId": "B",
+          "queryType": "range"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum(sum_over_time({service_name=\"claude-code\"} | event_name=\"api_request\" | unwrap cache_read_tokens [$__interval]))",
+          "legendFormat": "cache read",
+          "refId": "C",
+          "queryType": "range"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum(sum_over_time({service_name=\"claude-code\"} | event_name=\"api_request\" | unwrap cache_creation_tokens [$__interval]))",
+          "legendFormat": "cache write",
+          "refId": "D",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data in this time range"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 57,
+      "type": "timeseries",
+      "title": "Cache hit rate",
+      "description": "Cached input tokens divided by all input tokens, per interval.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 15,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum(sum_over_time({service_name=\"claude-code\"} | event_name=\"api_request\" | unwrap cache_read_tokens [$__interval])) / (sum(sum_over_time({service_name=\"claude-code\"} | event_name=\"api_request\" | unwrap cache_read_tokens [$__interval])) + sum(sum_over_time({service_name=\"claude-code\"} | event_name=\"api_request\" | unwrap cache_creation_tokens [$__interval])) + sum(sum_over_time({service_name=\"claude-code\"} | event_name=\"api_request\" | unwrap input_tokens [$__interval])))",
+          "legendFormat": "hit rate",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data in this time range",
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 58,
+      "type": "timeseries",
+      "title": "Latency, p50 and p95 (ms)",
+      "description": "Time from request to the end of the answer.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 23,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "quantile_over_time(0.5, {service_name=\"claude-code\"} | event_name=\"api_request\" | unwrap duration_ms [$__interval]) by (model)",
+          "legendFormat": "p50 {{model}}",
+          "refId": "A",
+          "queryType": "range"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "quantile_over_time(0.95, {service_name=\"claude-code\"} | event_name=\"api_request\" | unwrap duration_ms [$__interval]) by (model)",
+          "legendFormat": "p95 {{model}}",
+          "refId": "B",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data in this time range",
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 59,
+      "type": "timeseries",
+      "title": "Time to first token, p95 (ms)",
+      "description": "How long the slowest calls waited before the answer started.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 23,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "quantile_over_time(0.95, {service_name=\"claude-code\"} | event_name=\"api_request\" | unwrap ttft_ms [$__interval]) by (model)",
+          "legendFormat": "{{model}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data in this time range",
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 60,
+      "type": "row",
+      "title": "Tools",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 31,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 61,
+      "type": "text",
+      "title": "",
+      "transparent": true,
+      "gridPos": {
+        "x": 0,
+        "y": 32,
+        "w": 24,
+        "h": 3
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "Every Read, Edit, Bash, WebFetch, MCP, and skill call, as it finished."
+      }
+    },
+    {
+      "id": 62,
+      "type": "timeseries",
+      "title": "Tool calls by tool",
+      "description": "Finished tool calls per interval, by tool.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 35,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (tool_name) (count_over_time({service_name=\"claude-code\"} | event_name=\"tool_result\" [$__interval]))",
+          "legendFormat": "{{tool_name}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data in this time range"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 63,
+      "type": "timeseries",
+      "title": "Failed tool calls by tool",
+      "description": "Where tools fail. Rejected calls are not failures; they are on the security row.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 35,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (tool_name) (count_over_time({service_name=\"claude-code\"} | event_name=\"tool_result\" | success=\"false\" [$__interval]))",
+          "legendFormat": "{{tool_name}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data in this time range"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 64,
+      "type": "timeseries",
+      "title": "Tool time by tool (ms, average)",
+      "description": "Average time of a call to each tool.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 35,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "avg by (tool_name) (avg_over_time({service_name=\"claude-code\"} | event_name=\"tool_result\" | unwrap duration_ms [$__interval]))",
+          "legendFormat": "{{tool_name}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data in this time range",
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 65,
+      "type": "row",
+      "title": "Hooks",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 43,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 66,
+      "type": "text",
+      "title": "",
+      "transparent": true,
+      "gridPos": {
+        "x": 0,
+        "y": 44,
+        "w": 24,
+        "h": 3
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "Claude Code reports hooks by event, with the plugin's and your own merged, so they can't be told apart here. The plugin's are session start (rules, lessons), the guard before tools, and the recap check when Claude stops. **Hook time** is what they add to a session."
+      }
+    },
+    {
+      "id": 67,
+      "type": "timeseries",
+      "title": "Hook runs by hook",
+      "description": "Hook runs per interval, by hook event.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 47,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (hook_name) (count_over_time({service_name=\"claude-code\"} | event_name=\"hook_execution_complete\" [$__interval]))",
+          "legendFormat": "{{hook_name}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data in this time range"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 68,
+      "type": "timeseries",
+      "title": "Hook time by hook (ms, average)",
+      "description": "Average time the hooks of each event took.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 47,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "avg by (hook_name) (avg_over_time({service_name=\"claude-code\"} | event_name=\"hook_execution_complete\" | unwrap total_duration_ms [$__interval]))",
+          "legendFormat": "{{hook_name}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data in this time range",
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 69,
+      "type": "row",
+      "title": "Traces",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 55,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 70,
+      "type": "text",
+      "title": "",
+      "transparent": true,
+      "gridPos": {
+        "x": 0,
+        "y": 56,
+        "w": 24,
+        "h": 3
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "Claude Code's spans, stored in Tempo. Each row is one trace. Open **Explore**, pick **Tempo**, and paste a trace id to see its spans. Needs `OTEL_TRACES_EXPORTER=otlp` and `CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1`, then a restart of Claude Code. The `trace_id` in an event's attributes is the same id."
+      }
+    },
+    {
+      "id": 71,
+      "type": "table",
+      "title": "Recent traces",
+      "description": "The latest traces from Claude Code.",
+      "datasource": {
+        "type": "tempo",
+        "uid": "tempo"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 59,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "tempo",
+            "uid": "tempo"
+          },
+          "refId": "A",
+          "queryType": "traceql",
+          "limit": 20,
+          "tableType": "traces",
+          "query": "{resource.service.name=\"claude-code\"}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data in this time range",
+          "custom": {
+            "minWidth": 70
+          }
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 72,
+      "type": "row",
+      "title": "Events",
+      "collapsed": true,
+      "gridPos": {
+        "x": 0,
+        "y": 67,
+        "w": 24,
+        "h": 1
+      },
+      "panels": [
+        {
+          "id": 73,
+          "type": "text",
+          "title": "",
+          "transparent": true,
+          "gridPos": {
+            "x": 0,
+            "y": 68,
+            "w": 24,
+            "h": 3
+          },
+          "options": {
+            "mode": "markdown",
+            "content": "Latest Claude Code events. Collapsed so it loads only when you open it. Expand a line to see every attribute, such as `prompt_id`, `file_path`, or `trace_id`."
+          }
+        },
+        {
+          "id": 74,
+          "type": "logs",
+          "title": "Events",
+          "description": "Latest events. Expand one to see every attribute.",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 71,
+            "w": 24,
+            "h": 12
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "loki",
+                "uid": "loki"
+              },
+              "expr": "{service_name=\"claude-code\"} | event_name=~\"user_prompt|api_request|api_error|tool_result|tool_decision|hook_execution_complete|skill_activated|mcp_server_connection\"",
+              "legendFormat": "",
+              "refId": "A",
+              "queryType": "range"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "noValue": "No data in this time range"
+            },
+            "overrides": []
+          },
+          "options": {
+            "showTime": true,
+            "wrapLogMessage": true,
+            "sortOrder": "Descending"
+          }
+        }
+      ]
+    }
+  ],
+  "editable": true,
+  "links": [
+    {
+      "title": "paper-research: usage and security",
+      "type": "link",
+      "url": "/d/paper-research-claude-code",
+      "icon": "dashboard",
+      "targetBlank": false,
+      "keepTime": true,
+      "includeVars": false,
+      "tooltip": "Open paper-research: usage and security"
+    },
+    {
+      "title": "paper-research: plugin debug log",
+      "type": "link",
+      "url": "/d/paper-research-debug",
+      "icon": "dashboard",
+      "targetBlank": false,
+      "keepTime": true,
+      "includeVars": false,
+      "tooltip": "Open paper-research: plugin debug log"
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "query_source",
+        "label": "Model call source (regex)",
+        "type": "textbox",
+        "query": ".*",
+        "current": {
+          "text": ".*",
+          "value": ".*"
+        },
+        "options": [
+          {
+            "selected": true,
+            "text": ".*",
+            "value": ".*"
+          }
+        ]
+      }
+    ]
+  },
+  "description": "How Claude Code behaves: model calls, tools, hooks, traces, and the latest events."
+}

@@ -16,7 +16,7 @@ This workspace is where the user finds, reads, and discusses papers, and keeps w
 
 ### Skills
 
-`add` saves and triages links. `next` recommends what to read. `read` runs a discussion or skim and extracts the paper into the graph. `pin` saves a fact. `insight` logs a takeaway and connects it to its papers. `graph` changes and queries the knowledge graph. `recap` refreshes the recap page. `scholar` (Semantic Scholar) and `arxiv` are the clients the others use. `init` creates any missing starter file.
+`add` saves and triages links. `next` recommends what to read. `read` runs a discussion or skim and extracts the paper into the graph. `pin` saves a fact. `insight` logs a takeaway and connects it to its papers. `graph` changes and queries the knowledge graph. `recap` refreshes the recap page. `scholar` (Semantic Scholar) and `arxiv` are the clients the others use. `init` creates any missing starter file. `debug` turns the plugin's debug log on or off and reads it, only when the user asks.
 
 ### Links without a command
 

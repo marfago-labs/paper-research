@@ -23,6 +23,10 @@ CODE_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(CODE_DIR.parents[1] / "graph" / "scripts"))  # pragma: no mutate
 import graph  # noqa: E402
 
+# The debug skill's helper records events while debugging is on.
+sys.path.insert(0, str(CODE_DIR.parents[1] / "debug" / "scripts"))  # pragma: no mutate
+import debuglog  # noqa: E402
+
 PAGE_DIR = CODE_DIR.parent / "page"
 PAGE_FILES = ("recap.html", "recap-lib.js", "cytoscape-3.30.4.min.js", "cytoscape-LICENSE.txt")
 RESEARCH_DIR = "research"
@@ -241,20 +245,33 @@ def event_workspace(event):
     return Path(cwd if isinstance(cwd, str) and cwd else ".")
 
 
+def stop_decision(event):
+    """Whether the Stop hook blocks the stop, and why."""
+    if event.get("stop_hook_active"):
+        return False, "already stopped once this turn"
+    research = event_workspace(event) / RESEARCH_DIR
+    try:
+        if not (research / "user-facts.md").is_file():
+            return False, "not a paper workspace"
+        stale = changed_since_page(research)
+    except (OSError, ValueError):  # a file that can't be read or decoded: the turn ends as it would without the hook
+        return False, "a research file can't be read"
+    return stale, "the recap page is out of date" if stale else "the recap page is up to date"
+
+
 def stop_hook(stdin):
     """Block the stop, once, when the recap is out of date in a paper workspace. Never fails the turn itself."""
     try:
         event = json.load(stdin)
     except ValueError:
         return 0
-    if not isinstance(event, dict) or event.get("stop_hook_active"):
+    if not isinstance(event, dict):
         return 0
-    research = event_workspace(event) / RESEARCH_DIR
-    try:
-        stale = (research / "user-facts.md").is_file() and changed_since_page(research)
-    except (OSError, ValueError):  # a file that can't be read or decoded: the turn ends as it would without the hook
-        return 0
-    if stale:
+    blocks, why = stop_decision(event)
+    debuglog.event(
+        "recap", "stop_hook", folder=event_workspace(event), decision="block" if blocks else "pass", reason=why
+    )
+    if blocks:
         print(json.dumps({"decision": "block", "reason": STOP_REASON}))
     return 0
 
@@ -288,4 +305,4 @@ def main(argv=None):
 
 
 if __name__ == "__main__":  # pragma: no mutate (`is` and `<=` agree for the names a module can have)
-    sys.exit(main())
+    sys.exit(debuglog.run("recap", main, sys.argv[1:]))

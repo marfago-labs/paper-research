@@ -158,6 +158,26 @@ The hooks are for the plugin, not for you. Each does nothing outside a workspace
 
 **Exit codes:** 0 success. 2 the workspace folder wasn't found. With `--hook`, always 0, so a hook never breaks a session.
 
+## debug
+
+```bash
+python <skills>/debug/scripts/debuglog.py [--workspace FOLDER] COMMAND
+```
+
+| Command | What it does |
+|---|---|
+| `on` | Starts recording events, by creating `research/.debug`. Says where they go. |
+| `off` | Stops recording. The log stays. |
+| `status` | Says whether it is on, how big the log is, and where events are also sent. |
+| `show [--lines N]` | Prints the latest events (default 50), oldest first. |
+| `clear` | Deletes the log. |
+
+While `research/.debug` exists, each script and hook adds one JSON line per event to `research/.debug.log`: `time`, `source`, `event`, and the event's own fields. The events are `command` (its `exit` code and `duration_ms`, and the subcommand's name), `http` (`host`, `path` without the query, `status`, and `duration_ms`), `guard`, `rules`, `lessons`, and `stop_hook`. When the log would pass 2 MB it moves to `research/.debug.log.1`, which replaces the older one, so the two files never hold more than 4 MB. If `OTEL_EXPORTER_OTLP_ENDPOINT` is an `http` address on this machine, each event is also sent there as an OpenTelemetry log record, with a half-second limit and no retry. Events are sent directly, never through `HTTP_PROXY`. A failed write or send is skipped, so recording never breaks a command; scripts that write at the same moment can lose an event.
+
+`--workspace` is the workspace root, and defaults to the current folder.
+
+**Exit codes:** 0 success. 2 the workspace has no `research/` folder.
+
 ## Files the scripts create
 
 | Path | Created by | Holds |
@@ -169,3 +189,5 @@ The hooks are for the plugin, not for you. Each does nothing outside a workspace
 | `research/fulltext/<id>.md` | arxiv | A paper's text. |
 | `research/pdfs/<id>.pdf` | arxiv | A downloaded PDF. |
 | `research/recap/` | recap | The recap page and its data. |
+| `research/.debug` | debug | Exists while the debug log is on. |
+| `research/.debug.log`, `.debug.log.1` | every script and hook, while the log is on | The events, at most 2 MB each (4 MB in all). |
