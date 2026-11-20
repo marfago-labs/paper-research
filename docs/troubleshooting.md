@@ -5,31 +5,16 @@ Find the message you saw. Each entry says what it means and what to do.
 ## Installing and setting up
 
 **The skills don't appear, or Claude doesn't use the plugin's rules.**
-Run `/reload-plugins` to load a plugin you just installed or updated, then start a new session in the workspace. Claude Code reads `CLAUDE.md` when a session starts. Changes to `.claude/settings.json` apply straight away. Check that the plugin shows as installed with `/plugin`.
+Run `/reload-plugins` to load a plugin you just installed or updated, then start a new session in the workspace. The plugin gives Claude its rules when a session starts, and only in a folder that has `research/user-facts.md`, or inside one, so run `/paper-research:init` first. Check that the plugin shows as installed with `/plugin`. The hooks run `python3`, then `python`: if neither is on your `PATH`, nothing loads.
 
-**Auto mode blocked `init` as "self-modification", and nothing was written.**
-That's intended. `init` writes `.claude/settings.json` (permission rules) and `CLAUDE.md` (instructions), which control Claude's own behaviour, so Claude Code won't let Claude write them for you. Run it yourself: type `!` followed by the command `init` showed, for example `! python "<path>/skills/init/scripts/init.py" --workspace "<your folder>"`, or run the same command in a terminal. If `init` printed `no ready-made command`, a path has characters that need shell quoting, so run `python <path>/skills/init/scripts/init.py` from a terminal in the workspace folder. Don't add a permission rule that lets Claude run it, because that gives Claude a standing way to rewrite its own permissions.
+**Claude follows two sets of paper-research rules, or the old ones.**
+The workspace was set up by version 0.3.0 or earlier, which wrote its rules into `CLAUDE.md`. Delete the block between the `paper-research:begin` and `paper-research:end` lines, and the `permissions.ask` and `autoMode.soft_deny` entries that version added to `.claude/settings.json`. The plugin now brings its rules and prompts itself.
 
-**`init`: `... is not valid JSON ... fix it by hand first`.**
-Your `.claude/settings.json` has a syntax error, or contains comments. `init` won't guess. Fix the file, then run `init` again. Nothing was changed.
+**Claude Code asks before every fetch from `arxiv.org`, `export.arxiv.org`, `api.semanticscholar.org`, `huggingface.co`, `github.com`, or `api.github.com`, even in auto mode.**
+That's intended, so you see the address of each fetch from the sites papers come from. "Don't ask again" doesn't stick, because the plugin's hook asks each time. The plugin's own scripts download papers through the shell, so this affects only Claude's own page reads.
 
-**`init`: `... has an unexpected shape ...`.**
-A setting that should be a list or an object is something else, for example `"allow": "all"`. Fix it by hand. The message names the file.
-
-**`init`: `CLAUDE.md has only one of the paper-research markers`.**
-The block in `CLAUDE.md` is missing its begin or end line, or they're in the wrong order. Restore both lines, or delete the block entirely and run `init` again.
-
-**`init`: `CLAUDE.md has more than one paper-research block`.**
-Delete the extra blocks, leaving one, or none. `init` replaces only a single block.
-
-**`init`: `the plugin's settings template has an allow rule init won't write`, or `an ask rule`.**
-The settings template in the installed plugin contains an allow rule, or an ask rule other than approving a file edit or a fetch from a named website. `init` refuses, and nothing was changed. Don't work around it. This may mean the plugin has been tampered with, so reinstall it from a source you trust, or report it.
-
-**Claude Code asks before every fetch from arXiv, Semantic Scholar, Hugging Face, or GitHub, even in auto mode.**
-That's intended, so you see the address of each fetch from the sites papers come from. "Don't ask again" doesn't stick, because a project's ask rule wins over your own allow rule. The plugin's own scripts download papers through the shell, so this affects only Claude's own page reads.
-
-**Claude Code asks before Claude changes `lessons.md`, `profile.md`, `CLAUDE.md`, or a file in `.claude/`.**
-That's intended. These files steer every session, so `init` makes each edit need your approval. Check that the change is one you asked for, then approve it.
+**Claude Code asks before Claude changes `lessons.md` or `profile.md`, with a reason from the paper-research plugin.**
+That's intended. The plugin loads these files into every session, so each edit needs your approval. Check that the change is one you asked for, then approve it. A prompt that says the plugin `couldn't tell which file or address` means the tool call was malformed: approve it only if you asked for it.
 
 **`gh` commands fail with a network error, with the sandbox on.**
 The sandbox only reaches arXiv and Semantic Scholar. Claude can still read GitHub pages with its fetch tool.

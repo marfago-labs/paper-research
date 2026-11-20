@@ -17,13 +17,13 @@ Feature: A plugin that installs cleanly and keeps its promises
   Scenario: The manifests are valid
     Then the manifests are valid and agree on the plugin name
 
-  Scenario: The rules that init writes cover every skill
-    Then the rules written by init name every skill
+  Scenario: The plugin's rules cover every skill
+    Then the plugin's rules name every skill
 
   Scenario: The rules send every paper that is read through the read skill
-    Then the rules written by init route paper reading through the read skill
+    Then the plugin's rules route paper reading through the read skill
     And the arxiv skill routes reading a paper through the read skill
-    And the init skill loads the new rules into the session that ran it
+    And the init skill has Claude follow the rules in the session that ran it
 
   Scenario: The skills tell Claude to give every link its own status and a source it can be checked against
     Then the read skill says "with the paper and section as `--source`"
@@ -103,14 +103,13 @@ Feature: A plugin that installs cleanly and keeps its promises
     And the read skill says "links only connect papers that are already in the graph"
 
   Scenario: Questions about what the user has are answered from the graph too
-    Then the rules written by init send questions about existing notes to the graph
+    Then the plugin's rules send questions about existing notes to the graph
 
-  Scenario: The documentation agrees with init on when the new rules load
-    Then the documentation says the new rules load in the session that ran init
+  Scenario: Setting up is one command that Claude runs
+    Then setting up needs no command from the user and no change to their settings
 
-  Scenario: Claude never writes its own permissions
-    Then the init skill has the user run the write step
-    And the troubleshooting page explains the auto mode block
+  Scenario: The plugin loads its rules and guards its files through its own hooks
+    Then the plugin registers its session and approval hooks
 
   Scenario: No outside code is needed to run it
     Then the scripts import only the Python standard library

@@ -30,7 +30,7 @@ Then open the folder you want to use for papers and run:
 /paper-research:init
 ```
 
-`init` shows what it will create, then gives you one command to run, starting with `!`, which sets up the workspace. Check that its path points into the plugin's folder, then run it yourself because it changes Claude's own permissions and rules, and Claude Code's auto mode won't let Claude do that. Claude then follows the new rules straight away, and every new session loads them on its own. After updating the plugin, run `init --dry-run` to see what would change, then `init` to refresh the rules.
+`init` creates the starter files in `research/` and nothing else: it never touches `CLAUDE.md` or your settings. From then on, the plugin's hooks give Claude its rules at the start of every session, and ask you before Claude edits your lessons or profile, or fetches from the paper sites. An update brings new rules with it, with nothing to run.
 
 **Requirements:** Python 3.9 or later, standard library only. The `read` and `pin` skills use the Hugging Face MCP server when it's available, and skip it when it isn't.
 
@@ -65,7 +65,7 @@ Papers come in through small, purpose-built clients for arXiv and Semantic Schol
 - **Labelled as data.** Everything the retriever returns is marked as untrusted. Claude's rules say to treat it as data, never to follow links found inside papers without asking, and never to send your notes anywhere.
 - **Sections you can check.** Papers are read by section, and Claude cites the section, page, or figure behind each claim, so you can verify it against the paper.
 
-Around the retriever, Claude Code asks you before Claude fetches a web page and before its file tools edit the files that steer every session. An optional sandbox cuts shell commands off from everything but arXiv and Semantic Scholar, and `init` refuses an update that would widen your permissions. [Security](docs/security.md) says what is enforced, what is only instructions, and what isn't covered.
+Around the retriever, the plugin's hooks make Claude Code ask you before Claude fetches from the paper sites and before its file tools edit the lessons and profile that steer every session. An optional sandbox cuts shell commands off from everything but arXiv and Semantic Scholar. [Security](docs/security.md) says what is enforced, what is only instructions, and what isn't covered.
 
 ### It gets better at finding what you care about
 

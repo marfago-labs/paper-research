@@ -139,18 +139,24 @@ Copies the recap page into the workspace's `research/recap/` and writes `recap-d
 ## init
 
 ```bash
-python <skills>/init/scripts/init.py [--workspace FOLDER] [--dry-run] [--sandbox]
+python <skills>/init/scripts/init.py [--workspace FOLDER]
+python <skills>/init/scripts/init.py --hook {guard,lessons,rules}
 ```
 
 | Option | Meaning |
 |---|---|
 | `--workspace FOLDER` | The workspace root. Default: the current folder. |
-| `--dry-run` | Shows what it would change, with a diff for files that exist, and writes nothing. Its last line, starting with `! `, is the command that writes the changes. It carries the script's own path and the workspace folder, and `--sandbox` if you gave it. Nothing is printed when there is nothing to change. |
-| `--sandbox` | Also turns on Claude Code's sandbox for shell commands, with network access only to the hosts the scripts use. |
+| `--hook NAME` | Runs as one of the plugin's hooks instead, reading the hook event from standard input. See below. |
 
-It creates missing starter files, refreshes the rules block in `CLAUDE.md`, merges the approval prompts and auto-mode rules into `.claude/settings.json`, adds GitHub and Hugging Face to the sandbox's denied hosts whenever the settings have a sandbox, and adds missing lines to `.gitignore`. It stops without changing anything if a file can't be updated safely.
+Without `--hook`, it creates each missing starter file in `research/` and adds missing lines to `.gitignore`, and prints a `created` or `updated` line for each. It never changes a file in `research/` that exists, and never touches `CLAUDE.md` or `.claude/`. Then it prints the plugin's rules and the lessons, so the session that ran it can follow them at once.
 
-**Exit codes:** 0 success. 1 a file couldn't be read or updated safely. 2 the workspace folder wasn't found.
+The hooks are for the plugin, not for you. Each does nothing outside a workspace, a folder with `research/user-facts.md` or one inside it:
+
+- `rules`: the `SessionStart` hook. Prints the plugin's rules, which Claude Code adds to Claude's context.
+- `lessons`: the second `SessionStart` hook. Prints `research/lessons.md` between marker lines, cut at 9,000 characters with a note, because Claude Code keeps only 10,000 characters of a hook's output.
+- `guard`: the `PreToolUse` hook, for `Edit`, `Write`, `MultiEdit`, `NotebookEdit`, and `WebFetch`. Prints an `ask` decision for an edit to `research/lessons.md` or `research/profile.md` of any workspace, matched by the file itself rather than its spelling, and for a fetch from `arxiv.org`, `export.arxiv.org`, `api.semanticscholar.org`, `huggingface.co`, `github.com`, or `api.github.com`, with the host read the way a browser reads it. In a workspace it also asks when it can't tell which file or address a call uses. Otherwise it prints nothing.
+
+**Exit codes:** 0 success. 2 the workspace folder wasn't found. With `--hook`, always 0, so a hook never breaks a session.
 
 ## Files the scripts create
 
