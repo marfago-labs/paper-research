@@ -103,17 +103,26 @@ jobs:
                       init:skills/init/scripts/test_init.py debuglog:skills/debug/scripts/test_debuglog.py \
                       build_dataset:evals/dedup/test_build_dataset.py audit_labels:evals/dedup/test_audit_labels.py \
                       evaluate:evals/dedup/test_evaluate.py hand_check:evals/dedup/test_hand_check.py \
-                      complexity_report:tools/test_complexity_report.py; do
+                      complexity_report:tools/test_complexity_report.py badges:tools/test_badges.py; do
             module=${pair%%:*}
             echo "== $module"
             rm -f .coverage
             if coverage run --branch --include="*/$module.py" "${pair#*:}"; then
               coverage report --fail-under=100 --show-missing || status=1
+              coverage json --quiet -o "coverage-numbers/$module.json"
             else
               status=1
             fi
           done
           exit "$status"
+      # The badges workflow turns these numbers into the README badges, once CI has passed on main.
+      - name: Keep the coverage numbers for the badges
+        if: ${{ success() && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-numbers
+          path: coverage-numbers
+          retention-days: 1
       # Replays the dev pairs through graph.py's duplicate check and writes the rates to the job summary.
       # It reports only: the decision rule of evals/dedup/SPEC.md is applied when a change is proposed.
       - name: Duplicate-detection evaluation (dev pairs)
@@ -168,4 +177,11 @@ jobs:
           cache: pip
           cache-dependency-path: requirements-dev.txt
       - run: pip install --require-hashes -r requirements-dev.txt
-      - run: behave --no-capture-stderr --format progress features
+      - run: behave --no-capture-stderr --format progress --junit --junit-directory scenario-numbers features
+      - name: Keep the scenario numbers for the badges
+        if: ${{ success() && matrix.os == 'ubuntu-latest' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scenario-numbers
+          path: scenario-numbers
+          retention-days: 1

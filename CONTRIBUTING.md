@@ -16,7 +16,8 @@ Each skill is a folder in `skills/` with a `SKILL.md`. Scripts live in the skill
 | `mutation/` | One cosmic-ray configuration per script |
 | `tools/` | Development helpers that are not shipped to users, including the gitleaks wrapper and the pre-commit hook |
 | `.github/workflows/ci.yml` | Lint, static analysis, unit tests, coverage, and behaviour scenarios, on every push and pull request |
-| `.github/workflows/mutation.yml` | The survival limits of the mutation tests. The workflow is disabled: mutation tests run locally |
+| `.github/workflows/badges.yml` | After CI passes on a push to main, publishes the coverage and scenario numbers to the `badges` branch, which the README badges read |
+| `.github/workflows/mutation.yml` | The survival limits of the mutation tests. The workflow is disabled in GitHub's settings and has no schedule: mutation tests run locally |
 
 ## Rules for changes
 
@@ -64,13 +65,18 @@ python tools/run_mutation.py init --max-survival 0 --workers 4                  
 
   ```bash
   docker run --rm --memory=6g --memory-swap=6g --pids-limit=512 --cpus=4 -v "$PWD:/src:ro" -w /src python:3.12-slim \
-    bash -c 'pip install -q --require-hashes -r requirements-dev.txt && python tools/run_mutation.py graph --max-survival 0 --workers 4'
+    bash -c 'apt-get update -qq && apt-get install -y -qq git && git config --global --add safe.directory /src &&
+      pip install -q --require-hashes -r requirements-dev.txt &&
+      python tools/run_mutation.py graph --max-survival 0 --workers 4'
   ```
+
+  The runner needs `git` to hash the files a module depends on, which the slim image lacks, and git refuses a repository owned by another user, so the command installs it and trusts the mount. It takes the hash first and stops at once if git is missing, not after the last mutant. The runner keeps the counts of a run in `mutation/results/<module>.json` and the README's mutation badge in `mutation/badge.json`. To get them out of the container, mount `mutation` read-write over the read-only repository with `-v "$PWD/mutation:/src/mutation"`, and commit both files after a run. The badge shows the survivors of the last run of every module and the date of the oldest, so a stale one is visible.
 
   In PowerShell, write the volume as `"${PWD}:/src:ro"` and put the whole command on one line, or end each line with a backtick instead of a backslash. In Git Bash, set `MSYS_NO_PATHCONV=1` before `docker run`, or it rewrites the paths.
 
   `--workers N` tests N mutants at once, each in its own copy of the repo, so give the container N CPUs. Four workers ran `init` about three times faster than one. Each worker gets a free port chosen by the operating system.
-- **Mutation tests run locally, not in GitHub Actions.** The graph script alone takes about 45 minutes with one worker, or about 8 with four, so the workflow is disabled and CI doesn't check the 0% limits. A change to a module's script or its tests therefore runs that module in the container, and its pull request reports the survival rate.
+- **Mutation tests run locally, not in GitHub Actions.** The graph script alone takes about 45 minutes with one worker, or about 8 with four, so the workflow is disabled and has no schedule, and CI doesn't run them. It does fail, in `tools/test_mutation_results.py`, when a module, its tests or its `mutation/<module>.toml` changed since the hash in its committed result, so the README's mutation badge can't stay green after the code it vouches for has changed. The hash covers the files git tracks under the paths that `mutation.yml` lists for the module, which include the code its tests import, so a change to `skills/debug` needs every module run again. `SKILL.md` files are left out, because no test reads them, and so are files git doesn't track.
+- **A pull request that changes a module, its tests or what it imports needs its result refreshed.** CI fails until the module has been run in the container and `mutation/results` committed. A contributor without Docker can open the pull request anyway: a maintainer runs the module and pushes the result before merging. Its pull request reports the survival rate.
 - **Run each module with `--max-survival 0`.** The limits in `.github/workflows/mutation.yml` stay at 0 too, and are never raised.
 - **A mutant that runs longer than 20 seconds counts as caught.** A normal test run takes about 2 seconds, so only a hang gets that far. Raise the `timeout` in `mutation/<module>.toml` if a test file ever gets that slow.
 - **Changing a tool version:** edit `requirements-dev.in`, then run `uv pip compile requirements-dev.in --universal --generate-hashes --python-version 3.12 -o requirements-dev.txt`.
