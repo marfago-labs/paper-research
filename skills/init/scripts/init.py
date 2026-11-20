@@ -24,6 +24,10 @@ import unicodedata
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
+# The debug skill's helper records events while debugging is on.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "debug" / "scripts"))  # pragma: no mutate
+import debuglog  # noqa: E402  (after the path is set)
+
 SKILL_DIR = Path(__file__).resolve().parents[1]
 TEMPLATES = SKILL_DIR / "templates"
 RESEARCH = "research"
@@ -36,6 +40,9 @@ GITIGNORE = [
     "research/recap/",
     "research/graph/.lock",
     ".claude/settings.local.json",
+    "research/.debug",
+    "research/.debug.log",
+    "research/.debug.log.1",
 ]
 # Claude Code keeps at most 10,000 characters of a hook's output in context, so the lessons are cut well before that.
 LESSONS_LIMIT = 9000
@@ -228,16 +235,30 @@ def ask(reason):
 
 
 def rules_hook(event):
-    return None if find_workspace(event_folder(event)) is None else rules()
+    folder = event_folder(event)
+    if find_workspace(folder) is None:
+        return None
+    text = rules()
+    debuglog.event("init", "rules", folder=folder, chars=len(text))
+    return text
 
 
 def lessons_hook(event):
-    workspace = find_workspace(event_folder(event))
-    return None if workspace is None else lessons(workspace)
+    folder = event_folder(event)
+    workspace = find_workspace(folder)
+    if workspace is None:
+        return None
+    text = lessons(workspace)
+    debuglog.event("init", "lessons", folder=folder, chars=len(text), cut="[cut:" in text)
+    return text
 
 
 def guard_hook(event):
     reason = guard_reason(event)
+    decision = "pass" if reason is None else "ask"
+    debuglog.event(
+        "init", "guard", folder=event_folder(event), tool=event.get("tool_name"), decision=decision, reason=reason or ""
+    )
     return None if reason is None else ask(reason) + "\n"
 
 
@@ -287,4 +308,4 @@ def main(argv=None):
 
 
 if __name__ == "__main__":  # pragma: no mutate
-    sys.exit(main())
+    sys.exit(debuglog.run("init", main, sys.argv[1:]))

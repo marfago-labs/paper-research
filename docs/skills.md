@@ -11,6 +11,7 @@ The plugin is a set of skills. Claude chooses one from what you say, and you can
 | [insight](#insight) | Save a takeaway |
 | [graph](#graph) | Query or change the knowledge graph |
 | [recap](#recap) | Refresh the recap page |
+| [debug](#debug) | See what the plugin did, and why |
 | [scholar](#scholar-and-arxiv) and [arxiv](#scholar-and-arxiv) | Look things up (used by the others) |
 | [init](#init) | Set up a workspace |
 
@@ -103,6 +104,14 @@ If part of an insight isn't supported by its source, Claude rewords it to match,
 **Triggers:** after any change to your files, or when you ask to see what's been done. A `Stop` hook also checks this when Claude finishes a turn in a paper workspace: if the recap is out of date, Claude is made to refresh it first, and to log your questions and facts of the session that are not in `research/user-facts.md` yet.
 
 **Does:** copies the recap page into `research/recap/` and writes its data from your files. It prints the page's path. Open it in a browser. See [Your workspace](workspace.md#the-recap-page).
+
+## debug
+
+**Triggers:** you ask to debug the plugin, to see what it did or why, or to turn debug on or off.
+
+**Does:** turns the debug log on or off, and reads it. While it is on, the scripts and hooks record each command with its exit code and duration, each request to arXiv or Semantic Scholar with its host and status, each decision of the approval hook with its reason, and what the session-start hooks loaded. Claude reads the log to tell you why something happened. It is off by default, Claude turns it on only when you ask, and you turn it off by asking, or with `off`. See [Telemetry](telemetry.md#the-plugins-own-events) and the [command reference](reference.md#debug).
+
+**Changes:** `research/.debug`, and `research/.debug.log`, which holds at most 4 MB.
 
 ## scholar and arxiv
 

@@ -66,5 +66,17 @@ class Workers(unittest.TestCase):
             self.assertEqual(ports, [])
 
 
+class Limit(unittest.TestCase):
+    def test_a_limit_of_zero_fails_on_any_survivor(self):
+        # cr-rate --fail-over 0 let 4.09% through, so the limit is compared here.
+        self.assertFalse(run_mutation.within_limit("4.09", 0.0))
+        self.assertFalse(run_mutation.within_limit("0.15", 0.0))
+        self.assertTrue(run_mutation.within_limit("0.00", 0.0))
+
+    def test_a_rate_at_the_limit_passes(self):
+        self.assertTrue(run_mutation.within_limit("5.00", 5.0))
+        self.assertFalse(run_mutation.within_limit("5.01", 5.0))
+
+
 if __name__ == "__main__":
     unittest.main()

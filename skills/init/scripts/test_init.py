@@ -521,5 +521,89 @@ class GuardFetches(Guard):
                 self.assertEqual(self.fetch(url), init.UNCLEAR)
 
 
+# --- the debug log ------------------------------------------------------------------------------------------------
+
+
+class DebugEvents(Folder):
+    def setUp(self):
+        super().setUp()
+        self.run_main()
+
+    def turn_on(self):
+        self.write("research/.debug", "on")
+
+    def events(self):
+        path = self.root / "research" / ".debug.log"
+        lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+        return [{key: value for key, value in json.loads(line).items() if key != "time"} for line in lines]
+
+    def test_nothing_is_recorded_while_debug_is_off(self):
+        self.hook("rules", {"cwd": str(self.root)})
+        self.assertEqual(self.events(), [])
+
+    def test_the_rules_hook_records_how_much_it_loaded(self):
+        self.turn_on()
+        self.hook("rules", {"cwd": str(self.root)})
+        self.assertEqual(self.events(), [{"source": "init", "event": "rules", "chars": len(init.rules())}])
+
+    def test_the_rules_hook_records_nothing_outside_a_workspace(self):
+        self.turn_on()
+        with tempfile.TemporaryDirectory() as other:
+            self.hook("rules", {"cwd": other})
+        self.assertEqual(self.events(), [])
+
+    def test_the_lessons_hook_records_how_much_it_loaded_and_whether_it_cut(self):
+        self.turn_on()
+        short = len(init.lessons(self.root))
+        self.hook("lessons", {"cwd": str(self.root)})
+        self.write("research/lessons.md", "- " + "long " * 3000)
+        long = len(init.lessons(self.root))
+        self.hook("lessons", {"cwd": str(self.root)})
+        first, second = self.events()
+        self.assertEqual(first, {"source": "init", "event": "lessons", "chars": short, "cut": False})
+        self.assertEqual(second, {"source": "init", "event": "lessons", "chars": long, "cut": True})
+
+    def test_the_lessons_hook_records_nothing_outside_a_workspace(self):
+        self.turn_on()
+        with tempfile.TemporaryDirectory() as other:
+            self.hook("lessons", {"cwd": other})
+        self.assertEqual(self.events(), [])
+
+    def test_the_guard_records_each_decision_with_its_reason(self):
+        self.turn_on()
+        self.hook(
+            "guard", {"cwd": str(self.root), "tool_name": "Edit", "tool_input": {"file_path": "research/lessons.md"}}
+        )
+        self.hook("guard", {"cwd": str(self.root), "tool_name": "Edit", "tool_input": {"file_path": "notes.txt"}})
+        asked, passed = self.events()
+        self.assertEqual(
+            asked,
+            {
+                "source": "init",
+                "event": "guard",
+                "tool": "Edit",
+                "decision": "ask",
+                "reason": (
+                    "research/lessons.md is loaded as instructions in every session; "
+                    "approve only a change you asked for"
+                ),
+            },
+        )
+        self.assertEqual(passed, {"source": "init", "event": "guard", "tool": "Edit", "decision": "pass", "reason": ""})
+
+    def test_a_command_records_its_exit_code(self):
+        self.turn_on()
+        before = Path.cwd()
+        os.chdir(self.root)
+        try:
+            with mock.patch.object(sys, "argv", ["init.py"]), self.assertRaises(SystemExit):
+                capture(lambda: runpy.run_path(init.__file__, run_name="__main__"))
+        finally:
+            os.chdir(before)
+        (event,) = self.events()
+        self.assertEqual((event["source"], event["event"], event["exit"]), ("init", "command", 0))
+        self.assertIn("duration_ms", event)
+
+
 if __name__ == "__main__":
     unittest.main()

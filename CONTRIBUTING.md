@@ -9,7 +9,7 @@ Each skill is a folder in `skills/` with a `SKILL.md`. Scripts live in the skill
 | `skills/` | The skills, their scripts, and the unit tests beside the scripts |
 | `skills/recap/page/` | The recap page, its rendering library, and their Node tests |
 | `hooks/` | `hooks.json`: the `SessionStart` hooks that load the rules and lessons and the `PreToolUse` guard, all run by `init.py --hook`, and the `Stop` hook that runs `recap.py --stop-hook` |
-| `telemetry/` | The local telemetry stack, a Docker Compose file described in [Telemetry](docs/telemetry.md) |
+| `telemetry/` | The local telemetry stack described in [Telemetry](docs/telemetry.md): a Docker Compose file and a Grafana dashboard |
 | `docs/` | The user documentation. Keep it in step with the skills and scripts: a scenario checks that its links resolve and that every skill and command is covered |
 | `features/` | Behaviour scenarios in Gherkin, run with `behave` |
 | `evals/dedup/` | The duplicate-detection evaluation, not shipped to users: its specification (`SPEC.md`), the dataset builder, `audit_labels.py` (asks Jev, through OpenRouter, whether second names are the same thing; run by hand with `build_dataset.py --audit`, never in CI), `evaluate.py` (replays the pairs through `graph.py`'s check and reports the rates), `hand_check.py` (the sheet for the hand check of the labels, and its scorer), the frozen pairs in `data/`, and `analysis.ipynb`, which describes the dataset and what the evaluation finds. The notebook needs pandas and matplotlib, which the project doesn't install, and CI doesn't run it: run it by hand after any change to the dataset |
@@ -40,7 +40,7 @@ pip install --require-hashes -r requirements-dev.txt && npm ci --prefix tools/js
 
 ruff check skills tools features evals && ruff format --check skills tools features evals   # lint
 mypy skills/graph/scripts/graph.py skills/recap/scripts/recap.py skills/arxiv/scripts/arxiv.py \
-     skills/scholar/scripts/s2.py skills/init/scripts/init.py tools \
+     skills/scholar/scripts/s2.py skills/init/scripts/init.py skills/debug/scripts/debuglog.py tools \
      evals/dedup/build_dataset.py evals/dedup/audit_labels.py evals/dedup/evaluate.py \
      evals/dedup/hand_check.py                                                    # types
 bandit -q -r skills -x "*/test_*.py"                                             # security

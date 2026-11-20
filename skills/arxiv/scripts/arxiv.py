@@ -30,6 +30,10 @@ from html.parser import HTMLParser
 from pathlib import Path
 from xml.parsers import expat  # nosec B407
 
+# The debug skill's helper records events while debugging is on.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "debug" / "scripts"))  # pragma: no mutate
+import debuglog  # noqa: E402  (after the path is set)
+
 API = "https://export.arxiv.org/api/query"
 SITE = "https://arxiv.org"
 ALLOWED_HOSTS = {"arxiv.org", "export.arxiv.org"}
@@ -206,8 +210,10 @@ def get(url):
 def read_once(req, url, started):
     """One request, with the time left before the deadline and the size cap."""
     remaining = DEADLINE - (time.monotonic() - started)
+    began = time.monotonic()
     with OPENER.open(req, timeout=max(1, min(TIMEOUT, remaining))) as response:
         body = response.read(MAX_BYTES + 1)
+    debuglog.fetched("arxiv", url, 200, began)
     if len(body) > MAX_BYTES:
         raise ApiError(f"{url} is larger than {MAX_BYTES} bytes")
     return body
@@ -215,6 +221,7 @@ def read_once(req, url, started):
 
 def failure(err, url, last):
     """The error to raise for a failed request, or None if it should be retried."""
+    debuglog.fetch_failed("arxiv", url, err)
     if not isinstance(err, urllib.error.HTTPError):
         return ApiError(f"network failure calling {url}: {err}") if last else None
     err.close()
@@ -924,6 +931,7 @@ def main(argv=None):
     sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
     args = build_parser().parse_args(argv)
+    debuglog.note(command=args.command)
     try:
         out = checked_out(getattr(args, "out", None))
         result = args.func(args)
@@ -940,4 +948,4 @@ def main(argv=None):
 
 
 if __name__ == "__main__":  # pragma: no mutate (`is` and `<=` agree for the names a module can have)
-    sys.exit(main())
+    sys.exit(debuglog.run("arxiv", main, sys.argv[1:]))

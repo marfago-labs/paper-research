@@ -79,6 +79,12 @@ Then run `/sandbox` to check that it's on and that nothing it needs is missing. 
 
 It forbids running commands outside the sandbox, stops sandboxed commands from writing the files that steer Claude, and limits their network access to the hosts the plugin's scripts use. GitHub and Hugging Face are deliberately blocked: a shell command that could reach them could also use your own GitHub or Hugging Face login to publish your notes. Leaving them off the allowed list isn't enough, because Claude Code also opens the hosts of any fetch you've allowed to sandboxed commands, so they go in `deniedDomains`, which wins over every allow. Claude can still read pages there with its fetch tool, which `deniedDomains` doesn't affect. Commands such as `gh` can't reach GitHub inside the sandbox. A denied host stays blocked whatever another settings file allows, so there's no per-user exception: if some work needs `gh`, do it with the sandbox off.
 
+## The debug log
+
+The debug log is off unless you turn it on, and it is for you, not for Claude. While it is on, the plugin's scripts and hooks write the events described in the [command reference](reference.md#debug) to `research/.debug.log`, which `init` keeps out of git. The events hold names, hosts, statuses, counts, and timings. They never hold your notes, the text of a search, a query string, or your API key: a request is recorded as its host and path only. The file is limited to 4 MB in all.
+
+If `OTEL_EXPORTER_OTLP_ENDPOINT` is set, the same events are also sent there, but only when it is an `http` address on this machine (`localhost`, `127.0.0.1`, or `[::1]`), without following redirects. An address anywhere else is ignored, so turning the log on can't send anything off your machine.
+
 ## Third-party code
 
 The plugin's scripts use Python's standard library only. The one piece of code from elsewhere is Cytoscape.js 3.30.4, the library that draws the graph on the recap page. It ships with the plugin as `skills/recap/page/cytoscape-3.30.4.min.js`, with its MIT licence in `cytoscape-LICENSE.txt`, and runs only in your browser when you open the page. The page loads no scripts from the internet.

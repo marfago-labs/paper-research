@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Mutation-test one module on a temporary copy of the repository, so the real files are never changed.
 
-Usage: python tools/run_mutation.py <graph|recap|arxiv|s2|init> [--max-survival PERCENT] [--workers N]
+Usage: python tools/run_mutation.py <graph|recap|arxiv|s2|init|debuglog> [--max-survival PERCENT] [--workers N]
 Needs cosmic-ray on the PATH, for example: uvx --from cosmic-ray python tools/run_mutation.py init
 Prints the surviving mutants with their diffs. Exit 0 if the survival rate is at or below the limit.
 
@@ -22,7 +22,7 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-MODULES = ("graph", "recap", "arxiv", "s2", "init")
+MODULES = ("graph", "recap", "arxiv", "s2", "init", "debuglog")
 IGNORED = shutil.ignore_patterns(".git", "__pycache__", "node_modules", ".mypy_cache", ".ruff_cache")
 LOCAL = '[cosmic-ray.distributor]\nname = "local"'
 STARTUP = 30  # seconds for a worker to start listening
@@ -95,6 +95,11 @@ def workers(copy, count):
             process.wait()
 
 
+def within_limit(rate, limit):
+    """Whether the survival rate that cr-rate printed is at or below the limit, both in percent."""
+    return float(rate) <= limit
+
+
 def main(argv):
     parser = argparse.ArgumentParser(description="Mutation-test one module on a copy of the repository.")
     parser.add_argument("module", choices=MODULES)
@@ -115,9 +120,10 @@ def main(argv):
             run(["cosmic-ray", "exec", config, session], copy, capture=True)
         report = run(["cr-report", session, "--surviving-only", "--show-diff"], copy, capture=True)
         print(report.stdout)
-        rate = run(["cr-rate", session, "--fail-over", str(args.max_survival)], copy, check=False, capture=True)
-        print(f"{args.module}: survival rate {rate.stdout.strip()}% (limit {args.max_survival}%)")
-        return rate.returncode
+        # The limit is checked here, not by cr-rate --fail-over, which ignores a limit of 0.
+        rate = run(["cr-rate", session], copy, capture=True).stdout.strip()
+        print(f"{args.module}: survival rate {rate}% (limit {args.max_survival}%)")
+        return 0 if within_limit(rate, args.max_survival) else 1
 
 
 if __name__ == "__main__":

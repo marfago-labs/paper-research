@@ -81,7 +81,7 @@ jobs:
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: >
           mypy skills/graph/scripts/graph.py skills/recap/scripts/recap.py skills/arxiv/scripts/arxiv.py
-          skills/scholar/scripts/s2.py skills/init/scripts/init.py tools
+          skills/scholar/scripts/s2.py skills/init/scripts/init.py skills/debug/scripts/debuglog.py tools
           evals/dedup/build_dataset.py evals/dedup/audit_labels.py evals/dedup/evaluate.py evals/dedup/hand_check.py
       - name: bandit (shipped code only)
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
@@ -100,7 +100,7 @@ jobs:
           status=0
           for pair in graph:skills/graph/scripts/test_graph.py recap:skills/recap/scripts/test_recap.py \
                       arxiv:skills/arxiv/scripts/test_arxiv.py s2:skills/scholar/scripts/test_s2.py \
-                      init:skills/init/scripts/test_init.py \
+                      init:skills/init/scripts/test_init.py debuglog:skills/debug/scripts/test_debuglog.py \
                       build_dataset:evals/dedup/test_build_dataset.py audit_labels:evals/dedup/test_audit_labels.py \
                       evaluate:evals/dedup/test_evaluate.py hand_check:evals/dedup/test_hand_check.py \
                       complexity_report:tools/test_complexity_report.py; do

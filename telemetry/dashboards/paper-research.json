@@ -1,0 +1,3144 @@
+{
+  "uid": "paper-research-claude-code",
+  "title": "paper-research: usage and security",
+  "tags": [
+    "paper-research"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 27,
+      "type": "text",
+      "title": "",
+      "transparent": true,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 3
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**How to read this.** Claude Code sends one event per prompt, model call, tool call, hook, and so on. Use the time picker above. Each row has its own help, and every panel queries on its own, so an empty panel doesn't affect the others. Hover the **i** in a panel's corner for what it counts. An empty panel usually means that event hasn't happened in the range. The links above open the other two dashboards."
+      }
+    },
+    {
+      "id": 28,
+      "type": "row",
+      "title": "Metrics",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 3,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 29,
+      "type": "text",
+      "title": "",
+      "transparent": true,
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 24,
+        "h": 3
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "Totals for the time range, for every Claude Code session that sends telemetry here. **Cost** adds up every model call. A **skill run** is one use of a paper-research skill; a **script run** is a Bash call that ran one of its scripts. Per-prompt numbers follow the **Model call source** box above."
+      }
+    },
+    {
+      "id": 30,
+      "type": "stat",
+      "title": "Cost (USD)",
+      "description": "What the model calls in the range cost, as Claude Code reports it.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 7,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum(sum_over_time({service_name=\"claude-code\"} | event_name=\"api_request\" | unwrap cost_usd [$__range])) or vector(0)",
+          "legendFormat": "",
+          "refId": "A",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data in this time range",
+          "unit": "currencyUSD",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 31,
+      "type": "stat",
+      "title": "Prompts",
+      "description": "Prompts you sent.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 4,
+        "y": 7,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum(count_over_time({service_name=\"claude-code\"} | event_name=\"user_prompt\" [$__range])) or vector(0)",
+          "legendFormat": "",
+          "refId": "A",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data in this time range",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 32,
+      "type": "stat",
+      "title": "Sessions",
+      "description": "Claude Code sessions in which you sent at least one prompt.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 7,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "count(sum by (session_id) (count_over_time({service_name=\"claude-code\"} | event_name=\"user_prompt\" [$__range])))",
+          "legendFormat": "",
+          "refId": "A",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data in this time range",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 33,
+      "type": "stat",
+      "title": "Model calls",
+      "description": "Requests to the model, background calls included.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 7,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum(count_over_time({service_name=\"claude-code\"} | event_name=\"api_request\" [$__range])) or vector(0)",
+          "legendFormat": "",
+          "refId": "A",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data in this time range",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 34,
+      "type": "stat",
+      "title": "Tool calls",
+      "description": "Finished tool calls.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 7,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum(count_over_time({service_name=\"claude-code\"} | event_name=\"tool_result\" [$__range])) or vector(0)",
+          "legendFormat": "",
+          "refId": "A",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data in this time range",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 35,
+      "type": "stat",
+      "title": "Skill runs",
+      "description": "Uses of a paper-research skill.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 20,
+        "y": 7,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum(count_over_time({service_name=\"claude-code\"} | event_name=\"skill_activated\" | plugin_name=\"paper-research\" [$__range])) or vector(0)",
+          "legendFormat": "",
+          "refId": "A",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data in this time range",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 36,
+      "type": "stat",
+      "title": "Prompts with the plugin",
+      "description": "Prompts in which at least one paper-research skill ran.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 11,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "count(sum by (prompt_id) (count_over_time({service_name=\"claude-code\"} | event_name=\"skill_activated\" | plugin_name=\"paper-research\" [$__range])))",
+          "legendFormat": "",
+          "refId": "A",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data in this time range",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 37,
+      "type": "stat",
+      "title": "Script runs",
+      "description": "Bash calls that ran one of the plugin's scripts.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 4,
+        "y": 11,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum(count_over_time({service_name=\"claude-code\"} | event_name=\"tool_result\" | tool_name=~\"Bash|PowerShell\" | tool_parameters=~`.*scripts[^a-z0-9_]{1,4}(arxiv|s2|graph|init|recap|debuglog)[.]py.*` [$__range])) or vector(0)",
+          "legendFormat": "",
+          "refId": "A",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data in this time range",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 38,
+      "type": "stat",
+      "title": "Calls per prompt (avg)",
+      "description": "Model calls Claude made for one prompt.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 11,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "avg(sum by (prompt_id) (count_over_time({service_name=\"claude-code\"} | event_name=\"api_request\" | prompt_id!=\"\" | query_source=~\"$query_source\" [$__range])))",
+          "legendFormat": "",
+          "refId": "A",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data in this time range",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 39,
+      "type": "stat",
+      "title": "Calls per prompt (max)",
+      "description": "The most model calls Claude made for one prompt.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 11,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "max(sum by (prompt_id) (count_over_time({service_name=\"claude-code\"} | event_name=\"api_request\" | prompt_id!=\"\" | query_source=~\"$query_source\" [$__range])))",
+          "legendFormat": "",
+          "refId": "A",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data in this time range",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 40,
+      "type": "stat",
+      "title": "Cost per prompt (avg)",
+      "description": "What one prompt cost on average.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 11,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "avg(sum by (prompt_id) (sum_over_time({service_name=\"claude-code\"} | event_name=\"api_request\" | prompt_id!=\"\" | query_source=~\"$query_source\" | unwrap cost_usd [$__range])))",
+          "legendFormat": "",
+          "refId": "A",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data in this time range",
+          "unit": "currencyUSD",
+          "decimals": 3,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 41,
+      "type": "stat",
+      "title": "Cost per prompt (max)",
+      "description": "What the costliest prompt cost.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 20,
+        "y": 11,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "max(sum by (prompt_id) (sum_over_time({service_name=\"claude-code\"} | event_name=\"api_request\" | prompt_id!=\"\" | query_source=~\"$query_source\" | unwrap cost_usd [$__range])))",
+          "legendFormat": "",
+          "refId": "A",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data in this time range",
+          "unit": "currencyUSD",
+          "decimals": 3,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 42,
+      "type": "row",
+      "title": "Alarms",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 15,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 43,
+      "type": "text",
+      "title": "",
+      "transparent": true,
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 24,
+        "h": 3
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "Counts that should stay at or near zero. A red number is worth a look: the rows below show which tool, script, or command it was."
+      }
+    },
+    {
+      "id": 44,
+      "type": "stat",
+      "title": "Failed tool calls",
+      "description": "Tool calls that ended in an error. The service dashboard shows which tool.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 19,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum(count_over_time({service_name=\"claude-code\"} | event_name=\"tool_result\" | success=\"false\" [$__range])) or vector(0)",
+          "legendFormat": "",
+          "refId": "A",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data in this time range",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 45,
+      "type": "stat",
+      "title": "Failed script runs",
+      "description": "Script runs that exited with an error. The debug log dashboard has the exit code.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 4,
+        "y": 19,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum(count_over_time({service_name=\"claude-code\"} | event_name=\"tool_result\" | tool_name=~\"Bash|PowerShell\" | tool_parameters=~`.*scripts[^a-z0-9_]{1,4}(arxiv|s2|graph|init|recap|debuglog)[.]py.*` | success=\"false\" [$__range])) or vector(0)",
+          "legendFormat": "",
+          "refId": "A",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data in this time range",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 46,
+      "type": "stat",
+      "title": "Rejected tool calls",
+      "description": "Tool calls refused by you, a rule, a hook, or the auto-mode classifier.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 19,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum(count_over_time({service_name=\"claude-code\"} | event_name=\"tool_decision\" | decision=\"reject\" [$__range])) or vector(0)",
+          "legendFormat": "",
+          "refId": "A",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data in this time range",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 47,
+      "type": "stat",
+      "title": "Blocking hooks",
+      "description": "Hook runs that stopped a tool call, such as the plugin's guard asking first.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 19,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum(sum_over_time({service_name=\"claude-code\"} | event_name=\"hook_execution_complete\" | unwrap num_blocking [$__range])) or vector(0)",
+          "legendFormat": "",
+          "refId": "A",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data in this time range",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 48,
+      "type": "stat",
+      "title": "Risky commands",
+      "description": "Shell calls that mention curl, wget, ssh, sudo, rm -rf, .env, credentials, and similar. Code that sends data out from a script, such as python -c with urllib, is not matched, so a zero is not proof of no network access.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 19,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum(count_over_time({service_name=\"claude-code\"} | event_name=\"tool_result\" | tool_name=~\"Bash|PowerShell\" | line_format `{{.tool_parameters}}` | json | full_command=~`(?is).*((^|[\\s;&|(=/\\\\\"'\\x60])(sudo|curl|wget|ssh|scp|nc|ncat|chmod|base64|iwr|Invoke-WebRequest)([.]exe)?($|[\\s;&|)\"'\\x60])|rm\\s+(-[a-z]+\\s+)*-[a-z]*(rf|fr)|rm\\s+-[a-z]*r[a-z]*\\s+(-[a-z]+\\s+)*-[a-z]*f|rm\\s+-[a-z]*f[a-z]*\\s+(-[a-z]+\\s+)*-[a-z]*r|Remove-Item\\b[^;&|\\n]*-Recurse|(^|[\\s/\\\\\"'=~])([.]env([.](local|production|prod|development|dev|staging|test))?|[.]ssh|credentials|id_rsa|id_ed25519)($|[\\s\"'/\\\\;|&])).*` [$__range])) or vector(0)",
+          "legendFormat": "",
+          "refId": "A",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data in this time range",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 49,
+      "type": "stat",
+      "title": "Sensitive file access",
+      "description": "Reads and edits of files whose path looks like a secret: .env, .ssh, keys, credentials, tokens.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 20,
+        "y": 19,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum(count_over_time({service_name=\"claude-code\"} | event_name=\"tool_result\" | tool_name=~\"Read|Edit|Write|NotebookEdit\" | line_format `{{.tool_input}}` | json | file_path=~`(?i).*((^|[/\\\\])([.]env([.](local|production|prod|development|dev|staging|test))?|[.]ssh|[.]aws|[.]netrc|id_rsa|id_ed25519|(credentials?|secrets?|tokens?)([.][a-z0-9]+)?)([/\\\\]|$)|[.](pem|key)$).*` or notebook_path=~`(?i).*((^|[/\\\\])([.]env([.](local|production|prod|development|dev|staging|test))?|[.]ssh|[.]aws|[.]netrc|id_rsa|id_ed25519|(credentials?|secrets?|tokens?)([.][a-z0-9]+)?)([/\\\\]|$)|[.](pem|key)$).*` [$__range])) or vector(0)",
+          "legendFormat": "",
+          "refId": "A",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data in this time range",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "row",
+      "title": "Cost and time",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 23,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 3,
+      "type": "text",
+      "title": "",
+      "transparent": true,
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 24,
+        "h": 3
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "Cost of model calls over time, by model. **Where the time goes** sums the time of model calls, of the plugin's scripts, and of every other tool call."
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Cost by model",
+      "description": "Cost of model calls per interval.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 27,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (model) (sum_over_time({service_name=\"claude-code\"} | event_name=\"api_request\" | unwrap cost_usd [$__interval]))",
+          "legendFormat": "{{model}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data in this time range",
+          "unit": "currencyUSD",
+          "decimals": 3
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 5,
+      "type": "bargauge",
+      "title": "Where the time goes",
+      "description": "Total time in the range. A Bash call that runs a script and something else counts as a script call. Times are summed, so calls that overlap add up to more than the wall clock.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 27,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum(sum_over_time({service_name=\"claude-code\"} | event_name=\"api_request\" | unwrap duration_ms [$__range]))",
+          "legendFormat": "Claude (model calls)",
+          "refId": "A",
+          "queryType": "instant"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum(sum_over_time({service_name=\"claude-code\"} | event_name=\"tool_result\" | tool_name=~\"Bash|PowerShell\" | tool_parameters=~`.*scripts[^a-z0-9_]{1,4}(arxiv|s2|graph|init|recap|debuglog)[.]py.*` | unwrap duration_ms [$__range]))",
+          "legendFormat": "Plugin scripts",
+          "refId": "B",
+          "queryType": "instant"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum(sum_over_time({service_name=\"claude-code\"} | event_name=\"tool_result\" | tool_parameters!~`.*scripts[^a-z0-9_]{1,4}(arxiv|s2|graph|init|recap|debuglog)[.]py.*` | unwrap duration_ms [$__range]))",
+          "legendFormat": "Other tools",
+          "refId": "C",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data in this time range",
+          "unit": "ms"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value #A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Claude (model calls)"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value #B"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Plugin scripts"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value #C"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Other tools"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "row",
+      "title": "paper-research",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 35,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 7,
+      "type": "text",
+      "title": "",
+      "transparent": true,
+      "gridPos": {
+        "x": 0,
+        "y": 36,
+        "w": 24,
+        "h": 3
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "What the plugin did, as Claude Code recorded it, so it works with the debug log off. A **skill run** is one use of a paper-research skill (`/read`, `/add`, and so on). A **script run** is a Bash call that ran one of its scripts. Claude Code doesn't time a skill alone, so a skill gets the time and cost of the prompt it ran in, shared with any other skill in that prompt."
+      }
+    },
+    {
+      "id": 8,
+      "type": "table",
+      "title": "Time and cost per skill",
+      "description": "For each skill: runs, the cost of the prompts they ran in, and those prompts' time (model calls plus tools) as total, p50, p90 and max. Claude and Plugin scripts split the total. With fewer than about 10 runs, p90 is the max. The numbers are approximate: a prompt that ran two skills counts in full for each, so the rows add up to more than the real cost and time.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 39,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (prompt_id, skill_name) (count_over_time({service_name=\"claude-code\"} | event_name=\"skill_activated\" | plugin_name=\"paper-research\" [$__range]))",
+          "legendFormat": "",
+          "refId": "A",
+          "queryType": "instant"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (prompt_id) (sum_over_time({service_name=\"claude-code\"} | event_name=\"api_request\" | unwrap duration_ms [$__range]))",
+          "legendFormat": "",
+          "refId": "B",
+          "queryType": "instant"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (prompt_id) (sum_over_time({service_name=\"claude-code\"} | event_name=\"tool_result\" | unwrap duration_ms [$__range]))",
+          "legendFormat": "",
+          "refId": "C",
+          "queryType": "instant"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (prompt_id) (sum_over_time({service_name=\"claude-code\"} | event_name=\"tool_result\" | tool_name=~\"Bash|PowerShell\" | tool_parameters=~`.*scripts[^a-z0-9_]{1,4}(arxiv|s2|graph|init|recap|debuglog)[.]py.*` | unwrap duration_ms [$__range]))",
+          "legendFormat": "",
+          "refId": "D",
+          "queryType": "instant"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (prompt_id) (sum_over_time({service_name=\"claude-code\"} | event_name=\"api_request\" | unwrap cost_usd [$__range]))",
+          "legendFormat": "",
+          "refId": "E",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "",
+          "unit": "ms",
+          "custom": {
+            "minWidth": 70
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Skill"
+            },
+            "properties": [
+              {
+                "id": "custom.minWidth",
+                "value": 190
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Runs"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Cost"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Cost per run"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Model calls"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {},
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        },
+        {
+          "id": "joinByField",
+          "options": {
+            "byField": "prompt_id",
+            "mode": "outerTabular"
+          }
+        },
+        {
+          "id": "filterByValue",
+          "options": {
+            "match": "all",
+            "type": "include",
+            "filters": [
+              {
+                "fieldName": "skill_name",
+                "config": {
+                  "id": "isNotNull",
+                  "options": {}
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "mode": "reduceRow",
+            "alias": "Prompt ms",
+            "replaceFields": false,
+            "reduce": {
+              "reducer": "sum"
+            },
+            "include": [
+              "Value #B",
+              "Value #C"
+            ]
+          }
+        },
+        {
+          "id": "groupBy",
+          "options": {
+            "fields": {
+              "skill_name": {
+                "operation": "groupby"
+              },
+              "prompt_id": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "count"
+                ]
+              },
+              "Prompt ms": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "sum",
+                  "median",
+                  "p90",
+                  "max"
+                ]
+              },
+              "Value #B": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "sum"
+                ]
+              },
+              "Value #D": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "sum"
+                ]
+              },
+              "Value #E": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "sum",
+                  "mean"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "field": "Prompt ms (sum)",
+                "desc": true
+              }
+            ]
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": {
+              "skill_name": "Skill",
+              "prompt_id (count)": "Runs",
+              "Prompt ms (sum)": "Total time",
+              "Prompt ms (median)": "p50",
+              "Prompt ms (p90)": "p90",
+              "Prompt ms (max)": "Max",
+              "Value #B (sum)": "Claude",
+              "Value #D (sum)": "Plugin scripts",
+              "Value #E (sum)": "Cost",
+              "Value #E (mean)": "Cost per run"
+            },
+            "indexByName": {
+              "skill_name": 0,
+              "prompt_id (count)": 1,
+              "Value #E (sum)": 2,
+              "Value #E (mean)": 3,
+              "Prompt ms (sum)": 4,
+              "Prompt ms (median)": 5,
+              "Prompt ms (p90)": 6,
+              "Prompt ms (max)": 7,
+              "Value #B (sum)": 8,
+              "Value #D (sum)": 9
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "table",
+      "title": "Skill runs",
+      "description": "One row per skill run, longest first: the time of its prompt split into model calls and tools, and the prompt's cost. Search the Events log on the service dashboard for the prompt id to follow it.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 47,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (prompt_id, skill_name) (count_over_time({service_name=\"claude-code\"} | event_name=\"skill_activated\" | plugin_name=\"paper-research\" [$__range]))",
+          "legendFormat": "",
+          "refId": "A",
+          "queryType": "instant"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (prompt_id) (sum_over_time({service_name=\"claude-code\"} | event_name=\"api_request\" | unwrap duration_ms [$__range]))",
+          "legendFormat": "",
+          "refId": "B",
+          "queryType": "instant"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (prompt_id) (sum_over_time({service_name=\"claude-code\"} | event_name=\"tool_result\" | unwrap duration_ms [$__range]))",
+          "legendFormat": "",
+          "refId": "C",
+          "queryType": "instant"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (prompt_id) (sum_over_time({service_name=\"claude-code\"} | event_name=\"api_request\" | unwrap cost_usd [$__range]))",
+          "legendFormat": "",
+          "refId": "E",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "",
+          "unit": "ms",
+          "custom": {
+            "minWidth": 70
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Skill"
+            },
+            "properties": [
+              {
+                "id": "custom.minWidth",
+                "value": 190
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Cost"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {},
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        },
+        {
+          "id": "joinByField",
+          "options": {
+            "byField": "prompt_id",
+            "mode": "outerTabular"
+          }
+        },
+        {
+          "id": "filterByValue",
+          "options": {
+            "match": "all",
+            "type": "include",
+            "filters": [
+              {
+                "fieldName": "skill_name",
+                "config": {
+                  "id": "isNotNull",
+                  "options": {}
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "mode": "reduceRow",
+            "alias": "Prompt ms",
+            "replaceFields": false,
+            "reduce": {
+              "reducer": "sum"
+            },
+            "include": [
+              "Value #B",
+              "Value #C"
+            ]
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "field": "Prompt ms",
+                "desc": true
+              }
+            ]
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time 1": true,
+              "Time 2": true,
+              "Time 3": true,
+              "Time 4": true,
+              "Value #A": true
+            },
+            "renameByName": {
+              "skill_name": "Skill",
+              "prompt_id": "Prompt",
+              "Prompt ms": "Time",
+              "Value #B": "Model calls",
+              "Value #C": "Tools",
+              "Value #E": "Cost"
+            },
+            "indexByName": {
+              "skill_name": 0,
+              "Prompt ms": 1,
+              "Value #E": 2,
+              "Value #B": 3,
+              "Value #C": 4,
+              "prompt_id": 5
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "table",
+      "title": "Scripts",
+      "description": "Each plugin script: how often Claude ran it, how often it failed, and how long a run took. A call that runs two scripts counts for the first.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 55,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (script) (count_over_time({service_name=\"claude-code\"} | event_name=\"tool_result\" | tool_name=~\"Bash|PowerShell\" | tool_parameters=~`.*scripts[^a-z0-9_]{1,4}(arxiv|s2|graph|init|recap|debuglog)[.]py.*` | line_format `{{.tool_parameters}}` | regexp `scripts[^a-z0-9_]{1,4}(?P<script>arxiv|s2|graph|init|recap|debuglog)[.]py` [$__range]))",
+          "legendFormat": "",
+          "refId": "A",
+          "queryType": "instant"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (script) (count_over_time({service_name=\"claude-code\"} | event_name=\"tool_result\" | tool_name=~\"Bash|PowerShell\" | tool_parameters=~`.*scripts[^a-z0-9_]{1,4}(arxiv|s2|graph|init|recap|debuglog)[.]py.*` | line_format `{{.tool_parameters}}` | regexp `scripts[^a-z0-9_]{1,4}(?P<script>arxiv|s2|graph|init|recap|debuglog)[.]py` | success=\"false\" [$__range]))",
+          "legendFormat": "",
+          "refId": "B",
+          "queryType": "instant"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "avg by (script) (avg_over_time({service_name=\"claude-code\"} | event_name=\"tool_result\" | tool_name=~\"Bash|PowerShell\" | tool_parameters=~`.*scripts[^a-z0-9_]{1,4}(arxiv|s2|graph|init|recap|debuglog)[.]py.*` | line_format `{{.tool_parameters}}` | regexp `scripts[^a-z0-9_]{1,4}(?P<script>arxiv|s2|graph|init|recap|debuglog)[.]py` | unwrap duration_ms [$__range]))",
+          "legendFormat": "",
+          "refId": "C",
+          "queryType": "instant"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "max by (script) (max_over_time({service_name=\"claude-code\"} | event_name=\"tool_result\" | tool_name=~\"Bash|PowerShell\" | tool_parameters=~`.*scripts[^a-z0-9_]{1,4}(arxiv|s2|graph|init|recap|debuglog)[.]py.*` | line_format `{{.tool_parameters}}` | regexp `scripts[^a-z0-9_]{1,4}(?P<script>arxiv|s2|graph|init|recap|debuglog)[.]py` | unwrap duration_ms [$__range]))",
+          "legendFormat": "",
+          "refId": "D",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "",
+          "unit": "ms",
+          "custom": {
+            "minWidth": 70
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Runs"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Failed"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "noValue",
+                "value": "0"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {},
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        },
+        {
+          "id": "joinByField",
+          "options": {
+            "byField": "script",
+            "mode": "outerTabular"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time 1": true,
+              "Time 2": true,
+              "Time 3": true,
+              "Time 4": true
+            },
+            "renameByName": {
+              "script": "Script",
+              "Value #A": "Runs",
+              "Value #B": "Failed",
+              "Value #C": "Average",
+              "Value #D": "Max"
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "field": "Runs",
+                "desc": true
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Skill runs over time",
+      "description": "Runs of each skill per interval.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 55,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (skill_name) (count_over_time({service_name=\"claude-code\"} | event_name=\"skill_activated\" | plugin_name=\"paper-research\" [$__interval]))",
+          "legendFormat": "{{skill_name}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data in this time range"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 12,
+      "type": "table",
+      "title": "Skills by who started them",
+      "description": "user-slash is a slash command you typed. claude-proactive is Claude choosing the skill. nested-skill is a skill started by another skill.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 63,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (skill_name, invocation_trigger) (count_over_time({service_name=\"claude-code\"} | event_name=\"skill_activated\" | plugin_name=\"paper-research\" [$__range]))",
+          "legendFormat": "",
+          "refId": "A",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data in this time range",
+          "custom": {
+            "minWidth": 70
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Skill"
+            },
+            "properties": [
+              {
+                "id": "noValue",
+                "value": ""
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Started by"
+            },
+            "properties": [
+              {
+                "id": "noValue",
+                "value": ""
+              }
+            ]
+          }
+        ]
+      },
+      "options": {},
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "renameByName": {
+              "Value #A": "Runs",
+              "skill_name": "Skill",
+              "invocation_trigger": "Started by"
+            },
+            "indexByName": {
+              "skill_name": 0,
+              "invocation_trigger": 1,
+              "Value #A": 3
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "field": "Runs",
+                "desc": true
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Script runs over time",
+      "description": "Runs of each script per interval.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 63,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (script) (count_over_time({service_name=\"claude-code\"} | event_name=\"tool_result\" | tool_name=~\"Bash|PowerShell\" | tool_parameters=~`.*scripts[^a-z0-9_]{1,4}(arxiv|s2|graph|init|recap|debuglog)[.]py.*` | line_format `{{.tool_parameters}}` | regexp `scripts[^a-z0-9_]{1,4}(?P<script>arxiv|s2|graph|init|recap|debuglog)[.]py` [$__interval]))",
+          "legendFormat": "{{script}}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data in this time range"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 14,
+      "type": "table",
+      "title": "Plugin versions",
+      "description": "Sessions in which a paper-research skill ran, by the plugin version that was loaded, with their skill runs and script runs, to compare releases. Cost is the whole session's, including work that did not use the plugin, so read it as a rough guide. A session that started before the time range has no load event in it and is left out.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 71,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (session_id, plugin_version) (count_over_time({service_name=\"claude-code\"} | event_name=\"plugin_loaded\" | plugin_name=\"paper-research\" [$__range]))",
+          "legendFormat": "",
+          "refId": "A",
+          "queryType": "instant"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (session_id) (sum_over_time({service_name=\"claude-code\"} | event_name=\"api_request\" | unwrap cost_usd [$__range]))",
+          "legendFormat": "",
+          "refId": "B",
+          "queryType": "instant"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (session_id) (count_over_time({service_name=\"claude-code\"} | event_name=\"skill_activated\" | plugin_name=\"paper-research\" [$__range]))",
+          "legendFormat": "",
+          "refId": "C",
+          "queryType": "instant"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (session_id) (count_over_time({service_name=\"claude-code\"} | event_name=\"tool_result\" | tool_name=~\"Bash|PowerShell\" | tool_parameters=~`.*scripts[^a-z0-9_]{1,4}(arxiv|s2|graph|init|recap|debuglog)[.]py.*` [$__range]))",
+          "legendFormat": "",
+          "refId": "D",
+          "queryType": "instant"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (session_id) (count_over_time({service_name=\"claude-code\"} | event_name=\"tool_result\" | tool_name=~\"Bash|PowerShell\" | tool_parameters=~`.*scripts[^a-z0-9_]{1,4}(arxiv|s2|graph|init|recap|debuglog)[.]py.*` | success=\"false\" [$__range]))",
+          "legendFormat": "",
+          "refId": "E",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "",
+          "unit": "none",
+          "custom": {
+            "minWidth": 70
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Cost"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Cost per session"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Failed script runs"
+            },
+            "properties": [
+              {
+                "id": "noValue",
+                "value": "0"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {},
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        },
+        {
+          "id": "joinByField",
+          "options": {
+            "byField": "session_id",
+            "mode": "outerTabular"
+          }
+        },
+        {
+          "id": "filterByValue",
+          "options": {
+            "match": "all",
+            "type": "include",
+            "filters": [
+              {
+                "fieldName": "plugin_version",
+                "config": {
+                  "id": "isNotNull",
+                  "options": {}
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "filterByValue",
+          "options": {
+            "match": "all",
+            "type": "include",
+            "filters": [
+              {
+                "fieldName": "Value #C",
+                "config": {
+                  "id": "isNotNull",
+                  "options": {}
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "groupBy",
+          "options": {
+            "fields": {
+              "plugin_version": {
+                "operation": "groupby"
+              },
+              "session_id": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "count"
+                ]
+              },
+              "Value #B": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "sum"
+                ]
+              },
+              "Value #C": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "sum"
+                ]
+              },
+              "Value #D": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "sum"
+                ]
+              },
+              "Value #E": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "sum"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "mode": "binary",
+            "alias": "Cost per session",
+            "replaceFields": false,
+            "binary": {
+              "left": "Value #B (sum)",
+              "operator": "/",
+              "right": "session_id (count)"
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "field": "plugin_version",
+                "desc": true
+              }
+            ]
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": {
+              "plugin_version": "Version",
+              "session_id (count)": "Sessions",
+              "Value #B (sum)": "Cost",
+              "Value #C (sum)": "Skill runs",
+              "Value #D (sum)": "Script runs",
+              "Value #E (sum)": "Failed script runs"
+            },
+            "indexByName": {
+              "plugin_version": 0,
+              "session_id (count)": 1,
+              "Value #B (sum)": 2,
+              "Cost per session": 3,
+              "Value #C (sum)": 4,
+              "Value #D (sum)": 5,
+              "Value #E (sum)": 6
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "type": "row",
+      "title": "Per user prompt",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 79,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 16,
+      "type": "text",
+      "title": "",
+      "transparent": true,
+      "gridPos": {
+        "x": 0,
+        "y": 80,
+        "w": 24,
+        "h": 3
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "Every model call carries the `prompt_id` of the prompt that caused it, so a prompt's cost is the sum of its calls. Background calls (session titles, suggestions, compaction) are included; narrow them with **Model call source** above, where `sdk` is the main conversation."
+      }
+    },
+    {
+      "id": 17,
+      "type": "table",
+      "title": "Most expensive prompts",
+      "description": "The ten costliest prompts, with their model calls and the paper-research skills that ran in them.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 83,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "topk(10, sum by (prompt_id) (sum_over_time({service_name=\"claude-code\"} | event_name=\"api_request\" | prompt_id!=\"\" | query_source=~\"$query_source\" | unwrap cost_usd [$__range])))",
+          "legendFormat": "",
+          "refId": "A",
+          "queryType": "instant"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (prompt_id) (count_over_time({service_name=\"claude-code\"} | event_name=\"api_request\" | prompt_id!=\"\" | query_source=~\"$query_source\" [$__range]))",
+          "legendFormat": "",
+          "refId": "B",
+          "queryType": "instant"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (prompt_id, skill_name) (count_over_time({service_name=\"claude-code\"} | event_name=\"skill_activated\" | plugin_name=\"paper-research\" [$__range]))",
+          "legendFormat": "",
+          "refId": "C",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "",
+          "unit": "currencyUSD",
+          "custom": {
+            "minWidth": 70
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Model calls"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {},
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        },
+        {
+          "id": "joinByField",
+          "options": {
+            "byField": "prompt_id",
+            "mode": "outerTabular"
+          }
+        },
+        {
+          "id": "filterByValue",
+          "options": {
+            "match": "all",
+            "type": "include",
+            "filters": [
+              {
+                "fieldName": "Value #A",
+                "config": {
+                  "id": "isNotNull",
+                  "options": {}
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "groupBy",
+          "options": {
+            "fields": {
+              "prompt_id": {
+                "operation": "groupby"
+              },
+              "Value #A": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "max"
+                ]
+              },
+              "Value #B": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "max"
+                ]
+              },
+              "skill_name": {
+                "operation": "aggregate",
+                "aggregations": [
+                  "uniqueValues"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "field": "Value #A (max)",
+                "desc": true
+              }
+            ]
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": {
+              "prompt_id": "Prompt",
+              "Value #A (max)": "Cost",
+              "Value #B (max)": "Model calls",
+              "skill_name (uniqueValues)": "paper-research skills"
+            },
+            "indexByName": {
+              "prompt_id": 0,
+              "Value #A (max)": 1,
+              "Value #B (max)": 2,
+              "skill_name (uniqueValues)": 3
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "type": "row",
+      "title": "Security",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 91,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 19,
+      "type": "text",
+      "title": "",
+      "transparent": true,
+      "gridPos": {
+        "x": 0,
+        "y": 92,
+        "w": 24,
+        "h": 3
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "Signs of something unexpected: rejected calls, hooks that block, risky shell commands, sensitive files, MCP servers you didn't add, and pages fetched. These panels show tool inputs, which can hold secrets, so keep the stack on this machine only (it listens on 127.0.0.1). The plugin's own guard decisions and hosts are on the debug log dashboard."
+      }
+    },
+    {
+      "id": 20,
+      "type": "table",
+      "title": "Tool decisions",
+      "description": "Who decided each tool call: config (a rule or auto mode), user, or hook. In auto mode, Classifier is the classifier's verdict. A rise of accept by config can mean a rule was loosened.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 95,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (decision, source, permission_mode, classifier_verdict) (count_over_time({service_name=\"claude-code\"} | event_name=\"tool_decision\" [$__range]))",
+          "legendFormat": "",
+          "refId": "A",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data in this time range",
+          "custom": {
+            "minWidth": 70
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Decision"
+            },
+            "properties": [
+              {
+                "id": "noValue",
+                "value": ""
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Decided by"
+            },
+            "properties": [
+              {
+                "id": "noValue",
+                "value": ""
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Mode"
+            },
+            "properties": [
+              {
+                "id": "noValue",
+                "value": ""
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Classifier"
+            },
+            "properties": [
+              {
+                "id": "noValue",
+                "value": ""
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Decision"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "accept": {
+                        "color": "green",
+                        "index": 0,
+                        "text": "accept"
+                      },
+                      "reject": {
+                        "color": "red",
+                        "index": 1,
+                        "text": "reject"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {},
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "renameByName": {
+              "Value #A": "Count",
+              "decision": "Decision",
+              "source": "Decided by",
+              "permission_mode": "Mode",
+              "classifier_verdict": "Classifier"
+            },
+            "indexByName": {
+              "decision": 0,
+              "source": 1,
+              "permission_mode": 2,
+              "classifier_verdict": 3,
+              "Value #A": 4
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "field": "Count",
+                "desc": true
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Rejected tool calls over time",
+      "description": "Refused calls per interval, by tool and by what refused them.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 95,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (tool_name, source) (count_over_time({service_name=\"claude-code\"} | event_name=\"tool_decision\" | decision=\"reject\" [$__interval]))",
+          "legendFormat": "{{tool_name}} ({{source}})",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data in this time range"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 22,
+      "type": "table",
+      "title": "MCP servers",
+      "description": "Connection events of each MCP server. A server you didn't add is a supply-chain risk; failed and disconnected are worth a look.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 103,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (server_name, status) (count_over_time({service_name=\"claude-code\"} | event_name=\"mcp_server_connection\" [$__range]))",
+          "legendFormat": "",
+          "refId": "A",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data in this time range",
+          "custom": {
+            "minWidth": 70
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Server"
+            },
+            "properties": [
+              {
+                "id": "noValue",
+                "value": ""
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Status"
+            },
+            "properties": [
+              {
+                "id": "noValue",
+                "value": ""
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Status"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "connected": {
+                        "color": "green",
+                        "index": 0,
+                        "text": "connected"
+                      },
+                      "failed": {
+                        "color": "red",
+                        "index": 1,
+                        "text": "failed"
+                      },
+                      "disconnected": {
+                        "color": "orange",
+                        "index": 2,
+                        "text": "disconnected"
+                      },
+                      "pending": {
+                        "color": "yellow",
+                        "index": 3,
+                        "text": "pending"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {},
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "renameByName": {
+              "Value #A": "Count",
+              "server_name": "Server",
+              "status": "Status"
+            },
+            "indexByName": {
+              "server_name": 0,
+              "status": 1,
+              "Value #A": 2
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "field": "Count",
+                "desc": true
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 23,
+      "type": "table",
+      "title": "MCP tools called",
+      "description": "Calls to MCP tools, by server and tool. Claude Code reports them as the tool mcp_tool, with the names in the tool parameters, which needs OTEL_LOG_TOOL_DETAILS=1.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 103,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (mcp_server_name, mcp_tool_name) (count_over_time({service_name=\"claude-code\"} | event_name=\"tool_result\" | tool_name=~\"mcp_tool|mcp__.*\" | line_format `{{.tool_parameters}}` | json [$__range]))",
+          "legendFormat": "",
+          "refId": "A",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data in this time range",
+          "custom": {
+            "minWidth": 70
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Server"
+            },
+            "properties": [
+              {
+                "id": "noValue",
+                "value": ""
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Tool"
+            },
+            "properties": [
+              {
+                "id": "noValue",
+                "value": ""
+              }
+            ]
+          }
+        ]
+      },
+      "options": {},
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "renameByName": {
+              "Value #A": "Count",
+              "mcp_server_name": "Server",
+              "mcp_tool_name": "Tool"
+            },
+            "indexByName": {
+              "mcp_server_name": 0,
+              "mcp_tool_name": 1,
+              "Value #A": 2
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "field": "Count",
+                "desc": true
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 24,
+      "type": "logs",
+      "title": "Risky shell commands",
+      "description": "Each line is whether the call succeeded, then the command. A match is not an attack; read it.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 111,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{service_name=\"claude-code\"} | event_name=\"tool_result\" | tool_name=~\"Bash|PowerShell\" | line_format `{{.tool_parameters}}` | json | full_command=~`(?is).*((^|[\\s;&|(=/\\\\\"'\\x60])(sudo|curl|wget|ssh|scp|nc|ncat|chmod|base64|iwr|Invoke-WebRequest)([.]exe)?($|[\\s;&|)\"'\\x60])|rm\\s+(-[a-z]+\\s+)*-[a-z]*(rf|fr)|rm\\s+-[a-z]*r[a-z]*\\s+(-[a-z]+\\s+)*-[a-z]*f|rm\\s+-[a-z]*f[a-z]*\\s+(-[a-z]+\\s+)*-[a-z]*r|Remove-Item\\b[^;&|\\n]*-Recurse|(^|[\\s/\\\\\"'=~])([.]env([.](local|production|prod|development|dev|staging|test))?|[.]ssh|credentials|id_rsa|id_ed25519)($|[\\s\"'/\\\\;|&])).*` | line_format `{{.success}}  {{.full_command}}`",
+          "legendFormat": "",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data in this time range"
+        },
+        "overrides": []
+      },
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending"
+      }
+    },
+    {
+      "id": 25,
+      "type": "logs",
+      "title": "Sensitive file access",
+      "description": "Each line is the tool and the file it touched.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 119,
+        "w": 24,
+        "h": 6
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{service_name=\"claude-code\"} | event_name=\"tool_result\" | tool_name=~\"Read|Edit|Write|NotebookEdit\" | line_format `{{.tool_input}}` | json | file_path=~`(?i).*((^|[/\\\\])([.]env([.](local|production|prod|development|dev|staging|test))?|[.]ssh|[.]aws|[.]netrc|id_rsa|id_ed25519|(credentials?|secrets?|tokens?)([.][a-z0-9]+)?)([/\\\\]|$)|[.](pem|key)$).*` or notebook_path=~`(?i).*((^|[/\\\\])([.]env([.](local|production|prod|development|dev|staging|test))?|[.]ssh|[.]aws|[.]netrc|id_rsa|id_ed25519|(credentials?|secrets?|tokens?)([.][a-z0-9]+)?)([/\\\\]|$)|[.](pem|key)$).*` | line_format `{{.tool_name}}  {{.file_path}}{{.notebook_path}}`",
+          "legendFormat": "",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data in this time range"
+        },
+        "overrides": []
+      },
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending"
+      }
+    },
+    {
+      "id": 26,
+      "type": "logs",
+      "title": "Web fetches and searches",
+      "description": "Pages and searches Claude Code reached. Each line is the tool and its URL or query.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 125,
+        "w": 24,
+        "h": 6
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{service_name=\"claude-code\"} | event_name=\"tool_result\" | tool_name=~\"WebFetch|WebSearch\" | line_format `{{.tool_name}}  {{.tool_input}}`",
+          "legendFormat": "",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data in this time range"
+        },
+        "overrides": []
+      },
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending"
+      }
+    }
+  ],
+  "editable": true,
+  "links": [
+    {
+      "title": "paper-research: service details",
+      "type": "link",
+      "url": "/d/paper-research-service",
+      "icon": "dashboard",
+      "targetBlank": false,
+      "keepTime": true,
+      "includeVars": false,
+      "tooltip": "Open paper-research: service details"
+    },
+    {
+      "title": "paper-research: plugin debug log",
+      "type": "link",
+      "url": "/d/paper-research-debug",
+      "icon": "dashboard",
+      "targetBlank": false,
+      "keepTime": true,
+      "includeVars": false,
+      "tooltip": "Open paper-research: plugin debug log"
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "query_source",
+        "label": "Model call source (regex)",
+        "type": "textbox",
+        "query": ".*",
+        "current": {
+          "text": ".*",
+          "value": ".*"
+        },
+        "options": [
+          {
+            "selected": true,
+            "text": ".*",
+            "value": ".*"
+          }
+        ]
+      }
+    ]
+  },
+  "description": "What the plugin is used for and what it costs, and signs of anything unexpected."
+}

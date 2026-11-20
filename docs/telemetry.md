@@ -6,16 +6,9 @@ This is optional and only for debugging. The plugin works the same without it.
 
 ## Start the stack
 
-You need Docker, and the plugin's `telemetry/docker-compose.yml`. Download it into a folder of its own:
+You need Docker, and the plugin's `telemetry/` folder: the Compose file and a dashboard. Copy the folder to a place of its own. Get it from the repository, or from the plugin as Claude Code installed it, in `~/.claude/plugins/cache/<marketplace>/paper-research/<version>/telemetry/`. Copy it rather than run it there, because that folder changes with every update of the plugin.
 
-```bash
-mkdir paper-research-telemetry && cd paper-research-telemetry
-curl -fsSLO https://raw.githubusercontent.com/marfago-labs/paper-research/main/telemetry/docker-compose.yml
-```
-
-Or copy it from the plugin as Claude Code installed it, in `~/.claude/plugins/cache/<marketplace>/paper-research/<version>/telemetry/`. Copy it rather than run it there, because that folder changes with every update of the plugin.
-
-Then, in the folder with the file:
+Then, in the copy:
 
 ```bash
 docker compose up -d
@@ -64,7 +57,21 @@ To stop the export, remove the block, or set `CLAUDE_CODE_ENABLE_TELEMETRY` to `
 
 ## What to look at
 
-Open Grafana, then **Explore**.
+Open Grafana at http://localhost:3000. It needs no login.
+
+Three dashboards are already there, linked from each other's top bar:
+
+- **paper-research: usage and security.** Open this one first. It starts with two rows of numbers: **Metrics** (cost, prompts, sessions, model and tool calls, skill and script runs, and calls and cost per prompt) and **Alarms** (failed tool calls and script runs, rejected calls, blocking hooks, risky commands, and sensitive file access, red when above zero). Below them:
+  - cost by model, and where the time goes;
+  - a paper-research row, as Claude Code recorded it, so it works with debug off: skill runs, time and cost per skill, each skill run, each script's runs, failures and time, and the sessions of each plugin version, to compare releases;
+  - cost and model calls per prompt, with the most expensive prompts;
+  - a security row: tool decisions, rejected calls, MCP servers and tools, risky shell commands, sensitive files, and web fetches.
+- **paper-research: service details.** Model calls (by model and source, errors, tokens, cache hit rate, latency), tools, hooks, recent traces from Tempo, and the latest events.
+- **paper-research: plugin debug log.** The plugin's own events: commands and their exit codes, requests to arXiv and Semantic Scholar with rate limits (429) apart from failures, the guard's and the stop hook's decisions, and the size of the session-start text. It stays empty until the debug log is on.
+
+Every panel has a description, and each queries on its own, so an empty panel doesn't affect the rest. Use the time picker at the top for the range: it starts at the last 6 hours. The per-prompt panels include background calls such as session titles, so use the **Model call source** box at the top to narrow them: a regular expression on `query_source`, where `sdk` is the main conversation.
+
+For anything else, use **Explore**.
 
 - **Events (Loki):** `{service_name="claude-code"}`. Each event has an `event_name`:
   - `tool_decision` and `tool_result`: every tool call, whether it was allowed or asked, and how it ended. This is where a fetch, an edit to `research/`, or a call to an MCP server shows up.
@@ -78,6 +85,19 @@ Open Grafana, then **Explore**.
 Events arrive within about five seconds. Metrics are sent once a minute by default. Events are stored by their `service_name`, with each attribute attached to the event, so filter with `{service_name="claude-code"} | event_name="tool_result"`.
 
 The full list of events and attributes is in Claude Code's [monitoring documentation](https://code.claude.com/docs/en/monitoring-usage).
+
+## The plugin's own events
+
+Claude Code's events show what Claude did. To see what the plugin's scripts and hooks decided, turn on the plugin's debug log: ask Claude to turn debug on (the `debug` skill), or run `python <skills>/debug/scripts/debuglog.py on` in the workspace. While it is on, each script and hook records its events in `research/.debug.log`, and, when the stack above is running and `OTEL_EXPORTER_OTLP_ENDPOINT` is set as shown, also sends them to it. Turn it off the same way when you're done: it is off by default, and it never turns itself off.
+
+The events have `service_name="paper-research"` in Loki, with the `event_name` and `source` attributes:
+
+- `command`: each run of a script, with its `command`, `exit` code, and `duration_ms`.
+- `http`: each request to arXiv or Semantic Scholar, with `host`, `path`, `status` (`network error` if the server didn't answer), and `duration_ms`. A search's query string is never recorded.
+- `guard`: each decision of the approval hook, with the `tool`, `decision` (`ask` or `pass`), and `reason`.
+- `rules`, `lessons`, `stop_hook`: what the session-start hooks loaded, and whether the Stop hook blocked.
+
+For example, `{service_name="paper-research"} | event_name="http" | status!="200"` lists every request that was refused or failed. The plugin sends only to an address on this machine, and the local file doesn't need Docker.
 
 ## Privacy
 

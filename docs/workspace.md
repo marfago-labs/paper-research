@@ -19,7 +19,8 @@ your-workspace/
     ├── graph/                 the knowledge graph (two JSONL files)
     ├── fulltext/              papers' text as Markdown (ignored by git)
     ├── pdfs/                  downloaded PDFs (ignored by git)
-    └── recap/                 the recap page and its data (ignored by git)
+    ├── recap/                 the recap page and its data (ignored by git)
+    └── .debug, .debug.log*    the debug log, only while you have it on (ignored by git)
 ```
 
 You can edit the Markdown files by hand. Don't edit `research/graph/` or `research/recap/` by hand: the graph is changed through its script, which checks every change, and the recap is rebuilt from your other files.
@@ -125,6 +126,6 @@ The plugin writes nothing to `CLAUDE.md` or `.claude/`. Its hooks give Claude th
 
 ## Putting it in git
 
-The Markdown files and the graph are meant to be versioned. `init` already ignores the generated and bulky files: `research/pdfs/`, `research/fulltext/`, `research/recap/`, `research/graph/.lock`, `.cache/`, `__pycache__/`, and `.claude/settings.local.json`.
+The Markdown files and the graph are meant to be versioned. `init` already ignores the generated and bulky files: `research/pdfs/`, `research/fulltext/`, `research/recap/`, `research/graph/.lock`, `.cache/`, `__pycache__/`, `.claude/settings.local.json`, and the debug log, `research/.debug` and `research/.debug.log*`.
 
 Your notes describe you and what you read. If you push the repository anywhere, keep it private.
