@@ -37,18 +37,17 @@ A workspace is a folder where you do your paper reading. Everything the plugin l
    /paper-research:init
    ```
 
-3. It shows what it will create or change, and writes nothing yet. Read the list. It never overwrites a file in `research/`, and it leaves everything outside its own block in `CLAUDE.md` alone.
-4. It then gives you a command that starts with `!`, such as `! python "<path>/skills/init/scripts/init.py" --workspace "<your folder>"`. The script prints this command itself, with its own path and your workspace folder, and Claude passes it on unchanged. Check that the path points into the plugin's folder, then paste it into Claude Code to run it. You run this step because `init` writes Claude's own permission rules and instructions, so Claude doesn't, and Claude Code's auto mode would block it if it tried.
-5. **Carry on in the same session.** Claude Code reads `CLAUDE.md` only when a session starts, so Claude reads the new rules itself once the write has happened. Every new session in the folder loads them on its own.
+3. Claude runs it and tells you which files it created. It only creates files that are missing: it never overwrites a file in `research/`, and never touches `CLAUDE.md` or your settings.
+4. **Carry on in the same session.** Claude reads the plugin's rules straight away. Every new session in the folder gets them from the plugin on its own.
 
 What `init` created:
 
 | Path | What it is |
 |---|---|
 | `research/` | Your notes: facts about you, papers, pins, insights, lessons, and the knowledge graph. See [Your workspace](workspace.md). |
-| `CLAUDE.md` | A block of rules for Claude, between two marker comments. Write your own notes outside the block. |
-| `.claude/settings.json` | Approval prompts before Claude fetches from the paper sites or edits the files that steer it, and rules for auto mode. See [Security](security.md). |
 | `.gitignore` | Entries for generated files and your local settings. |
+
+From then on, the plugin's hooks give Claude its rules at the start of each session, and ask you before Claude edits your lessons or profile or fetches from the paper sites. See [Security](security.md).
 
 ## Your first paper
 
@@ -84,7 +83,9 @@ Ask Claude to refresh the recap, then open `research/recap/recap.html` **in a br
 
 ## Update the plugin
 
-After you update the plugin, run `/paper-research:init` again. It refreshes the rules block in `CLAUDE.md`, and shows you the changes before it writes them.
+There's nothing to do after an update: the rules and approval prompts come with the plugin. Run `/reload-plugins`, then start a new session so the new rules load.
+
+If you set up a workspace with version 0.3.0 or earlier, remove what that version's `init` wrote, or the old rules load as well: the block between the `paper-research:begin` and `paper-research:end` lines in `CLAUDE.md`, and the `permissions.ask` and `autoMode.soft_deny` entries it added to `.claude/settings.json`. Keep any `sandbox` settings you want.
 
 ## Next
 

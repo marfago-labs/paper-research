@@ -4,10 +4,10 @@ Everything the plugin learns is saved as plain text files in your workspace, whe
 
 ```text
 your-workspace/
-├── CLAUDE.md                  rules for Claude: yours, plus the plugin's block
+├── CLAUDE.md                  your own rules for Claude, if any; the plugin never touches it
 ├── .claude/
-│   ├── settings.json          approval prompts and auto-mode rules, written by init
-│   └── settings.local.json    your own settings, never touched by the plugin
+│   ├── settings.json          your project settings; the plugin never touches it
+│   └── settings.local.json    your own settings; the plugin never touches it
 ├── .cache/                    request-pacing state (ignored by git)
 └── research/
     ├── user-facts.md          a log of facts about you, and your questions
@@ -116,10 +116,12 @@ To see it, ask Claude to refresh the recap, then open the file **in a browser**.
 
 The page is a fixed copy shipped with the plugin, and the data comes from your files, so nothing on it can be out of step with them. The graph is drawn by Cytoscape.js, which also ships with the plugin and is copied next to the page, so the page loads nothing from the internet and works offline.
 
-## Settings files
+## Rules and settings
 
-- **`.claude/settings.json`:** written by `init`. It makes Claude Code ask you before Claude fetches a page from arXiv, Semantic Scholar, Hugging Face, or GitHub, and before edits to `lessons.md`, `profile.md`, `CLAUDE.md`, and `.claude/`, and adds rules for auto mode. It allows and denies nothing. `init` only adds to it. See [Security](security.md).
-- **`.claude/settings.local.json`:** yours. Use it for settings that belong to you and your machine, such as denying an MCP server you don't want here, or trusting another website. The plugin never reads or writes it, and `init` adds it to `.gitignore`.
+The plugin writes nothing to `CLAUDE.md` or `.claude/`. Its hooks give Claude the rules and `research/lessons.md` at the start of every session, and ask you before Claude edits `lessons.md` or `profile.md` or fetches from `arxiv.org`, `export.arxiv.org`, `api.semanticscholar.org`, `huggingface.co`, `github.com`, or `api.github.com`. The rules and the fetch prompts apply in a folder that has `research/user-facts.md`, or inside one. The edit prompts cover `lessons.md` and `profile.md` of any workspace, wherever the session is. See [Security](security.md).
+
+- **`.claude/settings.json`:** your project's settings. Add the sandbox here if you want it, as [Security](security.md#the-sandbox) shows.
+- **`.claude/settings.local.json`:** settings that belong to you and your machine, such as denying an MCP server you don't want here, or trusting another website. `init` adds it to `.gitignore`.
 
 ## Putting it in git
 

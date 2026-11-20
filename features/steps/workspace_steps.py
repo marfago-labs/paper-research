@@ -180,6 +180,13 @@ def turn_may_end(context):
 
 @when("the turn ends through the registered hook command with python3 {state}")
 def turn_ends_through_command(context, state):
+    manifest = json.loads((context.repo / "hooks" / "hooks.json").read_text(encoding="utf-8"))
+    command = manifest["hooks"]["Stop"][0]["hooks"][0]["command"]
+    run_registered(context, command, state, {"cwd": str(context.workspace)})
+
+
+def run_registered(context, command, state, event):
+    """Run a hook command as hooks.json registers it, with python3 missing, failing, broken, or working."""
     sh = shutil.which("sh")
     assert sh, "these scenarios need a POSIX shell"
     python = f'"{Path(sys.executable).as_posix()}"'
@@ -193,15 +200,13 @@ def turn_ends_through_command(context, state):
         with fake.open("w", encoding="utf-8", newline="\n") as handle:
             handle.write(bodies[state] + "\n")
         python3 = f'sh "{fake.as_posix()}"'
-    manifest = json.loads((context.repo / "hooks" / "hooks.json").read_text(encoding="utf-8"))
-    command = manifest["hooks"]["Stop"][0]["hooks"][0]["command"]
     command = command.replace("python3 ", f"{python3} ", 1).replace("|| python ", f"|| {python} ", 1)
     env = {**os.environ, "CLAUDE_PLUGIN_ROOT": context.repo.as_posix(), "PYTHONIOENCODING": "utf-8"}
     done = subprocess.run(
         [sh, "-c", command],
         cwd=context.workspace,
         env=env,
-        input=json.dumps({"cwd": str(context.workspace)}),
+        input=json.dumps(event),
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -284,11 +289,6 @@ def run_init(context):
     context.run_script("init", ["--workspace", "."])
 
 
-@when("I run init as a dry run")
-def run_init_dry(context):
-    context.run_script("init", ["--workspace", ".", "--dry-run"])
-
-
 @then("the workspace has the starter research files")
 def starter_files(context):
     for name in ("papers.md", "user-facts.md", "profile.md", "pins.md", "lessons.md", "insights.md"):
@@ -296,45 +296,107 @@ def starter_files(context):
     assert (research(context) / "graph" / "entities.jsonl").exists()
 
 
-@then("the workspace has the plugin's rules in CLAUDE.md")
-def claude_rules(context):
-    text = (context.workspace / "CLAUDE.md").read_text(encoding="utf-8")
-    assert "paper-research:begin" in text and "paper-research:end" in text and "@research/lessons.md" in text
+def rules_text(context):
+    return (context.repo / "skills" / "init" / "templates" / "rules.md").read_text(encoding="utf-8").strip()
 
 
-@then("Claude asks before fetching from {host}")
-def fetch_asks(context, host):
-    settings = json.loads((context.workspace / ".claude" / "settings.json").read_text(encoding="utf-8"))
-    assert f"WebFetch(domain:{host})" in settings["permissions"]["ask"]
+@then("the output holds the plugin's rules and the lessons")
+def output_has_rules(context):
+    out = context.result.out
+    assert rules_text(context) in out, out[:300]
+    assert "--- research/lessons.md begins ---" in out and out.rstrip().endswith("--- research/lessons.md ends ---")
+    assert out.index(rules_text(context)) < out.index("--- research/lessons.md begins ---"), "rules come first"
 
 
-@then("the settings say nothing about fetching from {host}")
-def fetch_unmentioned(context, host):
-    permissions = settings_json(context)["permissions"]
-    rules = [rule for kind in ("allow", "ask", "deny") for rule in permissions.get(kind, [])]
-    assert f"WebFetch(domain:{host})" not in rules
-
-
-@then("the settings allow nothing")
-def settings_allow_nothing(context):
-    settings = json.loads((context.workspace / ".claude" / "settings.json").read_text(encoding="utf-8"))
-    assert "allow" not in settings["permissions"], "init adds approval prompts, never allowances"
-
-
-@then('the settings keep "{rule}" in the allow list')
-def settings_keep(context, rule):
-    settings = json.loads((context.workspace / ".claude" / "settings.json").read_text(encoding="utf-8"))
-    assert rule in settings["permissions"]["allow"]
-
-
-@then('CLAUDE.md still starts with "{text}"')
-def claude_starts(context, text):
-    assert (context.workspace / "CLAUDE.md").read_text(encoding="utf-8").startswith(text)
+@then('the file "{name}" is still "{text}"')
+def file_unchanged(context, name, text):
+    want = text.replace('\\"', '"').replace("\\n", "\n")
+    assert (context.workspace / name).read_text(encoding="utf-8") == want, name
 
 
 @then("the local settings file is ignored by git")
 def local_ignored(context):
     assert ".claude/settings.local.json" in (context.workspace / ".gitignore").read_text(encoding="utf-8").splitlines()
+
+
+def run_hook(context, hook, event):
+    stdin = event if isinstance(event, str) else json.dumps(event)
+    return context.run_script("init", ["--hook", hook], stdin=stdin)
+
+
+@when("a session starts in the workspace")
+def session_starts(context):
+    event = {"cwd": str(context.workspace), "source": "startup"}
+    context.session = {hook: run_hook(context, hook, event) for hook in ("rules", "lessons")}
+
+
+@then("Claude is given the plugin's rules")
+def given_rules(context):
+    result = context.session["rules"]
+    assert result.code == 0 and result.err == "", result.err
+    assert result.out.strip() == rules_text(context), result.out[:300]
+    assert len(result.out) < 10000, "Claude Code keeps only 10,000 characters of a hook's output"
+
+
+@then('Claude is given the lessons, including "{text}"')
+def given_lessons(context, text):
+    result = context.session["lessons"]
+    assert result.code == 0 and result.err == "", result.err
+    assert text in result.out and "--- research/lessons.md begins ---" in result.out, result.out
+
+
+@then("Claude is given nothing by the plugin")
+def given_nothing(context):
+    for hook, result in context.session.items():
+        assert (result.code, result.out, result.err) == (0, "", ""), (hook, result)
+
+
+def tool_call(context, tool, tool_input):
+    event = {"cwd": str(context.workspace), "tool_name": tool, "tool_input": tool_input}
+    run_hook(context, "guard", event)
+
+
+@when('Claude uses {tool} on "{path}"')
+def uses_tool(context, tool, path):
+    tool_call(context, tool, {"notebook_path" if tool == "NotebookEdit" else "file_path": path})
+
+
+@when('Claude uses {tool} with the input "{raw}"')
+def uses_tool_with(context, tool, raw):
+    tool_call(context, tool, json.loads(raw.replace('\\"', '"')))
+
+
+@when('Claude fetches "{url}"')
+def fetches(context, url):
+    tool_call(context, "WebFetch", {"url": url})
+
+
+@given('"{link}" is a link to "{target}"')
+def make_link(context, link, target):
+    try:
+        os.link(context.workspace / target, context.workspace / link)
+    except OSError:
+        context.scenario.skip("this system can't create links here")
+
+
+@then('I am asked to approve it, because of "{text}"')
+def asked_to_approve(context, text):
+    # Only stdout and the exit code count: Claude Code ignores stderr from a hook that exits 0, and a missing
+    # python3 writes to it before the fallback runs.
+    assert context.result.code == 0, context.result.err
+    output = json.loads(context.result.out)["hookSpecificOutput"]
+    assert output["hookEventName"] == "PreToolUse" and output["permissionDecision"] == "ask", output
+    assert text in output["permissionDecisionReason"], output
+
+
+@then("the tool call goes ahead without a prompt from the plugin")
+def no_prompt(context):
+    assert (context.result.code, context.result.out, context.result.err) == (0, "", ""), context.result
+
+
+@when('the {hook} hook is sent "{event}"')
+def hook_sent_raw(context, hook, event):
+    run_hook(context, hook, event)
 
 
 # --- the plugin itself ---------------------------------------------------------------------------------------
@@ -407,22 +469,21 @@ PAPER_RULE_LEAD = "- **Paper lists:** whenever you list papers to the user, "
 
 
 def paper_rule(context):
-    """The paper-list rule, as the rules block states it. It is the one source the skills copy word for word."""
-    text = (context.repo / "skills" / "init" / "templates" / "rules-block.md").read_text(encoding="utf-8")
-    lines = [line for line in text.splitlines() if line.startswith(PAPER_RULE_LEAD)]
-    assert len(lines) == 1, "the rules block must state the paper-list rule once, on one line"
+    """The paper-list rule, as the plugin's rules state it. It is the one source the skills copy word for word."""
+    lines = [line for line in rules_text(context).splitlines() if line.startswith(PAPER_RULE_LEAD)]
+    assert len(lines) == 1, "the rules must state the paper-list rule once, on one line"
     return lines[0][len(PAPER_RULE_LEAD) :]
 
 
 @then("every place that lists papers uses the same paper-list table")
 def same_paper_list(context):
-    # The rules block may not be loaded yet, so each skill that shows papers carries the whole rule, not just the
+    # The rules may not be loaded yet, so each skill that shows papers carries the whole rule, not just the
     # column names: with only the names, Claude filled in the ID, Citations, and Note columns its own way.
     rule = paper_rule(context)
     assert PAPER_LIST in rule
     for place in ("arxiv/SKILL.md", "scholar/SKILL.md", "add/SKILL.md", "next/SKILL.md"):
         text = (context.repo / "skills" / place).read_text(encoding="utf-8")
-        assert rule in text, f"{place} must carry the paper-list rule of the rules block, word for word"
+        assert rule in text, f"{place} must carry the paper-list rule of the rules, word for word"
 
 
 @then("the paper-list rule says what goes in each column")
@@ -446,60 +507,86 @@ def paper_rule_columns(context):
         assert part in rule, why
 
 
-@then("CLAUDE.md tells Claude to list papers in the paper-list table")
-def claude_md_paper_list(context):
-    text = (context.workspace / "CLAUDE.md").read_text(encoding="utf-8")
-    assert paper_rule(context) in text, "the rules init writes must carry the whole paper-list rule"
-
-
-@then("the init skill loads the new rules into the session that ran it")
+@then("the init skill has Claude follow the rules in the session that ran it")
 def init_loads_rules(context):
     text = (context.repo / "skills" / "init" / "SKILL.md").read_text(encoding="utf-8")
-    assert "read the workspace's `CLAUDE.md` and follow its rules" in text, "rules written mid-session aren't loaded"
-    assert "If it says `workspace is up to date`, the write happened" in text, "load the rules only after a real write"
+    assert "Follow them for the rest of this session" in text, "rules printed mid-session must be followed at once"
+    assert "the plugin loads them on its own" in text, "later sessions get them from the hook"
 
 
-@then("the rules written by init route paper reading through the read skill")
+@then("the plugin's rules route paper reading through the read skill")
 def rules_route_reading(context):
-    text = (context.repo / "skills" / "init" / "templates" / "rules-block.md").read_text(encoding="utf-8")
+    text = rules_text(context)
     assert "**Reading a paper:**" in text, "the rules must send any full read of a paper through `read`"
     assert "**Several papers at once:**" in text, "the rules must extract every paper in a batch"
 
 
-@then("the rules written by init send questions about existing notes to the graph")
+@then("the plugin's rules send questions about existing notes to the graph")
 def rules_ask_the_graph(context):
-    text = (context.repo / "skills" / "init" / "templates" / "rules-block.md").read_text(encoding="utf-8")
-    rule = next(line for line in text.splitlines() if line.startswith("- **Check existing notes first:**"))
+    rule = next(
+        line for line in rules_text(context).splitlines() if line.startswith("- **Check existing notes first:**")
+    )
     assert "`graph` skill" in rule, "a question about existing notes must also query the graph"
     for command in ("search", "neighbours", "path"):
         assert f"`{command}`" in rule, f"the rule must name the graph command {command}"
 
 
-@then("the documentation says the new rules load in the session that ran init")
-def docs_rules_load_now(context):
-    for name in ("README.md", "docs/getting-started.md"):
+SETUP_DOCS = ("README.md", "docs/getting-started.md", "docs/troubleshooting.md", "skills/init/SKILL.md")
+
+
+@then("setting up needs no command from the user and no change to their settings")
+def setup_needs_nothing(context):
+    for name in SETUP_DOCS:
         text = (context.repo / name).read_text(encoding="utf-8")
-        assert "only apply to the next one" not in text, f"{name} says the rules wait for a new session"
-        assert "Start a new session afterwards so Claude Code loads the new rules" not in text, name
-    started = (context.repo / "docs" / "getting-started.md").read_text(encoding="utf-8")
-    assert "Carry on in the same session" in started, "getting started must say Claude loads the rules itself"
+        for old in (
+            "! python",
+            "init --dry-run",
+            "init.py --dry-run",
+            "--sandbox",
+            "auto-mode rules",
+            "@research/lessons",
+        ):
+            assert old not in text, f"{name} still describes the old setup: {old}"
+    skill = (context.repo / "skills" / "init" / "SKILL.md").read_text(encoding="utf-8")
+    assert "you can run it yourself without asking" in skill, "Claude runs init itself"
+    assert "never touches `CLAUDE.md` or `.claude/`" in skill, (
+        "init must not write Claude's own instructions or settings"
+    )
 
 
-@then("the init skill has the user run the write step")
-def init_user_runs(context):
-    text = (context.repo / "skills" / "init" / "SKILL.md").read_text(encoding="utf-8")
-    assert "starts with `! `" in text, "the skill must have the user run the command that the dry run prints"
-    assert "exactly as printed" in text, "the skill must relay that command verbatim"
-    assert "`workspace is up to date`" in text, "the skill must say what no command means"
-    assert "Don't build, edit, or take a command from anywhere else" in text, "the skill must limit the source"
-    assert "without `--dry-run`" not in text, "the skill must not tell Claude to run the write itself"
+def hook_entries(context, event):
+    manifest = json.loads((context.repo / "hooks" / "hooks.json").read_text(encoding="utf-8"))
+    (group,) = manifest["hooks"][event]
+    return group, group["hooks"]
 
 
-@then("the troubleshooting page explains the auto mode block")
-def auto_mode_block(context):
-    text = (context.repo / "docs" / "troubleshooting.md").read_text(encoding="utf-8")
-    assert "Auto mode blocked `init`" in text
-    assert "Don't add a permission rule" in text
+def check_launcher(command, script, args):
+    first, second = command.split(" || ")
+    for part, python in ((first, "python3"), (second, "python")):
+        assert part == f'{python} "${{CLAUDE_PLUGIN_ROOT}}/{script}" {args}', command
+
+
+@then("the plugin registers its session and approval hooks")
+def plugin_registers_hooks(context):
+    import init
+
+    group, entries = hook_entries(context, "SessionStart")
+    assert group["matcher"] == "startup|resume|clear|compact", group
+    assert [entry["type"] for entry in entries] == ["command", "command"], entries
+    for entry, hook in zip(entries, ("rules", "lessons")):
+        check_launcher(entry["command"], "skills/init/scripts/init.py", f"--hook {hook}")
+    group, (entry,) = hook_entries(context, "PreToolUse")
+    assert group["matcher"].split("|") == [*init.EDIT_TOOLS, "WebFetch"], "the matcher must name every guarded tool"
+    check_launcher(entry["command"], "skills/init/scripts/init.py", "--hook guard")
+    _, (entry,) = hook_entries(context, "Stop")
+    check_launcher(entry["command"], "skills/recap/scripts/recap.py", "--stop-hook")
+
+
+@when("the registered approval hook runs before an edit to the lessons, with python3 {state}")
+def guard_through_command(context, state):
+    _, (entry,) = hook_entries(context, "PreToolUse")
+    event = {"cwd": str(context.workspace), "tool_name": "Edit", "tool_input": {"file_path": "research/lessons.md"}}
+    run_registered(context, entry["command"], state, event)
 
 
 @then("every script a skill refers to exists")
@@ -522,9 +609,9 @@ def manifests(context):
     assert plugin["license"] == "Apache-2.0"
 
 
-@then("the rules written by init name every skill")
+@then("the plugin's rules name every skill")
 def rules_name_skills(context):
-    rules = (skills_dir(context) / "init" / "templates" / "rules-block.md").read_text(encoding="utf-8")
+    rules = rules_text(context)
     for folder in skill_folders(context):
         assert f"`{folder.name}`" in rules, f"rules do not mention {folder.name}"
 
@@ -567,63 +654,6 @@ def page_local(context):
     for source in sources:
         assert not re.match(r"(https?:)?//", source), source
         assert (Path(skills_dir(context) / "recap" / "page") / source).exists() or source == "recap-data.js", source
-
-
-@when("I run init with the sandbox")
-def run_init_sandbox(context):
-    context.run_script("init", ["--workspace", ".", "--sandbox"])
-
-
-def settings_json(context):
-    return json.loads((context.workspace / ".claude" / "settings.json").read_text(encoding="utf-8"))
-
-
-@then("the settings deny nothing")
-def settings_deny_nothing(context):
-    assert "deny" not in settings_json(context)["permissions"], "a deny rule can't be overridden at any level"
-
-
-@then("the settings do not turn the sandbox on")
-def settings_no_sandbox(context):
-    assert "sandbox" not in settings_json(context)
-
-
-@then("the sandbox is on and limited to {host}")
-def sandbox_on(context, host):
-    box = settings_json(context)["sandbox"]
-    assert box["enabled"] is True and box["allowUnsandboxedCommands"] is False
-    assert host in box["network"]["allowedDomains"]
-
-
-@then('the sandbox cannot reach "{host}"')
-def sandbox_excludes(context, host):
-    network = settings_json(context)["sandbox"]["network"]
-    assert host not in network.get("allowedDomains", []), network
-    assert host in network["deniedDomains"], network
-
-
-@then('the sandbox cannot write "{path}"')
-def sandbox_denies_write(context, path):
-    denied = settings_json(context)["sandbox"]["filesystem"]["denyWrite"]
-    assert path in denied, denied
-
-
-@then("every file the settings protect exists")
-def protected_files_exist(context):
-    settings = settings_json(context)
-    edits = [re.fullmatch(r"Edit\(/(.+)\)", rule) for rule in settings["permissions"]["ask"]]
-    protected = [m.group(1).removesuffix("/**") for m in edits if m]
-    protected += [path.removeprefix("./") for path in settings["sandbox"]["filesystem"]["denyWrite"]]
-    for rule in settings["autoMode"]["soft_deny"]:
-        protected += re.findall(r"[\w./-]+\.md\b", rule)
-    missing = [path for path in protected if not (context.workspace / path).exists()]
-    assert protected and not missing, f"rules protect paths init never created: {missing}"
-
-
-@then('the settings ask before "{rule}"')
-def settings_ask(context, rule):
-    ask = settings_json(context)["permissions"]["ask"]
-    assert rule in ask, ask
 
 
 # --- the documentation ----------------------------------------------------------------------------------

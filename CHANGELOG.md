@@ -6,6 +6,29 @@ All notable changes to the plugin are listed here, newest first. The format foll
 
 ## [Unreleased]
 
+### Changed
+
+- Setting up a workspace is one step that Claude runs: `/paper-research:init` creates the starter files in
+  `research/` and `.gitignore` entries, and never touches `CLAUDE.md` or `.claude/`. There is no `!` command to run,
+  and nothing to run after an update.
+- The plugin's rules and `research/lessons.md` come from two `SessionStart` hooks, at the start of every session and
+  after the conversation is compacted, in any folder with `research/user-facts.md`. They used to be a block in
+  `CLAUDE.md`.
+- Approval prompts come from a `PreToolUse` hook instead of ask rules in `.claude/settings.json`. It asks before an
+  edit to `research/lessons.md` or `research/profile.md` of any workspace, matching the file itself rather than its
+  spelling, and before a fetch from `arxiv.org`, `export.arxiv.org`, `api.semanticscholar.org`, `huggingface.co`,
+  `github.com`, or `api.github.com`, reading the host the way a browser does. If it can't tell which file or address
+  a call uses, it asks. It no longer covers `CLAUDE.md` and `.claude/`, which are left to Claude Code, and no
+  auto-mode rules are written.
+
+### Removed
+
+- `init --dry-run` and `init --sandbox`. To use the sandbox, add the settings that the security page shows.
+
+To update a workspace set up with 0.3.0 or earlier, delete the block between the `paper-research:begin` and
+`paper-research:end` lines in `CLAUDE.md`, and the `permissions.ask` and `autoMode.soft_deny` entries that `init`
+added to `.claude/settings.json`. Otherwise the old rules load as well.
+
 ## [0.3.0] - 2026-11-17
 
 ### Added

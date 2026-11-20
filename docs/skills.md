@@ -12,7 +12,7 @@ The plugin is a set of skills. Claude chooses one from what you say, and you can
 | [graph](#graph) | Query or change the knowledge graph |
 | [recap](#recap) | Refresh the recap page |
 | [scholar](#scholar-and-arxiv) and [arxiv](#scholar-and-arxiv) | Look things up (used by the others) |
-| [init](#init) | Set up or update a workspace |
+| [init](#init) | Set up a workspace |
 
 ## Links without a command
 
@@ -117,6 +117,6 @@ Paper text and abstracts come from outside your workspace. Claude treats them as
 
 ## init
 
-**Triggers:** `/paper-research:init`, a new workspace, or after updating the plugin. See [Getting started](getting-started.md#set-up-a-workspace).
+**Triggers:** `/paper-research:init`, or a new workspace. See [Getting started](getting-started.md#set-up-a-workspace).
 
-**Does:** shows what it would change, asks, then creates missing starter files, refreshes the rules block in `CLAUDE.md`, merges settings, and adds `.gitignore` entries. It never overwrites a file in `research/`. With `--sandbox`, it also turns on Claude Code's sandbox for shell commands. See [Security](security.md#the-sandbox).
+**Does:** Claude runs `init.py`, which creates each missing starter file in `research/` and adds `.gitignore` entries, then follows the rules it prints for the rest of the session. It never overwrites a file in `research/`, and never touches `CLAUDE.md` or your settings. Later sessions get the rules from the plugin's hooks, so there's nothing to run after an update. For the sandbox, see [Security](security.md#the-sandbox).

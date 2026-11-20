@@ -28,7 +28,7 @@ Each skill is a folder in `skills/` with a `SKILL.md`. Scripts live in the skill
 - **A change a user can see updates the docs** in the same commit: a new skill, command, option, file, or message. It also adds a line under `[Unreleased]` in `CHANGELOG.md`. Only a release changes the version: see [Releases](#releases).
 - **Tests never use made-up absolute paths** such as `/no/such/folder`. Build a missing path inside a temporary folder. A mutant that skips a check can otherwise create real folders on the developer's machine.
 - **Cytoscape.js is the only vendored file.** To update it, take `dist/cytoscape.min.js` and its licence from the npm release, put the version in the file name, and update the name in `recap.py`, `recap.html`, the recap tests, `features/steps/workspace_steps.py`, and `docs/troubleshooting.md`. Update the version, hash, and check command in [Security](docs/security.md#third-party-code).
-- **Rules the user's agent follows** go in `skills/init/templates/rules-block.md` if they apply in every session, or in the skill that needs them.
+- **Rules the user's agent follows** go in `skills/init/templates/rules.md` if they apply in every session, or in the skill that needs them. The `SessionStart` hook prints that file, and Claude Code keeps only 10,000 characters of it, which a unit test checks.
 
 ## Checks
 

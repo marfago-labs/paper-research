@@ -1,32 +1,33 @@
 #!/usr/bin/env python3
-"""Set up or update a paper-research workspace. Standard library only.
+"""Set up a paper-research workspace, and run the plugin's session and approval hooks. Standard library only.
 
-Run from the workspace root. It never overwrites a research file that exists. It changes only:
-- missing starter files in research/,
-- the marked paper-research block in CLAUDE.md (created, or replaced if present),
-- missing entries in .claude/settings.json (merged, nothing removed),
-- missing lines in .gitignore.
---dry-run prints what would change, with a diff for files that exist, and writes nothing. It also prints,
-on a line starting with "! ", the command that writes the changes. The user runs that command, because
-init changes the permission rules and instructions that steer Claude, so Claude must not run it.
---sandbox also turns on Claude Code's sandbox for shell commands, limited to the same hosts.
-Exit codes: 0 success, 1 a file couldn't be read or updated safely, 2 usage error.
+Run from the workspace root, it creates each missing starter file in research/ and adds missing lines to .gitignore.
+It never changes a research file that exists, and never touches CLAUDE.md or .claude/. Then it prints the rules and
+the lessons, so the session that ran it can follow them at once.
+
+With --hook it is one of the plugin's hooks instead, and reads the hook event from stdin:
+- rules: at session start in a workspace, prints the plugin's rules, which Claude Code adds to Claude's context.
+- lessons: at session start in a workspace, prints research/lessons.md the same way.
+- guard: before an edit or a fetch, asks the user to approve any edit to a workspace's research/lessons.md or
+  research/profile.md, and any fetch from the hosts the plugin reads papers from, in a workspace.
+A hook never fails the session: it exits 0 whatever it is sent.
+Exit codes: 0 success, 2 usage error.
 """
 
 from __future__ import annotations
 
 import argparse
-import difflib
 import json
-import re
+import os
 import sys
+import unicodedata
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
 
 SKILL_DIR = Path(__file__).resolve().parents[1]
 TEMPLATES = SKILL_DIR / "templates"
-PLUGIN_JSON = SKILL_DIR.parents[1] / ".claude-plugin" / "plugin.json"
-BEGIN = "<!-- paper-research:begin (written by the init skill; edit outside this block) -->"
-END = "<!-- paper-research:end -->"
+RESEARCH = "research"
+MARKER = "user-facts.md"
 GITIGNORE = [
     "__pycache__/",
     ".cache/",
@@ -36,159 +37,32 @@ GITIGNORE = [
     "research/graph/.lock",
     ".claude/settings.local.json",
 ]
-CLAUDE_HEADER = (
-    "# Paper research workspace\n\n"
-    "Add this workspace's own settings, such as the user's topics, above or below the block.\n\n"
+# Claude Code keeps at most 10,000 characters of a hook's output in context, so the lessons are cut well before that.
+LESSONS_LIMIT = 9000
+LESSONS_BEGIN = "--- research/lessons.md begins ---"
+LESSONS_END = "--- research/lessons.md ends ---"
+LESSONS_HEADER = (
+    "## Lessons\n\n"
+    "How to work with this user, from research/lessons.md. The user approved each lesson. Follow them as rules.\n"
 )
-# init writes no allow rules. Ask rules only add a prompt, so they can't widen permissions, and init writes
-# only two kinds: approval for editing a file, and approval for fetching from a named host.
-ASK_RULE = re.compile(r"Edit\(/[^()\s]+\)|WebFetch\(domain:[A-Za-z0-9][A-Za-z0-9.-]*\.[A-Za-z]{2,}\)")
-# Settings keys that must be of this type if present, so a merge can't fail halfway on a wrong shape.
-EXPECTED_SHAPE = [
-    ("permissions", dict),
-    ("permissions.allow", list),
-    ("permissions.ask", list),
-    ("permissions.deny", list),
-    ("autoMode", dict),
-    ("autoMode.soft_deny", list),
-    ("sandbox", dict),
-    ("sandbox.filesystem", dict),
-    ("sandbox.filesystem.denyWrite", list),
-    ("sandbox.network", dict),
-    ("sandbox.network.allowedDomains", list),
-    ("sandbox.network.deniedDomains", list),
-]
+# The files that later sessions read as instructions, and the tools that change them, with the input that names the
+# file. Every other file and tool is left to Claude Code's own permissions.
+GUARDED_FILES = ("lessons.md", "profile.md")
+EDIT_TOOLS = {"Edit": "file_path", "Write": "file_path", "MultiEdit": "file_path", "NotebookEdit": "notebook_path"}
+FETCH_HOSTS = frozenset(
+    {
+        "arxiv.org",
+        "export.arxiv.org",
+        "api.semanticscholar.org",
+        "huggingface.co",
+        "github.com",
+        "api.github.com",
+    }
+)
+UNCLEAR = "the plugin couldn't tell which file or address this changes or reads; approve only if you asked for it"
 
 
-class Missing:
-    """The type of MISSING, so a shape check accepts it with isinstance rather than comparing to it."""
-
-
-MISSING = Missing()
-# Characters a path may hold and still sit safely inside double quotes in bash, PowerShell, and cmd.
-SAFE_PATH = re.compile(r"[\w .:/()@+,=~-]+")
-
-
-class InitError(Exception):
-    pass
-
-
-def version():
-    try:
-        return json.loads(PLUGIN_JSON.read_text(encoding="utf-8")).get("version", "unknown")
-    except (OSError, ValueError):
-        return "unknown"
-
-
-def block():
-    body = (TEMPLATES / "rules-block.md").read_text(encoding="utf-8").strip()
-    return f"{BEGIN}\n<!-- plugin version {version()} -->\n\n{body}\n\n{END}\n"
-
-
-def claude_md(current):
-    """CLAUDE.md with the block added or replaced, leaving everything else as it is."""
-    if current is None:
-        return CLAUDE_HEADER + block()
-    if current.count(BEGIN) > 1 or current.count(END) > 1:
-        raise InitError("CLAUDE.md has more than one paper-research block; remove the extra ones by hand first")
-    has_begin, has_end = BEGIN in current, END in current
-    if not has_begin and not has_end:
-        return current.rstrip("\n") + "\n\n" + block()
-    start, end = current.find(BEGIN), current.find(END)
-    # The markers are different texts, so they can't start at the same place.
-    if has_begin != has_end or end < start:  # pragma: no mutate
-        raise InitError("CLAUDE.md has only one of the paper-research markers; fix it by hand first")
-    return current[:start] + block() + current[end + len(END) :].lstrip("\n")
-
-
-def load_template(name):
-    return json.loads((TEMPLATES / name).read_text(encoding="utf-8"))
-
-
-def check_template(template):
-    """Refuse a settings template that would allow anything, or ask about anything but edits and fetches."""
-    for rule in template.get("permissions", {}).get("allow", []):
-        raise InitError(f"the plugin's settings template has an allow rule init won't write: {rule!r}")
-    for rule in template.get("permissions", {}).get("ask", []):
-        if not isinstance(rule, str) or not ASK_RULE.fullmatch(rule):
-            raise InitError(f"the plugin's settings template has an ask rule init won't write: {rule!r}")
-    return template
-
-
-def extend(target, rules):
-    target.extend(rule for rule in rules if rule not in target)
-
-
-def merge_settings(current, sandbox):
-    """Add the template's rules to the settings, removing nothing."""
-    template = check_template(load_template("settings.json"))
-    settings = json.loads(json.dumps(current))
-    permissions = settings.setdefault("permissions", {})
-    extend(permissions.setdefault("ask", []), template["permissions"]["ask"])
-    soft = settings.setdefault("autoMode", {}).setdefault("soft_deny", [])
-    if not soft:
-        soft.append("$defaults")
-    extend(soft, template["autoMode"]["soft_deny"])
-    merge_sandbox(settings, sandbox)
-    return settings
-
-
-def merge_sandbox(settings, turn_on):
-    """Turn the sandbox on if asked, and keep any sandbox from reaching hosts that could publish notes."""
-    if turn_on:
-        box = settings.setdefault("sandbox", {})
-        box["enabled"] = True
-        box["allowUnsandboxedCommands"] = False
-    if "sandbox" not in settings:
-        return
-    template = load_template("sandbox.json")["sandbox"]
-    # The approval prompt covers Claude's file tools only, so keep sandboxed shell commands from writing
-    # the files that later sessions load as instructions. The ./ paths mean the workspace only because they
-    # go in the project's .claude/settings.json: in ~/.claude/settings.json they would mean ~/.claude.
-    files = settings["sandbox"].setdefault("filesystem", {})
-    extend(files.setdefault("denyWrite", []), template["filesystem"]["denyWrite"])
-    wanted = template["network"]
-    network = settings["sandbox"].setdefault("network", {})
-    if turn_on:
-        extend(network.setdefault("allowedDomains", []), wanted["allowedDomains"])
-    # Claude Code also opens the hosts of WebFetch(domain:...) allow rules to sandboxed commands. A denied
-    # domain stays blocked whatever allows it, and the WebFetch tool itself isn't affected.
-    extend(network.setdefault("deniedDomains", []), wanted["deniedDomains"])
-
-
-def lookup(settings, path):
-    for key in path.split("."):
-        if not isinstance(settings, dict) or key not in settings:
-            return MISSING
-        settings = settings[key]
-    return settings
-
-
-def parse_settings(path, text):
-    if text is None:
-        return {}
-    try:
-        settings = json.loads(text)
-    except ValueError as err:
-        raise InitError(f"{path} is not valid JSON ({err}); fix it by hand first") from None
-    if not isinstance(settings, dict) or any(
-        not isinstance(lookup(settings, key), (kind, Missing)) for key, kind in EXPECTED_SHAPE
-    ):
-        raise InitError(f"{path} has an unexpected shape; fix it by hand first")
-    return settings
-
-
-def detect_indent(text):
-    """The indentation the file already uses, so a merge doesn't reformat it."""
-    for line in text.splitlines():
-        indent = line[: len(line) - len(line.lstrip(" \t"))]
-        if indent and line.strip():
-            return "\t" if indent.startswith("\t") else len(indent)
-    return 2
-
-
-def dump(settings, indent):
-    return json.dumps(settings, indent=indent, ensure_ascii=False) + "\n"
+# --- setting up a workspace ------------------------------------------------------------------------------------
 
 
 def read_or_none(path):
@@ -197,111 +71,218 @@ def read_or_none(path):
 
 def starter_files(workspace):
     """Each starter file that the workspace doesn't have yet, as a change."""
-    for template in sorted((TEMPLATES / "research").rglob("*")):
-        target = workspace / "research" / template.relative_to(TEMPLATES / "research")
+    for template in sorted((TEMPLATES / RESEARCH).rglob("*")):
+        target = workspace / RESEARCH / template.relative_to(TEMPLATES / RESEARCH)
         if template.is_file() and not target.exists():
-            yield target, None, template.read_text(encoding="utf-8")
-
-
-def settings_change(workspace, sandbox):
-    """The settings with the template merged in, as a list of at most one change."""
-    path = workspace / ".claude" / "settings.json"
-    text = read_or_none(path)
-    current = parse_settings(path, text)
-    merged = merge_settings(current, sandbox)
-    if text is None:
-        return [(path, None, dump(merged, 2))]
-    return [(path, text, dump(merged, detect_indent(text)))] if merged != current else []
+            yield target, template.read_text(encoding="utf-8")
 
 
 def gitignore_change(workspace):
-    path = workspace / ".gitignore"
-    old = read_or_none(path)
-    lines = (old or "").splitlines()
-    missing = [line for line in GITIGNORE if line not in lines]
-    separator = "\n" if old and old.strip() else ""
-    return path, old, (old or "").rstrip("\n") + separator + "".join(f"{m}\n" for m in missing)
+    """.gitignore with the missing lines added, or None if it has them all."""
+    old = read_or_none(workspace / ".gitignore") or ""
+    missing = [line for line in GITIGNORE if line not in old.splitlines()]
+    if not missing:
+        return None
+    separator = "\n" if old.strip() else ""
+    return old.rstrip("\n") + separator + "".join(f"{line}\n" for line in missing)
 
 
-def plan(workspace, sandbox):
-    """Every change as (path, old text or None, new text)."""
-    claude = workspace / "CLAUDE.md"
-    old = read_or_none(claude)
-    changes: list[tuple[Path, str | None, str]] = [  # pragma: no mutate
-        *starter_files(workspace),
-        (claude, old, claude_md(old)),
-        *settings_change(workspace, sandbox),
-        gitignore_change(workspace),
-    ]
-    return [(p, o, n) for p, o, n in changes if o != n]
+def set_up(workspace):
+    """Write the missing files, and print each one."""
+    for path, text in starter_files(workspace):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+        print(f"created {path.relative_to(workspace).as_posix()}")
+    gitignore = gitignore_change(workspace)
+    if gitignore is not None:
+        (workspace / ".gitignore").write_text(gitignore, encoding="utf-8")
+        print("updated .gitignore")
 
 
-def describe(path, old, new, workspace):
-    name = path.relative_to(workspace).as_posix()
-    if old is None:
-        return f"create {name}"
-    diff = difflib.unified_diff(old.splitlines(), new.splitlines(), f"a/{name}", f"b/{name}", lineterm="")
-    return f"update {name}\n" + "\n".join(diff)
+# --- what Claude is told at the start of a session ----------------------------------------------------------------
+
+
+def rules():
+    return (TEMPLATES / "rules.md").read_text(encoding="utf-8").strip() + "\n"
+
+
+def lessons(workspace):
+    """research/lessons.md, marked as the user's lessons, and cut so it fits in what Claude Code keeps."""
+    text = (workspace / RESEARCH / "lessons.md").read_text(encoding="utf-8").strip()
+    if len(text) > LESSONS_LIMIT:
+        text = text[:LESSONS_LIMIT] + "\n[cut: the rest of research/lessons.md is longer than a session loads]"
+    return f"{LESSONS_HEADER}\n{LESSONS_BEGIN}\n{text}\n{LESSONS_END}\n"
+
+
+# --- the hooks ---------------------------------------------------------------------------------------------------
+
+
+def read_event(stdin):
+    """The hook event, or {} if stdin isn't a JSON object."""
+    try:
+        event = json.loads(stdin.buffer.read().decode("utf-8"))
+    except ValueError:  # bad JSON, and bytes that aren't UTF-8 (UnicodeDecodeError is a ValueError)
+        return {}
+    return event if isinstance(event, dict) else {}
+
+
+def event_folder(event):
+    cwd = event.get("cwd")
+    return Path(cwd) if isinstance(cwd, str) and cwd else Path.cwd()
+
+
+def is_workspace(folder):
+    return (folder / RESEARCH / MARKER).is_file()
+
+
+def find_workspace(folder):
+    """The folder, or the nearest folder above it, that holds a paper workspace, or None."""
+    try:
+        folder = folder.resolve()
+    except (OSError, RuntimeError, ValueError):
+        return None
+    return next((place for place in (folder, *folder.parents) if is_workspace(place)), None)
+
+
+def plain_name(name):
+    """A file name as Windows opens it: without a :stream suffix, and without trailing dots and spaces."""
+    return name.split(":")[0].rstrip(". ").casefold()
+
+
+def guarded_file(raw, folder, workspace):
+    """The guarded file that raw names, or None. Raises ValueError if raw can't be turned into a path."""
+    if not isinstance(raw, str) or not raw.strip():
+        raise ValueError(raw)
+    path = (folder / raw.replace("\\", "/")).resolve()
+    name = plain_name(path.name)
+    if name in GUARDED_FILES and path.parent.name.casefold() == RESEARCH and (path.parent / MARKER).is_file():
+        return f"{RESEARCH}/{name}"
+    return same_file(path, workspace)
+
+
+def same_file(path, workspace):
+    """The guarded file of the workspace that path is another name for, such as a hard link or a short name."""
+    if workspace is None or not path.exists():
+        return None
+    for guarded in GUARDED_FILES:
+        target = workspace / RESEARCH / guarded
+        if target.exists() and os.path.samefile(path, target):
+            return f"{RESEARCH}/{guarded}"
+    return None
+
+
+def fetch_host(raw):
+    """The host a URL fetches from, as a browser reads it. Raises ValueError if there is none."""
+    if not isinstance(raw, str):
+        raise ValueError(raw)
+    url = "".join(char for char in raw if char not in "\t\n\r").strip().replace("\\", "/")
+    host = urlsplit(url).hostname
+    if not host:
+        raise ValueError(raw)
+    host = unicodedata.normalize("NFKC", unquote(host)).casefold()
+    for dot in ("。", "．", "｡"):
+        host = host.replace(dot, ".")
+    return host.removesuffix(".")
+
+
+def guard_reason(event):
+    """Why the user should approve this tool call, or None if it isn't one the plugin guards."""
+    tool = event.get("tool_name")
+    if tool not in (*EDIT_TOOLS, "WebFetch"):  # a tuple, so a name that isn't a string can't raise
+        return None
+    folder = event_folder(event)
+    workspace = find_workspace(folder)
+    tool_input = event.get("tool_input")
+    tool_input = tool_input if isinstance(tool_input, dict) else {}
+    try:
+        if tool in EDIT_TOOLS:
+            return edit_reason(guarded_file(tool_input.get(EDIT_TOOLS[tool]), folder, workspace))
+        return fetch_reason(tool_input.get("url")) if workspace is not None else None
+    except (OSError, RuntimeError, ValueError):
+        return UNCLEAR if workspace is not None else None
+
+
+def edit_reason(name):
+    if name is None:
+        return None
+    return f"{name} is loaded as instructions in every session; approve only a change you asked for"
+
+
+def fetch_reason(url):
+    host = fetch_host(url)
+    if host not in FETCH_HOSTS:
+        return None
+    return f"a fetch from {host}, a host the paper-research plugin reads papers from; approve only if you expected it"
+
+
+def ask(reason):
+    return json.dumps(
+        {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "ask",
+                "permissionDecisionReason": reason,
+            }
+        }
+    )
+
+
+def rules_hook(event):
+    return None if find_workspace(event_folder(event)) is None else rules()
+
+
+def lessons_hook(event):
+    workspace = find_workspace(event_folder(event))
+    return None if workspace is None else lessons(workspace)
+
+
+def guard_hook(event):
+    reason = guard_reason(event)
+    return None if reason is None else ask(reason) + "\n"
+
+
+HOOKS = {"rules": rules_hook, "lessons": lessons_hook, "guard": guard_hook}
+
+
+def run_hook(name, stdin):
+    """Run one hook. Whatever happens, the session goes on: errors print nothing and exit 0."""
+    event = read_event(stdin)
+    try:
+        output = HOOKS[name](event)
+    except (OSError, ValueError):  # a file that can't be read or decoded: the session starts without it
+        output = None
+    if output is not None:
+        print(output, end="")
+    return 0
+
+
+# --- the command line --------------------------------------------------------------------------------------------
 
 
 def build_parser():
-    parser = argparse.ArgumentParser(description="Set up or update a paper-research workspace.")
+    parser = argparse.ArgumentParser(description="Set up a paper-research workspace, or run one of its hooks.")
     parser.add_argument("--workspace", type=Path, default=Path("."), help="workspace root (default: here)")
-    parser.add_argument("--dry-run", action="store_true", help="show the changes without writing them")
     parser.add_argument(
-        "--sandbox",
-        action="store_true",
-        help="also turn on the sandbox for shell commands, reaching only the hosts the scripts use",
+        "--hook",
+        choices=sorted(HOOKS),
+        help="run as one of the plugin's hooks, reading the hook event from stdin",
     )
     return parser
-
-
-def write_command(workspace, sandbox):
-    """The command that writes the changes, for the user to run, or None if a path would need shell quoting."""
-    script = Path(__file__).resolve().as_posix()
-    folder = workspace.as_posix()
-    if not (SAFE_PATH.fullmatch(script) and SAFE_PATH.fullmatch(folder)):
-        return None
-    return f'python "{script}" --workspace "{folder}"' + (" --sandbox" if sandbox else "")
-
-
-def show_write_command(workspace, sandbox):
-    command = write_command(workspace, sandbox)
-    if command is None:
-        print("no ready-made command: a path here needs shell quoting, so run init.py from a terminal")
-        print("in the workspace folder")
-    else:
-        print(f"! {command}")
-
-
-def apply(changes, workspace, dry_run):
-    """Print each change, and write it unless this is a dry run."""
-    for path, old, new in changes:
-        print(describe(path, old, new, workspace))
-        if not dry_run:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(new, encoding="utf-8")
-    if not changes:
-        print("workspace is up to date")
-    elif dry_run:
-        print(f"{len(changes)} changes; nothing written (dry run)")
 
 
 def main(argv=None):
     sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
     args = build_parser().parse_args(argv)
+    if args.hook:
+        return run_hook(args.hook, sys.stdin)
     workspace = args.workspace.resolve()
     if not workspace.is_dir():
         print(f"error: workspace not found: {workspace}", file=sys.stderr)
         return 2
-    try:
-        changes = plan(workspace, args.sandbox)
-    except InitError as err:
-        print(f"error: {err}", file=sys.stderr)
-        return 1
-    apply(changes, workspace, args.dry_run)
-    if args.dry_run and changes:
-        show_write_command(workspace, args.sandbox)
+    set_up(workspace)
+    print()
+    print(rules())
+    print(lessons(workspace), end="")
     return 0
 
 
