@@ -60,7 +60,7 @@ Something edited the graph files by hand and broke them. Read the listed errors 
 Not an error. The new entity looks like an existing one, and Claude decides whether to reuse the old one or confirm they're different. If it can't tell, it asks you. See [Knowledge graph](knowledge-graph.md#duplicates).
 
 **`graph`: `can't link ...: <relation> goes from ... to ..., not ...`.**
-The relation can't join those two types of entity, such as a concept `authored-by` an author. Use the relation that fits, or link the right entities. The types each relation joins are in [the knowledge graph](knowledge-graph.md#relations). Nothing was written.
+The relation can't join those two types of entity, such as a concept `authored-by` an author. Use the relation that fits, or link the right entities. The types each relation joins are in the [graph schema](graph-schema.md#relation-types). Nothing was written.
 
 **`graph`: `a new <type> needs its first link`.**
 Every entity but a paper is added with a link to where it came from, in the same `add` command: `--link-from` or `--link-to`, with `--source` and `--status`. Nothing was written.
@@ -72,7 +72,7 @@ Not an error in the graph, which still loads, though `validate` exits with 1 unt
 Two entities share that name. Claude uses an id. If you're running a command yourself, copy an id from the message.
 
 **A paper shows `nothing extracted yet` on the recap page.**
-It is in the graph with only its authors and citation links, because it was saved with `add` but never read. Ask Claude to extract it, or discuss it with `read`.
+Its status is `done`, but the graph holds only its authors and citation links, so it was finished without being extracted. Ask Claude to extract it, or discuss it with `read`. A paper still waiting to be read shows nothing: it is extracted when you read it.
 
 ## The recap page
 

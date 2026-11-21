@@ -25,7 +25,7 @@ python <skills>/graph/scripts/graph.py [--data FOLDER] COMMAND ...
 | `islands` | Lists papers with only author, citation, or insight connections. |
 | `add --type TYPE --name NAME [options]` | Adds an entity after checking for duplicates, with its first link. Every type but a paper needs one: `--link-from` or `--link-to`, with `--source` and `--status`. |
 | `update ENTITY [options]` | Adds aliases, ids, a url, a note, a reason it has no authors, or a distinct mark to an entity. |
-| `link START REL END --source TEXT --status STATUS` | Adds a relation. Nothing happens if it already exists. It refuses a relation between entity types it can't join, such as a concept `authored-by` an author; the types each relation joins are listed in [the knowledge graph](knowledge-graph.md). |
+| `link START REL END --source TEXT --status STATUS` | Adds a relation. If it already exists with a weaker status, it takes the new status and source, such as a `reported` link once the original study is checked; otherwise nothing changes, so a link is never downgraded. It refuses a relation between entity types it can't join, such as a concept `authored-by` an author; the types each relation joins are listed in the [graph schema](graph-schema.md#relation-types). |
 | `unlink START REL END` | Removes one relation. It warns about an entity other than a paper that is left with no links. |
 | `remove ENTITY` | Removes an entity and all its relations. It warns about each entity other than a paper that is left with no links. |
 | `merge KEEP DROP` | Folds a duplicate into the entity to keep, with its names, ids, and connections. |
@@ -51,7 +51,7 @@ An `ENTITY` is an id, a name, or an alias. If a name matches more than one entit
 | `--link-to REL ENTITY` | The first link, from the new entity to another one: `NEW REL ENTITY`, such as an insight `derived-from` a paper. `add` only. |
 | `--source`, `--status` | The first link's source and status, with the same rules as `link`. `add` only. |
 
-**Options for `link`:** `REL` is one of `authored-by`, `builds-on`, `cites`, `contradicts`, `derived-from`, `evaluates-on`, `proposes`, `related-to`, `uses`. `--status` is `verified` or `inferred`. A `verified` link's `--source` must start with a document: an `ARXIV:` or `DOI:` id, a `paper:` id followed by a comma and a place in it, a link, or `Semantic Scholar`. Anything else is refused, including a reason that only mentions an id, so a reason in prose goes with `inferred`.
+**Options for `link`:** `REL` is one of `authored-by`, `builds-on`, `cites`, `compared-with`, `contradicts`, `derived-from`, `evaluates-on`, `proposes`, `related-to`, `uses`. `--status` is `verified`, `reported`, or `inferred`. A `verified` or `reported` link's `--source` must start with a document: an `ARXIV:` or `DOI:` id, a `paper:` id followed by a comma and a place in it, a link, or `Semantic Scholar`. Anything else is refused, including a reason that only mentions an id, so a reason in prose goes with `inferred`.
 
 **Exit codes:** 0 success. 1 an error, such as an invalid graph, a refused change, or nothing found. 2 invalid arguments. 3 `add` found possible duplicates and made no change.
 

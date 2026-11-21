@@ -10,7 +10,8 @@ argument-hint: <text>
 2. Check `research/pins.md` for an existing entry, and update that instead of adding a duplicate.
 3. Add one entry to `research/pins.md` in the format described at the top of that file. Keep it to one fact in one or two sentences.
 4. Choose the status honestly:
-   - `verified`: checked against the source text.
+   - `verified`: checked against the source text, and the source made the claim itself.
+   - `reported`: checked against a source that only reports another study's result, such as a survey. Name that study in the entry.
    - `from-skim`: taken from an abstract or a skim, not checked.
    - `user-note`: the user's own idea or statement.
 5. Reply with the saved entry only.

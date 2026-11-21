@@ -92,6 +92,12 @@ def graph_has_relation(context, start, rel, end):
     assert len(found) == 1, read_all(context)[1]
 
 
+@then('the relation "{start}" {rel} "{end}" is {status} from "{source}"')
+def relation_status(context, start, rel, end, status, source):
+    found = [r for r in read_all(context)[1] if (r["from"], r["rel"], r["to"]) == (start, rel, end)]
+    assert [(r["status"], r["source"]) for r in found] == [(status, source)], found
+
+
 @then("the graph has {count:d} relations")
 def graph_relation_count(context, count):
     assert len(read_all(context)[1]) == count, read_all(context)[1]

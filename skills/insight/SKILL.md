@@ -16,7 +16,7 @@ An insight is a conclusion worth acting on or remembering, such as a practice to
 4. Add the entry to `research/insights.md`, creating the file with a `# Insights` heading if it doesn't exist. Use the format below.
 5. Connect it in the graph, following the `graph` skill:
    - Add the first source paper if it's missing. Then add an entity with `graph.py add --type insight`, using the slug from the entry's `id` and its title as `--name`, and `--link-to derived-from <paper>` as its first link.
-   - For each other source paper, add the paper if it's missing, then `link` the insight `derived-from` the paper. Give the paper and section as `source`, such as `ARXIV:<id>, §3.2`. Use status `verified` only if you checked it against the text, and `inferred` otherwise.
+   - For each other source paper, add the paper if it's missing, then `link` the insight `derived-from` the paper. Give the paper and section as `source`, such as `ARXIV:<id>, §3.2`. Use status `verified` only if you checked it against the text and the paper made the claim itself, `reported` if the paper only reports another study's result, and `inferred` otherwise.
    - Use `related-to` for any tools, methods, or other insights it clearly connects to.
 6. Reply with the saved titles, what you checked, and anything the source didn't support.
 
@@ -30,7 +30,7 @@ An insight is a conclusion worth acting on or remembering, such as a practice to
 - **Insight:** What to do or remember, in one or two sentences.
 - **Why:** The evidence or reasoning, in one or two sentences.
 - **Sources:** `ARXIV:<id>`, section or figure. Use `none` if it comes only from the user.
-- **Evidence:** `verified` (checked against the source), `unverified`, or `none`.
+- **Evidence:** `verified` (checked against the source), `reported` (checked against a source that quotes another study), `unverified`, or `none`.
 - **User's view:** What the user said about it, in their terms. Use `not stated` if they haven't said.
 - **Tags:** Short topic tags.
 - **Added:** YYYY-MM-DD

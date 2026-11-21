@@ -61,7 +61,7 @@ class Validate(unittest.TestCase):
                 [entity("paper:a"), entity("tool:b")],
                 [relation("paper:a", "uses", "tool:b", source="")],
             ),
-            "status must": (
+            "status must be inferred, reported, verified": (
                 [entity("paper:a"), entity("tool:b")],
                 [relation("paper:a", "uses", "tool:b", status="maybe")],
             ),
@@ -128,9 +128,10 @@ class Sources(unittest.TestCase):
         ):
             self.assertFalse(graph.names_document(source), source)
 
-    def test_only_verified_links_need_a_document(self):
+    def test_only_verified_and_reported_links_need_a_document(self):
         verified = {"source": "same group", "status": "verified"}
         self.assertTrue(graph.unsourced(verified))
+        self.assertTrue(graph.unsourced(dict(verified, status="reported")))
         self.assertFalse(graph.unsourced(dict(verified, status="inferred")))
         self.assertFalse(graph.unsourced(dict(verified, source="ARXIV:2401.00001")))
 
@@ -341,7 +342,7 @@ class CommandLine(CommandLineBase):
         self.write(ENTITIES, [*RELATIONS, unsourced])
         code, out, _ = self.run_main("validate")
         self.assertEqual(code, 1)
-        self.assertIn("found 1 verified link with no document it was checked against", out)
+        self.assertIn("found 1 verified or reported link with no document it was checked against", out)
         self.assertNotIn("OK", out, "the first line must not say OK when the command fails")
         self.assertIn("checked: 4 entities, 3 relations", out)
         self.assertIn("paper:a related-to concept:d  [same group]", out)
@@ -508,6 +509,8 @@ class Matching(unittest.TestCase):
         self.assertEqual([(a["id"], b["id"]) for a, b, _ in graph.dupes(entities)], [("concept:a", "concept:b")])
         relations = [relation("paper:p", "uses", "concept:a"), relation("paper:q", "cites", "paper:p")]
         self.assertEqual([e["id"] for e in graph.islands(entities, relations)], ["paper:q"])
+        compared = [*relations, relation("paper:q", "compared-with", "dataset:e")]
+        self.assertEqual(graph.islands(entities, compared), [], "a baseline is something read from the paper")
 
     def test_dupes_skips_crowded_trigrams(self):
         import hashlib
@@ -692,7 +695,32 @@ class Writing(CommandLineBase):
         code, out, _ = self.run_main(
             "link", "paper:a", "builds-on", "concept:d", "--source", "s", "--status", "inferred"
         )
-        self.assertEqual((code, out.strip()), (0, "already linked: paper:a builds-on concept:d"))
+        self.assertEqual((code, out.strip()), (0, "already linked: paper:a builds-on concept:d, inferred from s"))
+        self.assertEqual(len(self.relations()), 3)
+
+    def link_status(self, status, source):
+        argv = ("link", "paper:a", "builds-on", "concept:d", "--source", source, "--status", status)
+        code, out, err = self.run_main(*argv)
+        self.assertEqual(code, 0, err)
+        (found,) = [r for r in self.relations() if (r["from"], r["to"]) == ("paper:a", "concept:d")]
+        return out.strip(), (found["status"], found["source"])
+
+    def test_a_link_takes_a_stronger_status_and_its_source_but_is_never_downgraded(self):
+        survey, study = "ARXIV:2401.00009, Table 2, quoting ARXIV:2401.00003", "ARXIV:2401.00003, §4"
+        self.link_status("inferred", "same group")
+        out, saved = self.link_status("reported", survey)
+        self.assertEqual(out, "upgraded paper:a builds-on concept:d from inferred to reported")
+        self.assertEqual(saved, ("reported", survey))
+        out, saved = self.link_status("verified", study)
+        self.assertEqual(out, "upgraded paper:a builds-on concept:d from reported to verified")
+        self.assertEqual(saved, ("verified", study))
+        before = (self.folder / "relations.jsonl").read_bytes()
+        for status, source in (("reported", survey), ("inferred", "a guess"), ("verified", "ARXIV:2401.00003, §5")):
+            with self.subTest(status=status):
+                out, saved = self.link_status(status, source)
+                self.assertEqual(out, f"already linked: paper:a builds-on concept:d, verified from {study}")
+                self.assertEqual(saved, ("verified", study))
+        self.assertEqual((self.folder / "relations.jsonl").read_bytes(), before, "nothing changed, so nothing written")
         self.assertEqual(len(self.relations()), 3)
 
     def test_a_verified_link_must_name_the_document_it_was_checked_against(self):
@@ -701,13 +729,26 @@ class Writing(CommandLineBase):
             "link", "paper:a", "related-to", "concept:d", "--source", reason, "--status", "verified"
         )
         self.assertEqual(code, 1)
-        self.assertIn("a verified link must name the document it was checked against", err)
+        self.assertIn("a verified or reported link must name the document it was checked against", err)
         self.assertIn("--status inferred", err)
         self.assertEqual(len(self.relations()), 2)
         code, out, _ = self.run_main(
             "link", "paper:a", "related-to", "concept:d", "--source", reason, "--status", "inferred"
         )
         self.assertEqual((code, out.strip()), (0, "linked paper:a related-to concept:d"))
+
+    def test_a_reported_link_names_the_survey_that_quotes_the_claim(self):
+        code, _, err = self.run_main(
+            "link", "paper:a", "compared-with", "concept:d", "--source", "a survey says so", "--status", "reported"
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("a verified or reported link must name the document it was checked against", err)
+        survey = "ARXIV:2401.00009, Table 2, quoting ARXIV:2401.00003"
+        code, out, _ = self.run_main(
+            "link", "paper:a", "compared-with", "concept:d", "--source", survey, "--status", "reported"
+        )
+        self.assertEqual((code, out.strip()), (0, "linked paper:a compared-with concept:d"))
+        self.assertEqual(self.relations()[-1]["status"], "reported")
 
     def test_merge(self):
         entities = [
@@ -1467,12 +1508,16 @@ class CommandEdges(CommandLineBase):
         self.run_main("merge", "tool:keep", "tool:drop")
         self.assertEqual(self.entities()["tool:x"]["distinct_from"], ["tool:a", "tool:keep"])
 
-    def test_merging_links_keeps_the_first_of_equal_rank_and_a_verified_one_over_an_inferred_one(self):
+    def test_merging_links_keeps_the_first_of_equal_rank_and_otherwise_the_stronger_status(self):
         entities = [entity("tool:keep", "Keep"), entity("tool:drop", "Drop"), entity("paper:p", "P")]
         cases = (
             (("verified", "s1"), ("verified", "s2"), ("verified", "s1")),
             (("verified", "s1"), ("inferred", "s2"), ("verified", "s1")),
             (("inferred", "s1"), ("verified", "s2"), ("verified", "s2")),
+            (("reported", "s1"), ("verified", "s2"), ("verified", "s2")),
+            (("verified", "s1"), ("reported", "s2"), ("verified", "s1")),
+            (("inferred", "s1"), ("reported", "s2"), ("reported", "s2")),
+            (("reported", "s1"), ("inferred", "s2"), ("reported", "s1")),
         )
         for first, second, kept in cases:
             with self.subTest(first=first, second=second):
@@ -1602,6 +1647,7 @@ EXPECTED_ENDS = {
     "builds-on": (NOT_PEOPLE, NOT_PEOPLE),
     "contradicts": (NOT_PEOPLE, NOT_PEOPLE),
     "derived-from": (NOT_PEOPLE, NOT_PEOPLE),
+    "compared-with": (NOT_PEOPLE, NOT_PEOPLE),
     "related-to": (ALL_TYPES, ALL_TYPES),
 }
 # Every kind of link found in a real workspace's graph, by relation and entity types, which must all stay valid.
@@ -1754,7 +1800,7 @@ class LinkEnds(CommandLineBase):
         code, out, _ = self.run_main("validate")
         self.assertEqual(code, 1)
         self.assertIn("found 1 link between entity types its relation can't join:", out)
-        self.assertIn("found 1 verified link with no document it was checked against:", out)
+        self.assertIn("found 1 verified or reported link with no document it was checked against:", out)
         self.assertLess(out.index("no document"), out.index("can't join"))
 
 

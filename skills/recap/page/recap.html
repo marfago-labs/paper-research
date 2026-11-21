@@ -130,7 +130,7 @@
   #graph-view .connection { border-top: 1px solid var(--g-line); }
   #graph-view .relation { color: var(--g-muted); font-size: 12px; }
   #graph-view .evidence { display: block; color: var(--g-muted); font-size: 12px; overflow-wrap: anywhere; }
-  #graph-view .inferred { color: var(--warn); }
+  #graph-view .weaker { color: var(--warn); } /* inferred or reported: not checked in the source itself */
   @media (max-width: 720px) {
     #graph-view { height: auto; }
     #graph-view .body { flex-direction: column; }
@@ -307,7 +307,7 @@ function initGraph(GRAPH) {
     button.append(
       element("span", "relation", arrow + " " + relation.rel + " "),
       element("span", "", other.name),
-      element("span", "evidence" + (relation.status === "inferred" ? " inferred" : ""), relation.source + " · " + relation.status)
+      element("span", evidenceClass(relation.status), relation.source + " · " + relation.status)
     );
     button.addEventListener("click", () => select(otherId));
     item.append(button);
@@ -397,7 +397,7 @@ function initGraph(GRAPH) {
 
 // Recap view, built by recap-lib.js.
 const DATA = window.RECAP_DATA;
-const { esc, hashName, buildRecap, renderPaperList } = window.RecapLib;
+const { esc, evidenceClass, hashName, buildRecap, renderPaperList } = window.RecapLib;
 
 function renderRecap() {
   const views = document.getElementById("recap-views");
