@@ -1,0 +1,228 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<feed xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/" xmlns:arxiv="http://arxiv.org/schemas/atom" xmlns="http://www.w3.org/2005/Atom">
+  <id>https://arxiv.org/api/kh/LdfZKbptwhykhCUZC7dxVwhs</id>
+  <title>arXiv Query: search_query=&amp;id_list=2303.11366,2107.03374&amp;start=0&amp;max_results=2</title>
+  <updated>2026-11-20T22:56:28Z</updated>
+  <link href="https://arxiv.org/api/query?search_query=&amp;start=0&amp;max_results=2&amp;id_list=2303.11366,2107.03374" type="application/atom+xml"/>
+  <opensearch:itemsPerPage>2</opensearch:itemsPerPage>
+  <opensearch:totalResults>2</opensearch:totalResults>
+  <opensearch:startIndex>0</opensearch:startIndex>
+  <entry>
+    <id>http://arxiv.org/abs/2107.03374v2</id>
+    <title>Evaluating Large Language Models Trained on Code</title>
+    <updated>2021-07-14T17:16:02Z</updated>
+    <link href="https://arxiv.org/abs/2107.03374v2" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2107.03374v2" rel="related" type="application/pdf" title="pdf"/>
+    <summary>We introduce Codex, a GPT language model fine-tuned on publicly available code from GitHub, and study its Python code-writing capabilities. A distinct production version of Codex powers GitHub Copilot. On HumanEval, a new evaluation set we release to measure functional correctness for synthesizing programs from docstrings, our model solves 28.8% of the problems, while GPT-3 solves 0% and GPT-J solves 11.4%. Furthermore, we find that repeated sampling from the model is a surprisingly effective strategy for producing working solutions to difficult prompts. Using this method, we solve 70.2% of our problems with 100 samples per problem. Careful investigation of our model reveals its limitations, including difficulty with docstrings describing long chains of operations and with binding operations to variables. Finally, we discuss the potential broader impacts of deploying powerful code generation technologies, covering safety, security, and economics.</summary>
+    <category term="cs.LG" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2021-07-07T17:41:24Z</published>
+    <arxiv:comment>corrected typos, added references, added authors, added acknowledgements</arxiv:comment>
+    <arxiv:primary_category term="cs.LG"/>
+    <author>
+      <name>Mark Chen</name>
+    </author>
+    <author>
+      <name>Jerry Tworek</name>
+    </author>
+    <author>
+      <name>Heewoo Jun</name>
+    </author>
+    <author>
+      <name>Qiming Yuan</name>
+    </author>
+    <author>
+      <name>Henrique Ponde de Oliveira Pinto</name>
+    </author>
+    <author>
+      <name>Jared Kaplan</name>
+    </author>
+    <author>
+      <name>Harri Edwards</name>
+    </author>
+    <author>
+      <name>Yuri Burda</name>
+    </author>
+    <author>
+      <name>Nicholas Joseph</name>
+    </author>
+    <author>
+      <name>Greg Brockman</name>
+    </author>
+    <author>
+      <name>Alex Ray</name>
+    </author>
+    <author>
+      <name>Raul Puri</name>
+    </author>
+    <author>
+      <name>Gretchen Krueger</name>
+    </author>
+    <author>
+      <name>Michael Petrov</name>
+    </author>
+    <author>
+      <name>Heidy Khlaaf</name>
+    </author>
+    <author>
+      <name>Girish Sastry</name>
+    </author>
+    <author>
+      <name>Pamela Mishkin</name>
+    </author>
+    <author>
+      <name>Brooke Chan</name>
+    </author>
+    <author>
+      <name>Scott Gray</name>
+    </author>
+    <author>
+      <name>Nick Ryder</name>
+    </author>
+    <author>
+      <name>Mikhail Pavlov</name>
+    </author>
+    <author>
+      <name>Alethea Power</name>
+    </author>
+    <author>
+      <name>Lukasz Kaiser</name>
+    </author>
+    <author>
+      <name>Mohammad Bavarian</name>
+    </author>
+    <author>
+      <name>Clemens Winter</name>
+    </author>
+    <author>
+      <name>Philippe Tillet</name>
+    </author>
+    <author>
+      <name>Felipe Petroski Such</name>
+    </author>
+    <author>
+      <name>Dave Cummings</name>
+    </author>
+    <author>
+      <name>Matthias Plappert</name>
+    </author>
+    <author>
+      <name>Fotios Chantzis</name>
+    </author>
+    <author>
+      <name>Elizabeth Barnes</name>
+    </author>
+    <author>
+      <name>Ariel Herbert-Voss</name>
+    </author>
+    <author>
+      <name>William Hebgen Guss</name>
+    </author>
+    <author>
+      <name>Alex Nichol</name>
+    </author>
+    <author>
+      <name>Alex Paino</name>
+    </author>
+    <author>
+      <name>Nikolas Tezak</name>
+    </author>
+    <author>
+      <name>Jie Tang</name>
+    </author>
+    <author>
+      <name>Igor Babuschkin</name>
+    </author>
+    <author>
+      <name>Suchir Balaji</name>
+    </author>
+    <author>
+      <name>Shantanu Jain</name>
+    </author>
+    <author>
+      <name>William Saunders</name>
+    </author>
+    <author>
+      <name>Christopher Hesse</name>
+    </author>
+    <author>
+      <name>Andrew N. Carr</name>
+    </author>
+    <author>
+      <name>Jan Leike</name>
+    </author>
+    <author>
+      <name>Josh Achiam</name>
+    </author>
+    <author>
+      <name>Vedant Misra</name>
+    </author>
+    <author>
+      <name>Evan Morikawa</name>
+    </author>
+    <author>
+      <name>Alec Radford</name>
+    </author>
+    <author>
+      <name>Matthew Knight</name>
+    </author>
+    <author>
+      <name>Miles Brundage</name>
+    </author>
+    <author>
+      <name>Mira Murati</name>
+    </author>
+    <author>
+      <name>Katie Mayer</name>
+    </author>
+    <author>
+      <name>Peter Welinder</name>
+    </author>
+    <author>
+      <name>Bob McGrew</name>
+    </author>
+    <author>
+      <name>Dario Amodei</name>
+    </author>
+    <author>
+      <name>Sam McCandlish</name>
+    </author>
+    <author>
+      <name>Ilya Sutskever</name>
+    </author>
+    <author>
+      <name>Wojciech Zaremba</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2303.11366v4</id>
+    <title>Reflexion: Language Agents with Verbal Reinforcement Learning</title>
+    <updated>2023-10-10T05:21:45Z</updated>
+    <link href="https://arxiv.org/abs/2303.11366v4" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2303.11366v4" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Large language models (LLMs) have been increasingly used to interact with external environments (e.g., games, compilers, APIs) as goal-driven agents. However, it remains challenging for these language agents to quickly and efficiently learn from trial-and-error as traditional reinforcement learning methods require extensive training samples and expensive model fine-tuning. We propose Reflexion, a novel framework to reinforce language agents not by updating weights, but instead through linguistic feedback. Concretely, Reflexion agents verbally reflect on task feedback signals, then maintain their own reflective text in an episodic memory buffer to induce better decision-making in subsequent trials. Reflexion is flexible enough to incorporate various types (scalar values or free-form language) and sources (external or internally simulated) of feedback signals, and obtains significant improvements over a baseline agent across diverse tasks (sequential decision-making, coding, language reasoning). For example, Reflexion achieves a 91% pass@1 accuracy on the HumanEval coding benchmark, surpassing the previous state-of-the-art GPT-4 that achieves 80%. We also conduct ablation and analysis studies using different feedback signals, feedback incorporation methods, and agent types, and provide insights into how they affect performance.</summary>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.CL" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.LG" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2023-03-20T18:08:50Z</published>
+    <arxiv:comment>v4 contains a few additional experiments</arxiv:comment>
+    <arxiv:primary_category term="cs.AI"/>
+    <author>
+      <name>Noah Shinn</name>
+    </author>
+    <author>
+      <name>Federico Cassano</name>
+    </author>
+    <author>
+      <name>Edward Berman</name>
+    </author>
+    <author>
+      <name>Ashwin Gopinath</name>
+    </author>
+    <author>
+      <name>Karthik Narasimhan</name>
+    </author>
+    <author>
+      <name>Shunyu Yao</name>
+    </author>
+  </entry>
+</feed>

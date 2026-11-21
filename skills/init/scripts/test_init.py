@@ -5,6 +5,8 @@ import io
 import json
 import os
 import runpy
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -519,6 +521,68 @@ class GuardFetches(Guard):
         for url in (None, 5, ["https://arxiv.org/"], "", "arxiv.org/abs/1", "https://", "https://[::1/", "not a url"):
             with self.subTest(url=url):
                 self.assertEqual(self.fetch(url), init.UNCLEAR)
+
+
+# --- the hooks as the plugin registers them -------------------------------------------------------------------------
+
+
+def hook_groups(event):
+    manifest = json.loads((Path(init.__file__).parents[3] / "hooks" / "hooks.json").read_text(encoding="utf-8"))
+    (group,) = manifest["hooks"][event]
+    return group
+
+
+def launcher(script_args):
+    script = f'"${{CLAUDE_PLUGIN_ROOT}}/skills/init/scripts/init.py" {script_args}'
+    return f"python3 {script} || python {script}"
+
+
+class RegisteredHooks(Guard):
+    def test_the_plugin_registers_the_session_and_approval_hooks(self):
+        session = hook_groups("SessionStart")
+        self.assertEqual(session["matcher"], "startup|resume|clear|compact")
+        self.assertEqual(
+            [(entry["type"], entry["command"]) for entry in session["hooks"]],
+            [("command", launcher("--hook rules")), ("command", launcher("--hook lessons"))],
+        )
+        guard = hook_groups("PreToolUse")
+        self.assertEqual(guard["matcher"].split("|"), [*init.EDIT_TOOLS, "WebFetch"])
+        self.assertEqual([(e["type"], e["command"]) for e in guard["hooks"]], [("command", launcher("--hook guard"))])
+
+    def run_guard_command(self, python3):
+        """Run the registered approval command in a shell, with python3 replaced, before an edit to the lessons."""
+        sh = shutil.which("sh")
+        if sh is None:
+            self.skipTest("no POSIX shell")
+        real = f'"{Path(sys.executable).as_posix()}"'
+        command = hook_groups("PreToolUse")["hooks"][0]["command"]
+        command = command.replace("python3 ", f"{python3} ", 1).replace("|| python ", f"|| {real} ", 1)
+        event = {"cwd": str(self.root), "tool_name": "Edit", "tool_input": {"file_path": "research/lessons.md"}}
+        env = {**os.environ, "CLAUDE_PLUGIN_ROOT": Path(init.__file__).parents[3].as_posix()}
+        return subprocess.run(
+            [sh, "-c", command], input=json.dumps(event), capture_output=True, text=True, env=env, check=False
+        )
+
+    def fake_python(self, body):
+        """A stand-in for python3: a shell script that ignores its arguments and does what body says."""
+        script = self.root / "fake-python3.sh"
+        with script.open("w", encoding="utf-8", newline="\n") as handle:
+            handle.write(body + "\n")
+        return f'sh "{script.as_posix()}"'
+
+    def test_the_registered_approval_command_asks_whichever_python_the_system_has(self):
+        # Only stdout and the exit code count: Claude Code ignores stderr from a hook that exits 0.
+        for name, python3 in (
+            ("working", f'"{Path(sys.executable).as_posix()}"'),
+            ("missing", "no-such-python3-anywhere"),
+            ("failing", "false"),
+            ("only the Windows Store alias", self.fake_python("echo 'Python was not found' >&2; exit 49")),
+        ):
+            with self.subTest(name):
+                done = self.run_guard_command(python3)
+                self.assertEqual(done.returncode, 0, done.stderr)
+                self.assertEqual(done.stdout.count("hookSpecificOutput"), 1, done.stdout)
+                self.assert_guards(asked(done.stdout), "research/lessons.md")
 
 
 # --- the debug log ------------------------------------------------------------------------------------------------

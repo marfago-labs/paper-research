@@ -41,6 +41,11 @@ To update a workspace set up with 0.3.0 or earlier, delete the block between the
 `paper-research:end` lines in `CLAUDE.md`, and the `permissions.ask` and `autoMode.soft_deny` entries that `init`
 added to `.claude/settings.json`. Otherwise the old rules load as well.
 
+### Fixed
+
+- A paper whose title breaks over two lines in arXiv's HTML, such as Reflexion (2303.11366), keeps its whole
+  title as the first heading of the saved text and in the section list. It used to keep only the first line.
+
 ## [0.3.0] - 2026-11-17
 
 ### Added

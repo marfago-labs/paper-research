@@ -345,7 +345,7 @@ class CommandLine(CommandLineBase):
         self.assertNotIn("OK", out, "the first line must not say OK when the command fails")
         self.assertIn("checked: 4 entities, 3 relations", out)
         self.assertIn("paper:a related-to concept:d  [same group]", out)
-        self.assertIn("unlink", out)
+        self.assertIn("unlink it and link it again", out)
         self.assertEqual(self.run_main("stats")[0], 0, "an old link must not lock the user out of the graph")
 
     def test_invalid_graph_fails_every_command(self):
@@ -353,6 +353,12 @@ class CommandLine(CommandLineBase):
         code, _, err = self.run_main("stats")
         self.assertEqual(code, 1)
         self.assertIn("invalid graph", err)
+        before = [(self.folder / name).read_bytes() for name in ("entities.jsonl", "relations.jsonl")]
+        code, _, err = self.run_main("add", "--type", "tool", "--name", "Fine", *FIRST)
+        self.assertEqual(code, 1)
+        self.assertIn("invalid graph", err)
+        after = [(self.folder / name).read_bytes() for name in ("entities.jsonl", "relations.jsonl")]
+        self.assertEqual(after, before, "a refused change must leave the files as they were")
 
     def test_search(self):
         code, out, _ = self.run_main("search", "alpha")
