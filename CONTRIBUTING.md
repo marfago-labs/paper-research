@@ -10,11 +10,11 @@ Each skill is a folder in `skills/` with a `SKILL.md`. Scripts live in the skill
 | `skills/recap/page/` | The recap page, its rendering library, and their Node tests |
 | `hooks/` | `hooks.json`: the `SessionStart` hooks that load the rules and lessons and the `PreToolUse` guard, all run by `init.py --hook`, and the `Stop` hook that runs `recap.py --stop-hook` |
 | `telemetry/` | The local telemetry stack described in [Telemetry](docs/telemetry.md): a Docker Compose file and three Grafana dashboards |
-| `docs/` | The user documentation. Keep it in step with the skills and scripts: a scenario checks that its links resolve and that every skill and command is covered |
+| `docs/` | The user documentation. Keep it in step with the skills and scripts: `tools/test_plugin_contract.py` checks that its links resolve and that every skill and command is covered |
 | `features/` | Behaviour scenarios in Gherkin, run with `behave` |
 | `evals/dedup/` | The duplicate-detection evaluation, not shipped to users: its specification (`SPEC.md`), the dataset builder, `audit_labels.py` (asks Jev, through OpenRouter, whether second names are the same thing; run by hand with `build_dataset.py --audit`, never in CI), `evaluate.py` (replays the pairs through `graph.py`'s check and reports the rates), `hand_check.py` (the sheet for the hand check of the labels, and its scorer), the frozen pairs in `data/`, and `analysis.ipynb`, which describes the dataset and what the evaluation finds. The notebook needs pandas and matplotlib, which the project doesn't install, and CI doesn't run it: run it by hand after any change to the dataset |
 | `mutation/` | One cosmic-ray configuration per script |
-| `tools/` | Development helpers that are not shipped to users, including the gitleaks wrapper and the pre-commit hook |
+| `tools/` | Development helpers that are not shipped to users, including the gitleaks wrapper and the pre-commit hook. `tools/fixtures/` holds real replies from arXiv and Semantic Scholar, recorded by `record_responses.py`, which `test_recorded_responses.py` runs the scripts on |
 | `.github/workflows/ci.yml` | Lint, static analysis, unit tests, coverage, and behaviour scenarios, on every push and pull request |
 | `.github/workflows/badges.yml` | After CI passes on a push to main, publishes the coverage and scenario numbers to the `badges` branch, which the README badges read |
 | `.github/workflows/mutation.yml` | The survival limits of the mutation tests. The workflow is disabled in GitHub's settings and has no schedule: mutation tests run locally |
@@ -26,10 +26,10 @@ Each skill is a folder in `skills/` with a `SKILL.md`. Scripts live in the skill
 - **Coverage stays at 100%,** lines and branches, for every script and for `recap-lib.js`.
 - **A change that makes `name_key` merge more names needs a repair path.** Validation refuses a graph in which two entities of one type share a key, and every command, `merge` included, loads through validation. So a key that merges names an older key kept apart can stop an existing graph from loading, with no command left to fix it. Ship such a change with a migration, or with a way to load the graph and merge the clashing pairs.
 - **Functions stay simple:** cyclomatic complexity at most 6 and cognitive complexity at most 10, in Python and JavaScript, tests included. ruff (`C901`) and ESLint (`complexity`) check the first, complexipy and `sonarjs/cognitive-complexity` the second. Split a function rather than raising a limit. CI also writes both scores to the job summary, with the functions closest to the limits (`tools/complexity_report.py`). The inline script in `recap.html` isn't linted, so keep it small.
-- **Every behaviour a user relies on** gets a scenario in `features/`, written in the user's words.
+- **Every behaviour a user relies on** gets a unit test. A scenario in `features/`, written in the user's words, is only for what unit tests can't show: a story that chains several commands, or something outside the scripts, such as the hook commands in `hooks.json` or one script relying on the files another writes. A scenario that repeats a unit test is removed.
 - **A change a user can see updates the docs** in the same commit: a new skill, command, option, file, or message. It also adds a line under `[Unreleased]` in `CHANGELOG.md`. Only a release changes the version: see [Releases](#releases).
 - **Tests never use made-up absolute paths** such as `/no/such/folder`. Build a missing path inside a temporary folder. A mutant that skips a check can otherwise create real folders on the developer's machine.
-- **Cytoscape.js is the only vendored file.** To update it, take `dist/cytoscape.min.js` and its licence from the npm release, put the version in the file name, and update the name in `recap.py`, `recap.html`, the recap tests, `features/steps/workspace_steps.py`, and `docs/troubleshooting.md`. Update the version, hash, and check command in [Security](docs/security.md#third-party-code).
+- **Cytoscape.js is the only vendored file.** To update it, take `dist/cytoscape.min.js` and its licence from the npm release, put the version in the file name, and update the name in `recap.py`, `recap.html`, the recap tests, and `docs/troubleshooting.md`. Update the version, hash, and check command in [Security](docs/security.md#third-party-code).
 - **Rules the user's agent follows** go in `skills/init/templates/rules.md` if they apply in every session, or in the skill that needs them. The `SessionStart` hook prints that file, and Claude Code keeps only 10,000 characters of it, which a unit test checks.
 
 ## Checks
@@ -49,6 +49,7 @@ python tools/gitleaks.py                                                        
 complexipy skills tools features evals --max-complexity-allowed 10               # cognitive complexity
 npm run lint --prefix tools/js                                                   # ESLint, complexity
 npm run format:check --prefix tools/js                                           # Prettier (npm run format fixes)
+npm run validate-plugin --prefix tools/js                                        # Claude Code's plugin checks
 
 for t in skills/*/scripts/test_*.py evals/*/test_*.py tools/test_*.py; do python "$t"; done   # unit tests
 python evals/dedup/evaluate.py --split dev                                       # duplicate detection
@@ -89,9 +90,10 @@ python tools/run_mutation.py init --max-survival 0 --workers 4                  
 The version in `.claude-plugin/plugin.json` changes only in a release, never in a feature or fix. Claude Code installs an update for a plugin only when its version changes, so a bump is what delivers the merged changes to users. Versions follow [Semantic Versioning](https://semver.org/): a patch for fixes, a minor version for new features, a major version for a change that breaks existing workspaces.
 
 1. **Collect the changes.** Each change a user can see adds a line under `## [Unreleased]` in `CHANGELOG.md` in the same pull request.
-2. **Open a release pull request.** It does two things: it sets `version` in `.claude-plugin/plugin.json`, and it renames `[Unreleased]` to the new version and today's date, with a new empty `[Unreleased]` above it and the links at the bottom updated. `python tools/check_release.py` fails if the version has no dated entry, and the unit tests run it, so a bump without a changelog entry cannot merge.
-3. **Merge it, then tag the merge commit** with `git tag vX.Y.Z` and `git push origin vX.Y.Z`. The Release check workflow fails if the tag is not `v` followed by the plugin's version.
-4. **Create the GitHub release** from the tag, with the changelog entry as its notes: `gh release create vX.Y.Z --title vX.Y.Z --notes-file <the entry>`.
+2. **Record the services' replies again.** Run `python tools/record_responses.py`, then the unit tests. The scripts' own tests use replies written by hand, so a change in what arXiv or Semantic Scholar sends shows up only here. Commit `tools/fixtures/` if it changed, after reading the diff. It needs the network, so CI never runs it; if Semantic Scholar refuses with HTTP 429, wait a minute and run it again.
+3. **Open a release pull request.** It does two things: it sets `version` in `.claude-plugin/plugin.json`, and it renames `[Unreleased]` to the new version and today's date, with a new empty `[Unreleased]` above it and the links at the bottom updated. `python tools/check_release.py` fails if the version has no dated entry, and the unit tests run it, so a bump without a changelog entry cannot merge.
+4. **Merge it, then tag the merge commit** with `git tag vX.Y.Z` and `git push origin vX.Y.Z`. The Release check workflow fails if the tag is not `v` followed by the plugin's version.
+5. **Create the GitHub release** from the tag, with the changelog entry as its notes: `gh release create vX.Y.Z --title vX.Y.Z --notes-file <the entry>`.
 
 ## Design decisions
 

@@ -661,6 +661,15 @@ class Markdown(unittest.TestCase):
         page = "<article><p>one<wbr/>two<area/>three<img/>four<br/>five</p></article>"
         self.assertEqual(arxiv.to_markdown(page), "onetwothreefour\nfive\n")
 
+    def test_a_line_break_in_a_heading_keeps_the_heading_on_one_line(self):
+        # As in arXiv's HTML of 2303.11366, whose title breaks before its second line.
+        for br in ('<br class="ltx_break">', "<br/>"):
+            for space in (" \n", ""):
+                page = f"<article><h1>Language Agents with{space}{br}Verbal RL</h1><p>x</p></article>"
+                markdown = arxiv.to_markdown(page)
+                self.assertEqual(markdown, "# Language Agents with Verbal RL\n\nx\n", (br, space))
+                self.assertEqual([s["heading"] for s in arxiv.sections(markdown)], ["Language Agents with Verbal RL"])
+
     def test_character_references_become_text(self):
         self.assertEqual(arxiv.to_markdown("<article><p>R&amp;D &lt;x&gt; caf&#233;</p></article>"), "R&D <x> café\n")
 
@@ -858,6 +867,12 @@ class Saving(unittest.TestCase):
             with mock.patch.object(arxiv, "get", **kwargs), self.assertRaises(arxiv.ApiError):
                 arxiv.cmd_pdf(self.args(force=True))
 
+    def test_a_reply_that_is_not_a_pdf_is_named_and_leaves_no_file(self):
+        with mock.patch.object(arxiv, "get", return_value=b"<html>sorry</html>"):
+            with self.assertRaisesRegex(arxiv.ApiError, "did not return a PDF"):
+                arxiv.cmd_pdf(self.args(force=True))
+        self.assertEqual(list(self.folder.iterdir()), [])
+
 
 class InvisibleText(unittest.TestCase):
     """without_invisible: the one place that removes characters only a model can read."""
@@ -1019,6 +1034,10 @@ class Cli(unittest.TestCase):
             code, out, _ = self.run_main(["paper", "2401.00001"])
         self.assertEqual((code, json.loads(out)[0]["id"]), (0, "2401.00001"))
         self.assertEqual(self.run_main(["paper", "nonsense"])[0], 2)
+        with mock.patch.object(arxiv, "get") as get:
+            code, _, err = self.run_main(["fetch", "../../etc/passwd", "--dir", tempfile.gettempdir()])
+        self.assertEqual((code, get.call_count), (2, 0))
+        self.assertIn("invalid arXiv ID", err)
         with mock.patch.object(arxiv, "get", side_effect=arxiv.NoHtml("https://arxiv.org/html/2401.00001")):
             code, _, err = self.run_main(["fetch", "2401.00001", "--dir", tempfile.gettempdir(), "--force"])
         self.assertEqual(code, 3)

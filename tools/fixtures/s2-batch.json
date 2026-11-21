@@ -1,0 +1,362 @@
+[
+ {
+  "paperId": "0671fd553dd670a4e820553a974bc48040ba0819",
+  "externalIds": {
+   "ArXiv": "2303.11366",
+   "DBLP": "conf/nips/ShinnCGNY23",
+   "DOI": "10.52202/075280-0377",
+   "CorpusId": 258833055
+  },
+  "url": "https://www.semanticscholar.org/paper/0671fd553dd670a4e820553a974bc48040ba0819",
+  "title": "Reflexion: language agents with verbal reinforcement learning",
+  "venue": "Neural Information Processing Systems",
+  "year": 2023,
+  "citationCount": 6879,
+  "influentialCitationCount": 472,
+  "openAccessPdf": {
+   "url": "https://arxiv.org/pdf/2303.11366",
+   "status": "GREEN",
+   "license": "CCBY",
+   "disclaimer": "Notice: Paper or abstract available at https://arxiv.org/abs/2303.11366, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+  },
+  "publicationDate": "2023-03-20",
+  "authors": [
+   {
+    "authorId": "2212367248",
+    "name": "Noah Shinn"
+   },
+   {
+    "authorId": "2197063831",
+    "name": "Federico Cassano"
+   },
+   {
+    "authorId": "2249758594",
+    "name": "Edward M. Berman"
+   },
+   {
+    "authorId": "2162047785",
+    "name": "A. Gopinath"
+   },
+   {
+    "authorId": "144958935",
+    "name": "Karthik Narasimhan"
+   },
+   {
+    "authorId": "47188964",
+    "name": "Shunyu Yao"
+   }
+  ],
+  "abstract": "Large language models (LLMs) have been increasingly used to interact with external environments (e.g., games, compilers, APIs) as goal-driven agents. However, it remains challenging for these language agents to quickly and efficiently learn from trial-and-error as traditional reinforcement learning methods require extensive training samples and expensive model fine-tuning. We propose Reflexion, a novel framework to reinforce language agents not by updating weights, but instead through linguistic feedback. Concretely, Reflexion agents verbally reflect on task feedback signals, then maintain their own reflective text in an episodic memory buffer to induce better decision-making in subsequent trials. Reflexion is flexible enough to incorporate various types (scalar values or free-form language) and sources (external or internally simulated) of feedback signals, and obtains significant improvements over a baseline agent across diverse tasks (sequential decision-making, coding, language reasoning). For example, Reflexion achieves a 91% pass@1 accuracy on the HumanEval coding benchmark, surpassing the previous state-of-the-art GPT-4 that achieves 80%. We also conduct ablation and analysis studies using different feedback signals, feedback incorporation methods, and agent types, and provide insights into how they affect performance.",
+  "references": [
+   {
+    "paperId": "acbdbf49f9bc3f151b93d9ca9a06009f4f6eb269",
+    "externalIds": {
+     "ArXiv": "2107.03374",
+     "DBLP": "journals/corr/abs-2107-03374",
+     "DOI": "10.48550/arXiv.2107.03374",
+     "CorpusId": 235755472
+    }
+   },
+   {
+    "paperId": "3e4085e5869f1b7959707a1e1d7d273b6057eb4e",
+    "externalIds": {
+     "ArXiv": "2305.06161",
+     "DBLP": "journals/tmlr/LiAZMKMMALCLZZW23",
+     "CorpusId": 258588247
+    }
+   },
+   {
+    "paperId": "c76dd4a70361c3afd2e19d046343e2dedd16ecc3",
+    "externalIds": {
+     "ArXiv": "2305.03495",
+     "DBLP": "conf/emnlp/PryzantI0L0023",
+     "DOI": "10.48550/arXiv.2305.03495",
+     "CorpusId": 258546785
+    }
+   }
+  ]
+ },
+ {
+  "paperId": "acbdbf49f9bc3f151b93d9ca9a06009f4f6eb269",
+  "externalIds": {
+   "ArXiv": "2107.03374",
+   "DBLP": "journals/corr/abs-2107-03374",
+   "DOI": "10.48550/arXiv.2107.03374",
+   "CorpusId": 235755472
+  },
+  "url": "https://www.semanticscholar.org/paper/acbdbf49f9bc3f151b93d9ca9a06009f4f6eb269",
+  "title": "Evaluating Large Language Models Trained on Code",
+  "venue": "arXiv.org",
+  "year": 2021,
+  "citationCount": 12929,
+  "influentialCitationCount": 1917,
+  "openAccessPdf": {
+   "url": "http://arxiv.org/pdf/2107.03374",
+   "status": "GREEN",
+   "license": null,
+   "disclaimer": "Notice: Paper or abstract available at https://arxiv.org/abs/2107.03374, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+  },
+  "publicationDate": "2021-07-07",
+  "authors": [
+   {
+    "authorId": "2108828435",
+    "name": "Mark Chen"
+   },
+   {
+    "authorId": "2065005836",
+    "name": "Jerry Tworek"
+   },
+   {
+    "authorId": "2307453621",
+    "name": "Heewoo Jun"
+   },
+   {
+    "authorId": "153930486",
+    "name": "Qi-Ming Yuan"
+   },
+   {
+    "authorId": "1463773776",
+    "name": "Henrique Pondé de Oliveira Pinto"
+   },
+   {
+    "authorId": "2053807409",
+    "name": "Jared Kaplan"
+   },
+   {
+    "authorId": "144632352",
+    "name": "H. Edwards"
+   },
+   {
+    "authorId": "2311887305",
+    "name": "Yuri Burda"
+   },
+   {
+    "authorId": "2117706920",
+    "name": "Nicholas Joseph"
+   },
+   {
+    "authorId": "2065151121",
+    "name": "G. Brockman"
+   },
+   {
+    "authorId": "2064770039",
+    "name": "Alex Ray"
+   },
+   {
+    "authorId": "41158993",
+    "name": "Raul Puri"
+   },
+   {
+    "authorId": "2064404342",
+    "name": "G. Krueger"
+   },
+   {
+    "authorId": "2136008481",
+    "name": "Michael Petrov"
+   },
+   {
+    "authorId": "2103414",
+    "name": "Heidy Khlaaf"
+   },
+   {
+    "authorId": "144864359",
+    "name": "G. Sastry"
+   },
+   {
+    "authorId": "2051714782",
+    "name": "Pamela Mishkin"
+   },
+   {
+    "authorId": "1466431052",
+    "name": "Brooke Chan"
+   },
+   {
+    "authorId": "145565184",
+    "name": "Scott Gray"
+   },
+   {
+    "authorId": "2260406867",
+    "name": "N. Ryder"
+   },
+   {
+    "authorId": "2068123790",
+    "name": "Mikhail Pavlov"
+   },
+   {
+    "authorId": "146162186",
+    "name": "Alethea Power"
+   },
+   {
+    "authorId": "40527594",
+    "name": "L. Kaiser"
+   },
+   {
+    "authorId": "2275251620",
+    "name": "Mo Bavarian"
+   },
+   {
+    "authorId": "2059411355",
+    "name": "C. Winter"
+   },
+   {
+    "authorId": "2275252092",
+    "name": "Phil Tillet"
+   },
+   {
+    "authorId": "9927844",
+    "name": "Felipe Petroski Such"
+   },
+   {
+    "authorId": "80876468",
+    "name": "D. Cummings"
+   },
+   {
+    "authorId": "3407285",
+    "name": "Matthias Plappert"
+   },
+   {
+    "authorId": "2057091285",
+    "name": "Fotis Chantzis"
+   },
+   {
+    "authorId": "2057742918",
+    "name": "Elizabeth Barnes"
+   },
+   {
+    "authorId": "1404060687",
+    "name": "A. Herbert-Voss"
+   },
+   {
+    "authorId": "39121861",
+    "name": "W. H. Guss"
+   },
+   {
+    "authorId": "38967461",
+    "name": "A. Nichol"
+   },
+   {
+    "authorId": "34800652",
+    "name": "Alex Paino"
+   },
+   {
+    "authorId": "145950540",
+    "name": "Nikolas A. Tezak"
+   },
+   {
+    "authorId": "2275750817",
+    "name": "Jie Tang"
+   },
+   {
+    "authorId": "7309979",
+    "name": "I. Babuschkin"
+   },
+   {
+    "authorId": "2054519183",
+    "name": "S. Balaji"
+   },
+   {
+    "authorId": "150298413",
+    "name": "Shantanu Jain"
+   },
+   {
+    "authorId": "2331855884",
+    "name": "William Saunders"
+   },
+   {
+    "authorId": "2242286342",
+    "name": "C. Hesse"
+   },
+   {
+    "authorId": "2056600871",
+    "name": "Andrew N. Carr"
+   },
+   {
+    "authorId": "2990741",
+    "name": "Jan Leike"
+   },
+   {
+    "authorId": "3381809",
+    "name": "Joshua Achiam"
+   },
+   {
+    "authorId": "40055795",
+    "name": "Vedant Misra"
+   },
+   {
+    "authorId": "1404556973",
+    "name": "Evan Morikawa"
+   },
+   {
+    "authorId": "38909097",
+    "name": "A. Radford"
+   },
+   {
+    "authorId": "2146257375",
+    "name": "Matthew Knight"
+   },
+   {
+    "authorId": "35167962",
+    "name": "Miles Brundage"
+   },
+   {
+    "authorId": "2117715631",
+    "name": "Mira Murati"
+   },
+   {
+    "authorId": "2275231822",
+    "name": "Katie Mayer"
+   },
+   {
+    "authorId": "2930640",
+    "name": "Peter Welinder"
+   },
+   {
+    "authorId": "39593364",
+    "name": "Bob McGrew"
+   },
+   {
+    "authorId": "2698777",
+    "name": "D. Amodei"
+   },
+   {
+    "authorId": "52238703",
+    "name": "Sam McCandlish"
+   },
+   {
+    "authorId": "1701686",
+    "name": "I. Sutskever"
+   },
+   {
+    "authorId": "2563432",
+    "name": "W. Zaremba"
+   }
+  ],
+  "abstract": "We introduce Codex, a GPT language model fine-tuned on publicly available code from GitHub, and study its Python code-writing capabilities. A distinct production version of Codex powers GitHub Copilot. On HumanEval, a new evaluation set we release to measure functional correctness for synthesizing programs from docstrings, our model solves 28.8% of the problems, while GPT-3 solves 0% and GPT-J solves 11.4%. Furthermore, we find that repeated sampling from the model is a surprisingly effective strategy for producing working solutions to difficult prompts. Using this method, we solve 70.2% of our problems with 100 samples per problem. Careful investigation of our model reveals its limitations, including difficulty with docstrings describing long chains of operations and with binding operations to variables. Finally, we discuss the potential broader impacts of deploying powerful code generation technologies, covering safety, security, and economics.",
+  "references": [
+   {
+    "paperId": "ff9a6a7e87ae82ec7d58ee8eb957541e6051cadd",
+    "externalIds": {
+     "DOI": "10.1080/23738871.2023.2237981",
+     "CorpusId": 260104496
+    }
+   },
+   {
+    "paperId": "fc963363bcddfc1aeca07d44d7a9d0e53485662d",
+    "externalIds": {
+     "DOI": "10.1093/ia/iiac034",
+     "CorpusId": 247309683
+    }
+   },
+   {
+    "paperId": "722ad6ac92286507437b31486f47987d6ece05c9",
+    "externalIds": {
+     "DBLP": "conf/iclr/Bao0PW22",
+     "ArXiv": "2106.08254",
+     "DOI": "10.48550/arXiv.2106.08254",
+     "CorpusId": 235436185
+    }
+   }
+  ]
+ },
+ null
+]

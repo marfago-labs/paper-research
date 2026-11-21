@@ -554,7 +554,7 @@ class MarkdownWriter(HTMLParser):
         "ltx_note_mark",
         "ltx_tag_note",
     }
-    OPENERS = {"tr": "start_row", "br": "flush", "li": "start_item"}
+    OPENERS = {"tr": "start_row", "br": "line_break", "li": "start_item"}
     BLOCKS = {"p", "div", "section", "figure", "figcaption", "table", "blockquote", "pre", "ul", "ol", "dl"}
 
     def __init__(self):
@@ -637,6 +637,13 @@ class MarkdownWriter(HTMLParser):
         self.flush()
         self.line.append("- ")
 
+    def line_break(self):
+        """End the line, except in a heading, which a Markdown heading must keep on one line."""
+        if any(re.fullmatch(r"h[1-6]", open_tag) for open_tag, _ in self.stack):
+            self.emit(" ")
+        else:
+            self.flush()
+
     def handle_endtag(self, tag):
         if not self.inside or tag not in (open_tag for open_tag, _ in self.stack):
             return
@@ -672,7 +679,7 @@ class MarkdownWriter(HTMLParser):
 
     def handle_startendtag(self, tag, attrs):
         if tag == "br" and self.inside and not self.skipping:
-            self.flush()
+            self.line_break()
 
     def visible(self, text):
         """The text without invisible characters, counting how many were removed."""

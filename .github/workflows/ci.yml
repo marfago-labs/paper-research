@@ -54,6 +54,14 @@ jobs:
       - name: Prettier
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: npm run format:check --prefix tools/js
+      # Claude Code's own checks of the manifests, hooks, and skills, offline and without a login. --strict fails on
+      # warnings too, such as an unknown hook event, which Claude Code would ignore at run time. The variable turns off
+      # telemetry, error reporting, and the update check, so the step makes no outside calls.
+      - name: Plugin validation (Claude Code)
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        env:
+          CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
+        run: npm run validate-plugin --prefix tools/js
       # ruff checks cyclomatic complexity (C901, at most 6); complexipy checks cognitive complexity.
       - name: Cognitive complexity of the Python code (at most 10)
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
