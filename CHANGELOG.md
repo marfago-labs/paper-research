@@ -6,6 +6,12 @@ All notable changes to the plugin are listed here, newest first. The format foll
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-22
+
+To update a workspace set up with 0.3.0 or earlier, delete the block between the `paper-research:begin` and
+`paper-research:end` lines in `CLAUDE.md`, and the `permissions.ask` and `autoMode.soft_deny` entries that `init`
+added to `.claude/settings.json`. Otherwise the old rules load as well.
+
 ### Added
 
 - A `debug` skill and a debug log for finding out what the plugin did. `debuglog.py on` starts it and `off` stops it:
@@ -17,7 +23,6 @@ All notable changes to the plugin are listed here, newest first. The format foll
   collector on `127.0.0.1`, and [Telemetry](docs/telemetry.md) shows how to send Claude Code's events, metrics, and
   traces to it, and what to look for. It loads three Grafana dashboards: usage and security, service details, and
   the plugin's debug log.
-
 - A `reported` status, for a claim checked against a source that only quotes another study, such as a survey's table
   of other papers' scores. It sits between `inferred` and `verified`: links, pins, and insights can carry it, a
   reported link's source names the document and the study it quotes, and the recap's Graph tab marks it as it marks an
@@ -56,10 +61,6 @@ All notable changes to the plugin are listed here, newest first. The format foll
 ### Removed
 
 - `init --dry-run` and `init --sandbox`. To use the sandbox, add the settings that the security page shows.
-
-To update a workspace set up with 0.3.0 or earlier, delete the block between the `paper-research:begin` and
-`paper-research:end` lines in `CLAUDE.md`, and the `permissions.ask` and `autoMode.soft_deny` entries that `init`
-added to `.claude/settings.json`. Otherwise the old rules load as well.
 
 ### Fixed
 
@@ -197,7 +198,8 @@ added to `.claude/settings.json`. Otherwise the old rules load as well.
 First release: the `arxiv`, `scholar`, `read`, `add`, `next`, `pin`, `insight`, `graph`, `recap`, and `init`
 skills, with plain-file notes in the workspace, a knowledge graph with duplicate checks, and the recap page.
 
-[Unreleased]: https://github.com/marfago-labs/paper-research/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/marfago-labs/paper-research/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/marfago-labs/paper-research/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/marfago-labs/paper-research/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/marfago-labs/paper-research/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/marfago-labs/paper-research/releases/tag/v0.1.0
