@@ -66,15 +66,18 @@ RELATION_ENDS = {
     "builds-on": (WORKS, WORKS),
     "contradicts": (WORKS, WORKS),
     "derived-from": (WORKS, WORKS),
+    "compared-with": (WORKS, WORKS),
     "related-to": (ENTITY_TYPES, ENTITY_TYPES),
 }
 RELATION_TYPES = set(RELATION_ENDS)
-STATUSES = {"verified", "inferred"}
-STRENGTH = ["inferred", "verified"]  # weakest first: when two links merge into one, the stronger stays
-VERIFIED = {"verified"}
+# verified: checked in the source itself. reported: checked in a source that quotes another study, such as a survey,
+# so the claim is only as good as that study. inferred: Claude's own reading.
+STRENGTH = ["inferred", "reported", "verified"]  # weakest first: when two links merge into one, the stronger stays
+STATUSES = set(STRENGTH)
+CHECKED = {"verified", "reported"}  # checked against a document, so the source must name it
 EXTERNAL_ID_KINDS = {"s2", "arxiv", "doi", "hf", "github", "orcid"}
 # Relations that come from reading a paper, as opposed to authors, citations, or insights.
-EXTRACTED_RELATIONS = {"uses", "evaluates-on", "builds-on", "proposes", "related-to", "contradicts"}
+EXTRACTED_RELATIONS = {"uses", "evaluates-on", "builds-on", "proposes", "related-to", "contradicts", "compared-with"}
 # The source recorded on cites relations, by the list of the Semantic Scholar record they come from.
 CITATION_SOURCES = {"references": "Semantic Scholar references", "citations": "Semantic Scholar citations"}
 OUTGOING = {"references"}  # a paper cites its references; its citations cite it
@@ -114,9 +117,9 @@ UNCAPPED_KEYS = {"ext", "name"}  # block key kinds always compared, however many
 # a problem, weight each trigram by how rare it is in the graph (IDF) rather than adding rules: still one score.
 SIMILARITY = 0.5
 ID_ALIAS = re.compile(r"(ARXIV|DOI):(.+)", re.I)
-# Verified means checked against a source, so the source must start with a document someone can look up: an arXiv or
-# DOI id, a link, a place in a paper of the graph (paper:<id>, <section>), or Semantic Scholar's data. Only the start
-# counts, because a reason that merely mentions an id ("same group as paper:x") is an inference, not a source.
+# Verified and reported mean checked against a source, so the source must start with a document someone can look up:
+# an arXiv or DOI id, a link, a place in a paper of the graph (paper:<id>, <section>), or Semantic Scholar's data. Only
+# the start counts, because a reason that merely mentions an id ("same group as paper:x") is an inference, not a source.
 DOCUMENT = re.compile(r"^\s*(?:(?:ARXIV|DOI):\S|paper:[^\s,]+,\s*\S|https?://\S|Semantic Scholar\b)", re.I)
 SOURCE_FIX = (
     "mark it --status inferred, or give a source that names the document, such as 'ARXIV:2401.00001, §3.2',"
@@ -483,7 +486,7 @@ def relation_problems(relation, ids, seen):
         (start == end, f"{label}: an entity can't connect to itself"),
         (rel not in RELATION_TYPES, f"{label}: unknown relation {rel!r}"),
         (not relation.get("source"), f"{label}: needs a source"),
-        (relation.get("status") not in STATUSES, f"{label}: status must be verified or inferred"),
+        (relation.get("status") not in STATUSES, f"{label}: status must be {', '.join(sorted(STATUSES))}"),
         ((start, rel, end) in seen, f"{label}: duplicate relation"),
     ]
     seen.add((start, rel, end))
@@ -613,8 +616,8 @@ def names_document(source):
 
 
 def unsourced(relation):
-    """A relation marked verified whose source names no document it could have been checked against."""
-    return relation["status"] in VERIFIED and not names_document(relation["source"])
+    """A relation marked verified or reported whose source names no document it could have been checked against."""
+    return relation["status"] in CHECKED and not names_document(relation["source"])
 
 
 def checked_load(directory):
@@ -713,7 +716,7 @@ def cmd_validate(args):
     print(f"checked: {len(entities)} entities, {len(relations)} relations")
     report(
         found,
-        f"found {count(len(found), 'verified link')} with no document it was checked against:",
+        f"found {count(len(found), 'verified or reported link')} with no document it was checked against:",
         lambda r: f"{r['from']} {r['rel']} {r['to']}  [{r['source']}]",
         f"For each, unlink it and link it again: {SOURCE_FIX}.",
     )
@@ -972,7 +975,7 @@ def checked_link(first, rel, second, source, status):
     if why:
         raise GraphError(f"can't link {start} {rel} {end}: {why}")
     if unsourced({"source": source, "status": status}):
-        raise GraphError(f"a verified link must name the document it was checked against: {SOURCE_FIX}")
+        raise GraphError(f"a verified or reported link must name the document it was checked against: {SOURCE_FIX}")
     return start, rel, end
 
 
@@ -1074,15 +1077,28 @@ def link(relations, start, rel, end, source, status):
     return True
 
 
+def stronger(status, than):
+    return STRENGTH.index(status) > STRENGTH.index(than)
+
+
 def cmd_link(args):
+    """Add a link. If it exists with a weaker status, such as a reported claim since checked in the study that made it,
+    take the new status and source. A weaker or equal status changes nothing, so a link is never downgraded."""
     entities, relations = checked_load(args.data)
     first, second = resolve(entities, args.start), resolve(entities, args.end)
-    start, _, end = checked_link(first, args.rel, second, args.source, args.status)
-    if link(relations, start, args.rel, end, args.source, args.status):
-        save(args.data, entities, relations)
-        print(f"linked {start} {args.rel} {end}")
+    start, rel, end = checked_link(first, args.rel, second, args.source, args.status)
+    found = next((r for r in relations if (r["from"], r["rel"], r["to"]) == (start, rel, end)), None)
+    if found is None:
+        link(relations, start, rel, end, args.source, args.status)
+        done = f"linked {start} {rel} {end}"
+    elif stronger(args.status, found["status"]):
+        done = f"upgraded {start} {rel} {end} from {found['status']} to {args.status}"
+        found.update(source=args.source, status=args.status)
     else:
-        print(f"already linked: {start} {args.rel} {end}")
+        print(f"already linked: {start} {rel} {end}, {found['status']} from {found['source']}")
+        return 0
+    save(args.data, entities, relations)
+    print(done)
     return 0
 
 
@@ -1178,13 +1194,13 @@ def repoint(relation, keep_id, drop_id):
 
 
 def merged_relations(relations, keep_id, drop_id):
-    """The relations with drop replaced by keep, dropping loops and keeping one of each, verified first."""
+    """The relations with drop replaced by keep, dropping loops and keeping one of each, the strongest status first."""
     merged: dict[tuple, dict] = {}
     for relation in (repoint(r, keep_id, drop_id) for r in relations):
         key = (relation["from"], relation["rel"], relation["to"])
         if relation["from"] == relation["to"]:
             continue
-        if key not in merged or STRENGTH.index(relation["status"]) > STRENGTH.index(merged[key]["status"]):
+        if key not in merged or stronger(relation["status"], merged[key]["status"]):
             merged[key] = relation
     return list(merged.values())
 

@@ -92,5 +92,6 @@ If you set up a workspace with version 0.3.0 or earlier, remove what that versio
 - [Skills](skills.md): what each skill does, step by step.
 - [Your workspace](workspace.md): every file, and its format.
 - [Knowledge graph](knowledge-graph.md): how entities, links, and duplicate checks work.
+- [Graph schema](graph-schema.md): the graph's exact format, with every field, relation, and rule.
 - [Security](security.md): what protects you from a malicious paper, and what doesn't.
 - [Troubleshooting](troubleshooting.md): when something goes wrong.

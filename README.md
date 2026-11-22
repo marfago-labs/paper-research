@@ -91,6 +91,7 @@ There is no hidden model. The personalization is in files you control, and it is
 | [Skills](docs/skills.md) | See what each skill does, step by step, and what it changes |
 | [Your workspace](docs/workspace.md) | Understand every file `init` creates, its format, and the recap page |
 | [Knowledge graph](docs/knowledge-graph.md) | See how a paper gets into the graph, and how entities, links, and duplicate checks work |
+| [Graph schema](docs/graph-schema.md) | Look up the graph's exact format: every field, relation, and rule |
 | [Architecture](docs/architecture.md) | See the components, what each one writes, and the design decisions |
 | [Security](docs/security.md) | Know what protects you from a malicious paper, and what doesn't |
 | [Command reference](docs/reference.md) | Run the scripts yourself, with every option and exit code |

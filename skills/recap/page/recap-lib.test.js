@@ -118,6 +118,30 @@ test("safeUrl only allows http and https", () => {
   for (const bad of ["javascript:alert(1)", "data:text/html,x", "", undefined]) assert.equal(lib.safeUrl(bad), "");
 });
 
+test("evidenceClass marks every link that isn't verified", () => {
+  assert.equal(lib.evidenceClass("verified"), "evidence");
+  for (const status of ["reported", "inferred", "", undefined])
+    assert.equal(lib.evidenceClass(status), "evidence weaker");
+});
+
+test("needsExtraction lists papers missing from the graph, and finished papers with nothing extracted", () => {
+  const paper = (status, graph) => ({ status, graph });
+  assert.equal(lib.needsExtraction(paper("read", "missing")), true);
+  assert.equal(lib.needsExtraction(paper("done", "unextracted")), true);
+  for (const status of ["read", "skim", "archive", "dropped", "unread-link", ""])
+    assert.equal(lib.needsExtraction(paper(status, "unextracted")), false, status);
+  assert.equal(lib.needsExtraction(paper("done", "extracted")), false);
+  assert.equal(lib.needsExtraction(paper("done", undefined)), false);
+});
+
+test("a paper card shows the graph gap only when the paper needs extraction", () => {
+  const card = (status, graph) =>
+    lib.renderPaperList({ insights: [], papers: [{ id: "x", title: "X", status, graph }] }, "status");
+  assert.match(card("done", "unextracted"), /<span class="tag warn">nothing extracted yet<\/span>/);
+  assert.match(card("read", "missing"), /<span class="tag warn">not in graph<\/span>/);
+  assert.ok(!card("read", "unextracted").includes("tag warn"));
+});
+
 test("gapLabel ignores object built-ins", () => {
   assert.equal(lib.gapLabel("missing"), "not in graph");
   assert.equal(lib.gapLabel("unextracted"), "nothing extracted yet");
@@ -154,9 +178,9 @@ test("buildRecap renders every view with escaped text", () => {
   assert.ok(!html.includes("<b>odd</b>"), "types must be escaped");
   assert.ok(!html.includes("javascript:"), "unsafe links must be dropped");
   assert.match(html, /href="https:\/\/arxiv.org\/abs\/2601.00001" target="_blank" rel="noopener noreferrer"/);
-  assert.match(html, /Needs graph extraction \(2\)/);
+  assert.match(html, /Needs graph extraction \(1\)/);
   assert.match(html, /<span class="tag warn">not in graph<\/span>/);
-  assert.match(html, /<span class="tag warn">nothing extracted yet<\/span>/);
+  assert.ok(!html.includes("nothing extracted yet"), "a paper nobody has finished isn't due for extraction");
   assert.ok(!html.includes("[object Object]"));
   assert.match(html, /<details open><summary><strong>2026-01-03<\/strong> · 1 paper<\/summary>/);
   assert.match(html, /1 &lt;b&gt;odd&lt;\/b&gt;, 1 insight, 1 interest, 1 paper, 2 pins, 1 question/);

@@ -6,17 +6,19 @@ argument-hint: "[topic]"
 
 # Recommend what to read
 
-1. Read `research/profile.md`, `research/papers.md`, and `research/user-facts.md`, looking for topics the user keeps returning to. If the user gave a topic, focus on it.
+1. Read `research/profile.md`, `research/papers.md`, and `research/user-facts.md`, looking for topics the user keeps returning to. If the user gave a topic, focus on it. If no paper in `research/papers.md` has a rating, ask the user to rate a few they have read, from 1 to 5, before you recommend: without ratings you can't tell what they value from what they skimmed.
 2. Gather candidates:
    - **Your list:** papers with status `read`.
    - **Similar to rated papers:** `scholar` `recommend`, using papers rated 4–5 as `--like` and 1–2 as `--dislike`. Skip this until something is rated 4–5. `recommend` returns mostly recent papers and can't be limited to dates, so for similar papers from a period, such as "similar work from 2025", use `scholar` `search` with `--year` or the `arxiv` skill's `search` with `--since` and `--until`, and say the list came from a search.
    - **New on arXiv:** search the topics in `research/profile.md` with the `arxiv` skill, using `--sort new` and `--since` for recent work and `--category` to stay on topic.
    - **Community interest:** https://huggingface.co/papers, read with the built-in web fetch.
+   - **Say where the list came from:** when the candidates came from your own searches, the queries decided what could appear, and anything not on arXiv, such as a company's technical report, is missing. Say so in the reply.
 3. Remove anything already in `research/papers.md` with a status other than `read`.
 4. Pick 1–2 papers, unless the user asks for more. Check that each pick is a paper that fits (its title, abstract, and the page count in `comment`, or its `venue` for a paper found only through Semantic Scholar), because a search or a citation count doesn't screen out books or papers from another field. Weigh fit with the profile first, then quality signals such as citations for the paper's age, venue, and available code.
 5. Rate each pick's standing in the academic community, using `scholar` `batch` and `authors`:
    - **Evidence to show:** citations and influential citations with the paper's age, the venue and whether it's peer-reviewed, and the highest author h-index with that author's name.
    - **Rating:** `High`, `Medium`, `Low`, or `Too early`. It's your judgement from that evidence, so don't present it as a calculated score.
+   - **Older and newer papers:** raw citation counts favour older papers, so compare influential citations per month since publication, not totals.
    - **New papers:** citations mean little in the first few months, so rate from the authors and venue, or use `Too early` if they don't settle it.
    - **Keep it separate:** this measures attention and standing, not whether the paper is correct or fits the user. If the data isn't available, say so rather than estimating.
    - **One set of counts:** use the counts from this `batch` call for both the `Citations` column and the rating, never an older saved count. If the call fails, follow the paper-list rule: write `?` and say so, or, for a pick in the graph, use the saved count that `graph.py search <id>` shows, with the date it was checked, for both. Save the `batch` output to a file and run `graph.py standing <file>`, so the counts are kept for the picks already in the graph.

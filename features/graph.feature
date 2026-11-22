@@ -27,7 +27,7 @@ Feature: A knowledge graph that stays trustworthy as it grows
     And a verified link "paper:2401.00003" related-to "paper:2401.00004" has the source "Same group"
     When I run graph validate
     Then the command fails
-    And the output mentions "found 1 verified link with no document it was checked against"
+    And the output mentions "found 1 verified or reported link with no document it was checked against"
     And the output mentions "unlink it and link it again"
     When I run graph stats
     Then the command succeeds
@@ -36,6 +36,22 @@ Feature: A knowledge graph that stays trustworthy as it grows
     And I run graph validate
     Then the command succeeds
     And the output mentions "OK: 3 entities, 3 relations"
+
+  Scenario: A result a survey quotes is recorded as reported, and becomes verified once the original study is checked
+    Given the graph holds a paper "Survey" with id "paper:2401.00009"
+    And the graph holds a paper "Original study" with id "paper:2401.00003"
+    And every paper in the graph has the author "Ann Lee"
+    When I run graph add --type dataset --name "Dataset D" --link-from paper:2401.00003 evaluates-on --source "ARXIV:2401.00009, Table 2, quoting ARXIV:2401.00003" --status reported
+    Then the command succeeds
+    And the relation "paper:2401.00003" evaluates-on "dataset:dataset-d" is reported from "ARXIV:2401.00009, Table 2, quoting ARXIV:2401.00003"
+    When I run graph link paper:2401.00003 evaluates-on dataset:dataset-d --source "ARXIV:2401.00003, section 4" --status verified
+    Then the output mentions "upgraded paper:2401.00003 evaluates-on dataset:dataset-d from reported to verified"
+    When I run graph link paper:2401.00003 evaluates-on dataset:dataset-d --source "ARXIV:2401.00009, Table 2" --status reported
+    Then the output mentions "already linked"
+    And the relation "paper:2401.00003" evaluates-on "dataset:dataset-d" is verified from "ARXIV:2401.00003, section 4"
+    When I run graph validate
+    Then the command succeeds
+    And the output mentions "OK: 4 entities, 3 relations"
 
   Scenario: Citation counts are saved with their date, shown in search, and not asked for again until due
     Given the graph holds a paper "Paper A" with id "paper:2611.00001"
@@ -62,3 +78,11 @@ Feature: A knowledge graph that stays trustworthy as it grows
     When I run graph validate
     Then the command succeeds
     And the output mentions "1 paper with a reason instead of authors"
+
+  Scenario: A report by a large team can be recorded with its lab and its leads, with no author for each member
+    Given the graph holds a paper "Technical report" with id "paper:2401.00006"
+    When I run graph add --type organisation --name "Example Lab" --link-from paper:2401.00006 authored-by --source "Semantic Scholar" --status verified
+    And I run graph add --type author --name "Ann Lee" --link-from paper:2401.00006 authored-by --source "Semantic Scholar" --status verified
+    And I run graph validate
+    Then the command succeeds
+    And the output mentions "OK: 3 entities"

@@ -18,8 +18,28 @@ All notable changes to the plugin are listed here, newest first. The format foll
   traces to it, and what to look for. It loads three Grafana dashboards: usage and security, service details, and
   the plugin's debug log.
 
+- A `reported` status, for a claim checked against a source that only quotes another study, such as a survey's table
+  of other papers' scores. It sits between `inferred` and `verified`: links, pins, and insights can carry it, a
+  reported link's source names the document and the study it quotes, and the recap's Graph tab marks it as it marks an
+  inferred link. Before, such a claim could only be marked `verified`.
+- `graph.py link` upgrades an existing link given a stronger status, taking the new source, so a reported or
+  inferred claim becomes verified once it is checked. A weaker or equal status changes nothing.
+- [Graph schema](docs/graph-schema.md): the graph's exact format, with every entity field, relation, status, and rule
+  `graph.py` enforces. A test checks it against the script. [Knowledge graph](docs/knowledge-graph.md) is shorter,
+  and says each rule once.
+- A `compared-with` relation between two works, for a baseline or a system a paper measures against, which used to
+  become `related-to`.
+
 ### Changed
 
+- Claude checks every number in a paper's analysis against the text before showing it, so a summary can't say "9 of
+  12" when the table shows 8.
+- `next` asks you to rate a few papers when none is rated, ranks by influential citations per month since publication
+  instead of raw counts, and says when its candidates came from its own searches, which miss anything not on arXiv.
+- Each version of a benchmark, dataset, or model is an entity of its own, never another version's alias. Claude decides
+  each possible duplicate on its own and never marks a list of them distinct in one go.
+- For a report with hundreds of authors, Claude links the lab as an organisation plus the leads or corresponding
+  authors the report names.
 - Setting up a workspace is one step that Claude runs: `/paper-research:init` creates the starter files in
   `research/` and `.gitignore` entries, and never touches `CLAUDE.md` or `.claude/`. There is no `!` command to run,
   and nothing to run after an update.
@@ -43,6 +63,13 @@ added to `.claude/settings.json`. Otherwise the old rules load as well.
 
 ### Fixed
 
+- After reading or skimming a paper, Claude sets its status to `done`. The `read` skill didn't say which status, so
+  a finished paper could be set to `read`, which means still to read, and the recap counted it as to read. The
+  `papers.md` template and the docs now say what each status means. In an existing workspace, a paper you finished
+  that still says `read` counts as to read: set it to `done`.
+- The recap's "Needs graph extraction" panel and the paper cards flag only finished papers with nothing extracted,
+  and papers missing from the graph. They used to flag every paper only added to the reading list, whose extraction
+  waits for `read`.
 - A paper whose title breaks over two lines in arXiv's HTML, such as Reflexion (2303.11366), keeps its whole
   title as the first heading of the saved text and in the section list. It used to keep only the first line.
 

@@ -49,7 +49,7 @@ One table row per link. Escape a `|` in a title as `\|`.
 | Added | `YYYY-MM-DD` |
 | Title | The paper's title |
 | ID | `ARXIV:2303.11366`, `DOI:10.1234/abc`, or the link for anything else |
-| Status | `read`, `skim`, `archive`, `done`, `dropped`, or `unread-link` |
+| Status | `read` (to read), `skim` (to skim), `archive` (kept, not to read), `done` (read or skimmed), `dropped`, or `unread-link` |
 | Rating | 1 to 5 after reading, otherwise `-` |
 | Tags | Comma-separated topics |
 | Summary | One or two sentences, and whether it comes from the abstract or the full text |
@@ -63,7 +63,7 @@ One line per fact:
 ```
 
 - **Type:** `concept`, `finding`, `method`, `tool`, `dataset`, or `idea`.
-- **Status:** `verified` (checked against the source), `from-skim` (not checked), or `user-note` (your own).
+- **Status:** `verified` (checked against the source), `reported` (checked against a source that quotes another study), `from-skim` (not checked), or `user-note` (your own).
 
 ## insights.md
 
@@ -83,7 +83,7 @@ One section per takeaway:
 - **Added:** 2026-11-05
 ```
 
-`Kind` is `practice`, `lesson`, `caution`, or `idea`. `Evidence` is `verified`, `unverified`, or `none`. Your view is kept apart from the evidence on purpose, because agreeing with something doesn't prove it.
+`Kind` is `practice`, `lesson`, `caution`, or `idea`. `Evidence` is `verified`, `reported`, `unverified`, or `none`. Your view is kept apart from the evidence on purpose, because agreeing with something doesn't prove it.
 
 ## user-facts.md
 
@@ -102,7 +102,7 @@ Short lessons about how Claude should work with you, each with the date and what
 
 ## The graph
 
-`research/graph/entities.jsonl` and `relations.jsonl`, one JSON object per line. See [Knowledge graph](knowledge-graph.md).
+`research/graph/entities.jsonl` and `relations.jsonl`, one JSON object per line. See [Knowledge graph](knowledge-graph.md) for how it works, and [Graph schema](graph-schema.md) for every field and rule.
 
 ## The recap page
 

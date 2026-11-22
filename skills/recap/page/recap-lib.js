@@ -47,8 +47,20 @@
     return /^https?:\/\//.test(url || "") ? esc(url) : "";
   }
 
+  // The class of a link's evidence line in the Graph tab: anything short of verified, such as a reported or
+  // inferred link, is marked, since it wasn't checked in the study that made the claim.
+  function evidenceClass(status) {
+    return status === "verified" ? "evidence" : "evidence weaker";
+  }
+
   function gapLabel(status) {
     return GRAPH_GAPS.get(status) || "";
+  }
+
+  // Whether a paper belongs under "Needs graph extraction": one missing from the graph, or one finished (done) with
+  // nothing extracted. A paper still to read or skim is extracted when it is read, so it isn't listed.
+  function needsExtraction(paper) {
+    return paper.graph === "missing" || (paper.graph === "unextracted" && paper.status === "done");
   }
 
   // The part of the address after #, decoded. A malformed address gives "" instead of an error.
@@ -106,7 +118,7 @@
   }
 
   function paperGap(p) {
-    const label = gapLabel(p.graph);
+    const label = needsExtraction(p) ? gapLabel(p.graph) : "";
     return label ? ` <span class="tag warn">${label}</span>` : "";
   }
 
@@ -283,7 +295,7 @@
     const graphNote = data.graph.error
       ? `<p class="warning">The graph can't be shown: ${esc(data.graph.error)}</p>`
       : "";
-    const waiting = data.papers.filter((p) => gapLabel(p.graph));
+    const waiting = data.papers.filter(needsExtraction);
     const gaps = waiting.length
       ? `<div class="gaps"><h3>Needs graph extraction (${waiting.length})</h3><ul>` +
         waiting
@@ -315,5 +327,17 @@
     };
   }
 
-  Object.assign(lib, { esc, anchor, inline, safeUrl, gapLabel, hashName, groupBy, buildRecap, renderPaperList });
+  Object.assign(lib, {
+    esc,
+    anchor,
+    inline,
+    safeUrl,
+    evidenceClass,
+    gapLabel,
+    needsExtraction,
+    hashName,
+    groupBy,
+    buildRecap,
+    renderPaperList,
+  });
 })(typeof module === "object" && module.exports ? module.exports : (window.RecapLib = {}));
