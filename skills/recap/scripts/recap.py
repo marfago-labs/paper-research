@@ -277,7 +277,9 @@ def stop_hook(stdin):
 
 
 def build_parser():
-    parser = argparse.ArgumentParser(description="Write the data for the recap page.")
+    # Whole flags only: a shortened flag is refused rather than guessed, and argparse's message for an ambiguous
+    # one repeats its value, which the debug log would record.
+    parser = argparse.ArgumentParser(description="Write the data for the recap page.", allow_abbrev=False)
     parser.add_argument("--workspace", type=Path, default=Path("."), help="workspace root (default: here)")
     parser.add_argument("--stop-hook", action="store_true", help="run as the Stop hook, reading the event from stdin")
     return parser
@@ -289,7 +291,7 @@ def main(argv=None):
         return stop_hook(sys.stdin)
     research = args.workspace / RESEARCH_DIR
     if not research.is_dir():
-        print(f"error: research folder not found: {research}", file=sys.stderr)
+        print(f"error: research folder not found: '{research}'", file=sys.stderr)
         return 2
     data = build_data(research)
     folder = research / OUTPUT_DIR

@@ -47,18 +47,20 @@ Add this to `~/.claude/settings.json`, merging it with what's there, then start 
     "OTEL_METRICS_EXPORTER": "otlp",
     "OTEL_LOGS_EXPORTER": "otlp",
     "OTEL_EXPORTER_OTLP_PROTOCOL": "http/json",
-    "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318",
+    "OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318",
     "OTEL_LOG_TOOL_DETAILS": "1",
     "CLAUDE_CODE_ENHANCED_TELEMETRY_BETA": "1",
-    "OTEL_TRACES_EXPORTER": "otlp"
+    "OTEL_TRACES_EXPORTER": "otlp",
+    "PAPER_RESEARCH_OTLP_ENDPOINT": "http://127.0.0.1:4318"
   }
 }
 ```
 
-It has to go in your user settings or your shell. Claude Code ignores these variables in a project's `.claude/settings.json`, so a repository can't turn telemetry on or choose where it goes.
+It has to go in your user settings or your shell. Claude Code ignores the `OTEL_` variables in a project's `.claude/settings.json`, so a repository can't turn telemetry on or choose where it goes. A project's settings can set `PAPER_RESEARCH_OTLP_ENDPOINT`, but the plugin only uses an address on this machine.
 
 - `OTEL_LOG_TOOL_DETAILS` adds the file paths, URLs, shell commands, skill names, and MCP server and tool names to each tool event. Without it you see only the tool's name, which isn't enough to debug the plugin.
-- The last two lines turn on traces, which are a beta in Claude Code. Leave them out if you only want events and metrics.
+- `CLAUDE_CODE_ENHANCED_TELEMETRY_BETA` and `OTEL_TRACES_EXPORTER` turn on traces, which are a beta in Claude Code. Leave them out if you only want events and metrics.
+- `PAPER_RESEARCH_OTLP_ENDPOINT` is for the plugin's own events (see below). Claude Code removes every `OTEL_` variable from the commands and hooks it runs, so the plugin can't use `OTEL_EXPORTER_OTLP_ENDPOINT`.
 
 To stop the export, remove the block, or set `CLAUDE_CODE_ENABLE_TELEMETRY` to `0`.
 
@@ -95,11 +97,11 @@ The full list of events and attributes is in Claude Code's [monitoring documenta
 
 ## The plugin's own events
 
-Claude Code's events show what Claude did. To see what the plugin's scripts and hooks decided, turn on the plugin's debug log: ask Claude to turn debug on (the `debug` skill), or run `python <skills>/debug/scripts/debuglog.py on` in the workspace. While it is on, each script and hook records its events in `research/.debug.log`, and, when the stack above is running and `OTEL_EXPORTER_OTLP_ENDPOINT` is set as shown, also sends them to it. Turn it off the same way when you're done: it is off by default, and it never turns itself off.
+Claude Code's events show what Claude did. To see what the plugin's scripts and hooks decided, turn on the plugin's debug log: ask Claude to turn debug on (the `debug` skill), or run `python <skills>/debug/scripts/debuglog.py on` in the workspace. While it is on, each script and hook records its events in `research/.debug.log`, and, when the stack above is running and `PAPER_RESEARCH_OTLP_ENDPOINT` is set as shown, also sends them to it. `debuglog.py status` shows where events go. Turn it off the same way when you're done: it is off by default, and it never turns itself off.
 
 The events have `service_name="paper-research"` in Loki, with the `event_name` and `source` attributes:
 
-- `command`: each run of a script, with its `command`, `exit` code, and `duration_ms`.
+- `command`: each run of a script, with its `command`, `exit` code, and `duration_ms`. A run that fails also has its `reason`: the first line of its error message, such as `error: no entity matches '…'; try the search command`, with quoted values, entity ids (their names can be your own words), paths, and query strings replaced by `…`. The debug dashboard lists them under **Failures by reason**, and counts `graph add`'s exit 3 (possible duplicates, so Claude asks first) apart from failures.
 - `http`: each request to arXiv or Semantic Scholar, with `host`, `path`, `status` (`network error` if the server didn't answer), and `duration_ms`. A search's query string is never recorded.
 - `guard`: each decision of the approval hook, with the `tool`, `decision` (`ask` or `pass`), and `reason`.
 - `rules`, `lessons`, `stop_hook`: what the session-start hooks loaded, and whether the Stop hook blocked.

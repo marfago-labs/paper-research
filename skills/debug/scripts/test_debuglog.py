@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Tests for debuglog.py. Run: python skills/debug/scripts/test_debuglog.py"""
 
+import argparse
 import contextlib
 import http.client
 import http.server
@@ -28,8 +29,9 @@ def workspace(on=True):
         (root / "research").mkdir()
         if on:
             (root / "research" / ".debug").write_text("on\n", encoding="utf-8")
-        with mock.patch.dict(os.environ, {}, clear=False):
-            os.environ.pop("OTEL_EXPORTER_OTLP_ENDPOINT", None)
+        with mock.patch.dict(os.environ):
+            for name in debuglog.ENDPOINTS:
+                os.environ.pop(name, None)
             yield root
 
 
@@ -177,14 +179,17 @@ class Events(unittest.TestCase):
 
 
 class Export(unittest.TestCase):
-    def endpoint(self, value):
-        with mock.patch.dict(os.environ, {"OTEL_EXPORTER_OTLP_ENDPOINT": value}):
+    def endpoint(self, value, name="PAPER_RESEARCH_OTLP_ENDPOINT", **others):
+        with mock.patch.dict(os.environ, {name: value, **others}):
+            for other in debuglog.ENDPOINTS:
+                if other != name and other not in others:
+                    os.environ.pop(other, None)
             return debuglog.otlp_url()
 
     def test_only_an_address_on_this_machine_is_used(self):
-        self.assertEqual(self.endpoint("http://localhost:4318"), "http://localhost:4318/v1/logs")
         self.assertEqual(self.endpoint("http://127.0.0.1:4318/"), "http://127.0.0.1:4318/v1/logs")
         self.assertEqual(self.endpoint("http://[::1]:4318"), "http://[::1]:4318/v1/logs")
+        self.assertEqual(self.endpoint("http://127.0.0.1/otlp?x=1"), "http://127.0.0.1/otlp/v1/logs")
         for value in (
             "",
             "https://localhost:4318",
@@ -195,25 +200,43 @@ class Export(unittest.TestCase):
             with self.subTest(value=value):
                 self.assertIsNone(self.endpoint(value))
 
+    def test_localhost_becomes_127_0_0_1_so_windows_does_not_wait_on_ipv6(self):
+        self.assertEqual(self.endpoint("http://localhost:4318"), "http://127.0.0.1:4318/v1/logs")
+        self.assertEqual(self.endpoint("http://user@LOCALHOST:4318"), "http://127.0.0.1:4318/v1/logs")
+
     def test_a_malformed_address_is_no_address(self):
-        self.assertIsNone(self.endpoint("http://[::1"))
+        for value in ("http://[::1", "http://127.0.0.1:port"):
+            with self.subTest(value=value):
+                self.assertIsNone(self.endpoint(value))
+
+    def test_the_standard_variable_is_used_when_the_plugins_is_unset(self):
+        # Claude Code removes OTEL_ variables from the commands it runs, so this serves runs in a terminal.
+        url = self.endpoint("http://127.0.0.1:4318", name="OTEL_EXPORTER_OTLP_ENDPOINT")
+        self.assertEqual(url, "http://127.0.0.1:4318/v1/logs")
+
+    def test_the_plugins_variable_wins_and_an_empty_one_counts_as_unset(self):
+        standard = {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:1111"}
+        self.assertEqual(self.endpoint("http://127.0.0.1:2222", **standard), "http://127.0.0.1:2222/v1/logs")
+        self.assertEqual(self.endpoint("", **standard), "http://127.0.0.1:1111/v1/logs")
+        self.assertIsNone(self.endpoint("http://example.com", **standard))
 
     def test_a_malformed_address_does_not_stop_an_event(self):
         with workspace() as root:
-            with mock.patch.dict(os.environ, {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://[::1"}):
+            with mock.patch.dict(os.environ, {"PAPER_RESEARCH_OTLP_ENDPOINT": "http://[::1"}):
                 debuglog.event("graph", "command", root, exit=0)
             self.assertEqual(len(logged(root)), 1)
 
     def test_events_do_not_go_through_a_proxy(self):
         env = {"HTTP_PROXY": "http://127.0.0.1:1", "http_proxy": "http://127.0.0.1:1"}
         with workspace() as root, collector() as url:
-            with mock.patch.dict(os.environ, {**env, "OTEL_EXPORTER_OTLP_ENDPOINT": url}):
+            with mock.patch.dict(os.environ, {**env, "PAPER_RESEARCH_OTLP_ENDPOINT": url}):
                 debuglog.event("graph", "command", root, exit=0)
             self.assertEqual(len(Collector.received), 1)
 
-    def test_it_is_off_when_the_variable_is_unset(self):
+    def test_it_is_off_when_the_variables_are_unset(self):
         with mock.patch.dict(os.environ):
-            os.environ.pop("OTEL_EXPORTER_OTLP_ENDPOINT", None)
+            for name in debuglog.ENDPOINTS:
+                os.environ.pop(name, None)
             self.assertIsNone(debuglog.otlp_url())
 
     def test_the_record_has_the_same_fields_as_the_log(self):
@@ -257,7 +280,7 @@ class Export(unittest.TestCase):
 
     def test_an_event_is_sent_to_the_collector(self):
         with workspace() as root, collector() as url:
-            with mock.patch.dict(os.environ, {"OTEL_EXPORTER_OTLP_ENDPOINT": url}):
+            with mock.patch.dict(os.environ, {"PAPER_RESEARCH_OTLP_ENDPOINT": url}):
                 debuglog.event("graph", "command", root, exit=0)
             ((path, kind, body),) = Collector.received
             self.assertEqual(len(logged(root)), 1)
@@ -266,19 +289,19 @@ class Export(unittest.TestCase):
 
     def test_nothing_is_sent_while_debug_is_off(self):
         with workspace(on=False) as root, collector() as url:
-            with mock.patch.dict(os.environ, {"OTEL_EXPORTER_OTLP_ENDPOINT": url}):
+            with mock.patch.dict(os.environ, {"PAPER_RESEARCH_OTLP_ENDPOINT": url}):
                 debuglog.event("graph", "command", root, exit=0)
             self.assertEqual(Collector.received, [])
 
     def test_a_collector_that_is_down_does_not_stop_the_log(self):
         with workspace() as root:
-            with mock.patch.dict(os.environ, {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:1"}):
+            with mock.patch.dict(os.environ, {"PAPER_RESEARCH_OTLP_ENDPOINT": "http://127.0.0.1:1"}):
                 debuglog.event("graph", "command", root, exit=0)
             self.assertEqual(len(logged(root)), 1)
 
     def test_a_redirect_is_not_followed(self):
         with workspace() as root, collector(status=307) as url:
-            with mock.patch.dict(os.environ, {"OTEL_EXPORTER_OTLP_ENDPOINT": url}):
+            with mock.patch.dict(os.environ, {"PAPER_RESEARCH_OTLP_ENDPOINT": url}):
                 debuglog.event("graph", "command", root, exit=0)
             self.assertEqual(len(Collector.received), 1)
         with self.assertRaises(urllib.error.HTTPError):
@@ -287,14 +310,14 @@ class Export(unittest.TestCase):
 
     def test_a_failed_log_write_still_sends(self):
         with workspace() as root, collector() as url:
-            with mock.patch.dict(os.environ, {"OTEL_EXPORTER_OTLP_ENDPOINT": url}):
+            with mock.patch.dict(os.environ, {"PAPER_RESEARCH_OTLP_ENDPOINT": url}):
                 with mock.patch.object(debuglog, "append", side_effect=OSError("disk full")):
                     debuglog.event("graph", "command", root, exit=0)
             self.assertEqual(len(Collector.received), 1)
 
     def test_a_sender_that_fails_in_http_is_ignored(self):
         with workspace() as root:
-            with mock.patch.dict(os.environ, {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318"}):
+            with mock.patch.dict(os.environ, {"PAPER_RESEARCH_OTLP_ENDPOINT": "http://localhost:4318"}):
                 with mock.patch.object(debuglog, "send", side_effect=http.client.HTTPException("bad")):
                     debuglog.event("graph", "command", root, exit=0)
 
@@ -391,6 +414,158 @@ class Commands(unittest.TestCase):
         self.assertEqual((rec["exit"], rec["error"]), ("error", "KeyError"))
         self.assertIn("duration_ms", rec)
 
+    def recorded(self, *messages, code=1):
+        """Run a main that prints messages to standard error and returns code; give back its event and what the real
+        standard error received."""
+
+        def main(argv):
+            for message in messages:
+                print(message, file=sys.stderr)
+            return code
+
+        with workspace() as root:
+            os.chdir(root)
+            try:
+                with mock.patch.object(sys, "stderr", Out()) as err:
+                    debuglog.run("graph", main, [])
+                    self.assertIs(sys.stderr, err)
+            finally:
+                os.chdir(Path(__file__).parent)
+            (rec,) = logged(root)
+        return rec, err.getvalue()
+
+    def test_a_failed_command_records_its_error_line_and_still_prints_it(self):
+        message = "error: already in the graph: concept:attention"
+        rec, printed = self.recorded("usage: graph.py add ...", message)
+        self.assertEqual(rec["reason"], "error: already in the graph: …")
+        self.assertEqual(printed, f"usage: graph.py add ...\n{message}\n")
+
+    def test_without_an_error_line_the_first_line_is_the_reason(self):
+        rec, _ = self.recorded("", "possible duplicates:", "  concept:attention", code=3)
+        self.assertEqual(rec["reason"], "possible duplicates:")
+
+    def test_the_reason_starts_at_error_after_a_program_name(self):
+        rec, _ = self.recorded("graph.py: error: argument --type: invalid choice: 'x'", code=2)
+        self.assertEqual(rec["reason"], "error: argument --type: invalid choice: '…'")
+
+    def test_quoted_values_and_query_strings_are_left_out_of_the_reason(self):
+        cases = {
+            "no matches for 'secret search'": "no matches for '…'",
+            'error: no entity matches "paper:1"; try search': "error: no entity matches '…'; try search",
+            "error: can't read 'a b': it's gone": "error: can't read '…': it's gone",
+            "error: HTTP 503 from https://export.arxiv.org/api/query?search_query=secret&max=5": (
+                "error: HTTP 503 from https://export.arxiv.org/api/query?…"
+            ),
+            "error: no 'x?y' here?": "error: no '…' here?…",
+        }
+        for message, expected in cases.items():
+            with self.subTest(message=message):
+                self.assertEqual(self.recorded(message)[0]["reason"], expected)
+
+    def test_unquoted_ids_paths_and_extra_arguments_are_left_out_of_the_reason(self):
+        cases = {
+            "error: can't link insight:keep-the-review-agent-read-only supports paper:x: wrong ends": (
+                "error: can't link … supports …: wrong ends"
+            ),
+            "error: no relation concept:my-idea uses tool:b.": "error: no relation … uses ….",
+            "error: workspace not found: C:\\Users\\someone\\notes": "error: workspace not found: …",
+            "error: research folder not found: /home/someone/my notes/research": (
+                "error: research folder not found: … …"
+            ),
+            "error: HTTPS://Example.org/a/b failed": "error: HTTPS://Example.org/a/b failed",
+            "error: http://127.0.0.1:4318/v1/logs refused": "error: http://127.0.0.1:4318/v1/logs refused",
+            "graph.py: error: unrecognized arguments: --bogus private words": "error: unrecognized arguments: …",
+            "graph.py: error: ambiguous option: --no=private words could match --note, --no-authors": (
+                "error: ambiguous option: …"
+            ),
+            "error: the following arguments are required: query": "error: the following arguments are required: query",
+        }
+        for message, expected in cases.items():
+            with self.subTest(message=message):
+                self.assertEqual(self.recorded(message)[0]["reason"], expected)
+
+    def exited(self, stop):
+        """Run a main that prints a usage error and raises stop; give back its event and what was printed."""
+
+        def main(argv):
+            print("usage: graph.py stats", file=sys.stderr)
+            raise stop
+
+        with workspace() as root, mock.patch.object(sys, "stderr", Out()) as err:
+            os.chdir(root)
+            try:
+                with self.assertRaises(SystemExit) as raised:
+                    debuglog.run("graph", main, [])
+            finally:
+                os.chdir(Path(__file__).parent)
+            self.assertIs(raised.exception, stop)
+            self.assertIs(sys.stderr, err)
+            (rec,) = logged(root)
+        return rec, err.getvalue()
+
+    def test_a_usage_error_is_recorded_with_its_reason_and_raised_again(self):
+        def main(argv):
+            debuglog.note(command="search")
+            return argparse.ArgumentParser(prog="graph.py").parse_args(argv) and 0  # exits on the wrong flag first
+
+        with workspace() as root, mock.patch.object(sys, "stderr", Out()) as err:
+            os.chdir(root)
+            try:
+                with self.assertRaises(SystemExit) as raised:
+                    debuglog.run("graph", main, ["--bogus", "private words"])
+            finally:
+                os.chdir(Path(__file__).parent)
+            (rec,) = logged(root)
+        self.assertEqual(raised.exception.code, 2)
+        self.assertIn("private words", err.getvalue())  # the user still sees the whole message
+        self.assertEqual(
+            {key: rec[key] for key in ("command", "exit", "reason")},
+            {"command": "search", "exit": 2, "reason": "error: unrecognized arguments: …"},
+        )
+        self.assertIn("duration_ms", rec)
+
+    def test_an_exit_with_a_message_records_the_message_as_the_reason(self):
+        rec, printed = self.exited(SystemExit("error: stopped at concept:my-idea"))
+        self.assertEqual((rec["exit"], rec["reason"]), (1, "error: stopped at …"))
+        self.assertEqual(printed, "usage: graph.py stats\n")
+
+    def test_an_exit_without_a_code_is_a_success_with_no_reason(self):
+        for stop in (SystemExit(), SystemExit(0)):
+            with self.subTest(code=stop.code):
+                rec, _ = self.exited(stop)
+                self.assertEqual(rec["exit"], 0)
+                self.assertNotIn("reason", rec)
+
+    def test_a_success_or_a_silent_failure_has_no_reason(self):
+        self.assertNotIn("reason", self.recorded("2 invisible characters removed", code=0)[0])
+        self.assertNotIn("reason", self.recorded(code=1)[0])
+        self.assertNotIn("reason", self.recorded("   ", code=1)[0])
+
+    def test_only_the_start_of_standard_error_is_kept(self):
+        self.assertEqual(debuglog.KEPT, 2000)  # enough for the error line after a long usage message
+        kept = debuglog.Kept(Out())
+        kept.write("x" * (debuglog.KEPT - 1))
+        kept.write("yz")
+        kept.write("more")
+        self.assertEqual(kept.text, "x" * (debuglog.KEPT - 1) + "y")
+        self.assertEqual(kept.stream.getvalue(), "x" * (debuglog.KEPT - 1) + "yzmore")
+
+    def test_standard_error_is_restored_after_a_crash_and_keeps_its_methods(self):
+        def main(argv):
+            sys.stderr.reconfigure(encoding="utf-8")
+            raise KeyError("x")
+
+        with workspace() as root, mock.patch.object(sys, "stderr", Out()) as err:
+            os.chdir(root)
+            try:
+                with self.assertRaises(KeyError):
+                    debuglog.run("graph", main, [])
+            finally:
+                os.chdir(Path(__file__).parent)
+            self.assertIs(sys.stderr, err)
+            (rec,) = logged(root)
+        self.assertNotIn("reason", rec)
+
 
 class CommandLine(unittest.TestCase):
     def run_main(self, root, *args):
@@ -412,9 +587,9 @@ class CommandLine(unittest.TestCase):
 
     def test_on_says_where_events_are_also_sent(self):
         with workspace(on=False) as root:
-            with mock.patch.dict(os.environ, {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318"}):
+            with mock.patch.dict(os.environ, {"PAPER_RESEARCH_OTLP_ENDPOINT": "http://localhost:4318"}):
                 out = self.run_main(root, "on")[1]
-        self.assertIn(".debug.log and to http://localhost:4318/v1/logs", out)
+        self.assertIn(".debug.log and to http://127.0.0.1:4318/v1/logs", out)
 
     def test_status_says_what_is_on_and_how_big_the_log_is(self):
         with workspace(on=False) as root:
@@ -427,7 +602,7 @@ class CommandLine(unittest.TestCase):
             debuglog.event("s", "e", root)
             (root / "research" / ".debug.log.1").write_text("12345", encoding="utf-8")
             size = (root / "research" / ".debug.log").stat().st_size + 5
-            with mock.patch.dict(os.environ, {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318"}):
+            with mock.patch.dict(os.environ, {"PAPER_RESEARCH_OTLP_ENDPOINT": "http://127.0.0.1:4318"}):
                 out = self.run_main(root, "status")[1]
         self.assertIn("debug is on", out)
         self.assertIn(f"log: {size} bytes", out)
@@ -494,6 +669,18 @@ class CommandLine(unittest.TestCase):
                 os.chdir(Path(__file__).parent)
         self.assertEqual(stop.exception.code, 0)
         self.assertIn("debug is off", out.getvalue())
+
+
+class Flags(unittest.TestCase):
+    def test_no_parser_accepts_a_shortened_flag(self):
+        # A shortened flag would be guessed, and argparse's message for an ambiguous one repeats its value.
+        parsers = [debuglog.build_parser()]
+        for parser in parsers:
+            self.assertFalse(parser.allow_abbrev, parser.prog)
+            for action in parser._actions:
+                if isinstance(action, argparse._SubParsersAction):
+                    parsers.extend(action.choices.values())
+        self.assertEqual(len(parsers), 6)
 
 
 if __name__ == "__main__":

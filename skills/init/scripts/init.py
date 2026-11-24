@@ -281,7 +281,11 @@ def run_hook(name, stdin):
 
 
 def build_parser():
-    parser = argparse.ArgumentParser(description="Set up a paper-research workspace, or run one of its hooks.")
+    # Whole flags only: a shortened flag is refused rather than guessed, and argparse's message for an ambiguous
+    # one repeats its value, which the debug log would record.
+    parser = argparse.ArgumentParser(
+        description="Set up a paper-research workspace, or run one of its hooks.", allow_abbrev=False
+    )
     parser.add_argument("--workspace", type=Path, default=Path("."), help="workspace root (default: here)")
     parser.add_argument(
         "--hook",
@@ -298,7 +302,7 @@ def main(argv=None):
         return run_hook(args.hook, sys.stdin)
     workspace = args.workspace.resolve()
     if not workspace.is_dir():
-        print(f"error: workspace not found: {workspace}", file=sys.stderr)
+        print(f"error: workspace not found: '{workspace}'", file=sys.stderr)
         return 2
     set_up(workspace)
     print()

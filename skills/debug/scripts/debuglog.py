@@ -3,10 +3,14 @@
 
 It is off by default. `debuglog.py on` creates research/.debug, and `debuglog.py off` removes it. While the file
 exists, the plugin's scripts and hooks append one JSON line per event to research/.debug.log, and, if
-OTEL_EXPORTER_OTLP_ENDPOINT points at this machine, send the same event there as an OpenTelemetry log record.
+PAPER_RESEARCH_OTLP_ENDPOINT (else OTEL_EXPORTER_OTLP_ENDPOINT) points at this machine, send the same event there as
+an OpenTelemetry log record. Claude Code removes every OTEL_ variable from the commands and hooks it runs, so in a
+session only the plugin's own variable arrives; the OTEL_ one serves scripts run by hand in a terminal.
 The log holds at most 2 MB: when it is full it moves to research/.debug.log.1, which replaces the older one.
 Two scripts that write at the same moment can lose an event; that is accepted for a debug log.
-An event holds names, hosts, statuses, counts, and timings, never notes or search text.
+An event holds names, hosts, statuses, counts, and timings, never notes or search text. A failed command's event
+also holds its reason: the first line of its error message, with quoted values, entity ids, paths, the words after
+"unrecognized arguments", and query strings left out.
 
 Commands: on, off, status, show [--lines N], clear.
 Exit codes: 0 success, 2 usage error.
@@ -19,12 +23,13 @@ import contextlib
 import http.client
 import json
 import os
+import re
 import sys
 import time
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 RESEARCH = "research"
 SWITCH = ".debug"
@@ -34,8 +39,21 @@ MAX_BYTES = 2_000_000
 MAX_TEXT = 200
 SERVICE = "paper-research"
 LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+ENDPOINTS = ("PAPER_RESEARCH_OTLP_ENDPOINT", "OTEL_EXPORTER_OTLP_ENDPOINT")  # the first one set is used
 SEND_TIMEOUT = 0.5  # seconds; the collector is on this machine, so it answers at once or not at all
 NOTES: dict = {}  # fields that a command adds to its own `command` event
+KEPT = 2000  # characters of a command's standard error kept to find why it failed
+# A value in quotes, such as a search or an ID that a message repeats, and a URL's query string, which can hold the
+# search text. The quotes must stand apart from words, so the apostrophe in "can't" opens nothing.
+QUOTED = re.compile(r"""(?<!\w)(['"]).*?\1(?!\w)""")
+# A word that holds a value without quotes: an entity id such as insight:keep-it-short, whose slug is the user's own
+# words, or a path, which can hold a user name. A URL is kept for its host; QUERY then drops its query string.
+# Punctuation that ends the sentence stays.
+UNQUOTED = re.compile(r"(?<!\S)(?![a-z][\w+.-]*://)\S*?(?:[/\\]|\w:\w)\S*?(?=[,;:.)]*(?:\s|$))", re.IGNORECASE)
+# argparse repeats the extra or ambiguous arguments, values included. The scripts refuse shortened flags, so the
+# ambiguous message shouldn't appear; this keeps a parser added without that setting safe.
+LEFTOVER = re.compile(r"(unrecognized arguments:|ambiguous option:).*")
+QUERY = re.compile(r"\?\S*")
 
 
 def research_folder(start):
@@ -82,15 +100,20 @@ OPENER = urllib.request.build_opener(NoRedirect, urllib.request.ProxyHandler({})
 
 
 def otlp_url():
-    """Where to send events: the logs address of OTEL_EXPORTER_OTLP_ENDPOINT if that is on this machine, else None."""
-    endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "")
+    """Where to send events: the logs address of the first of ENDPOINTS that is set, if it is on this machine, else
+    None. localhost becomes 127.0.0.1: on Windows, localhost tries ::1 first and waits out the whole timeout there
+    when the collector listens on IPv4 only."""
+    endpoint = next((os.environ[name] for name in ENDPOINTS if os.environ.get(name)), "")
     try:
         parts = urlsplit(endpoint)
+        port = parts.port
     except ValueError:
         return None
     if parts.scheme != "http" or parts.hostname not in LOCAL_HOSTS:
         return None
-    return endpoint.rstrip("/") + "/v1/logs"
+    host = {"localhost": "127.0.0.1", "::1": "[::1]"}.get(parts.hostname, parts.hostname)
+    netloc = f"{host}:{port}" if port else host
+    return urlunsplit(("http", netloc, parts.path.rstrip("/") + "/v1/logs", "", ""))
 
 
 def otlp_body(rec):
@@ -151,17 +174,57 @@ def note(**fields):
     NOTES.update(fields)
 
 
+class Kept:
+    """Standard error that also keeps the first KEPT characters written to it, so a failed command can say why."""
+
+    def __init__(self, stream):
+        self.stream = stream
+        self.text = ""
+
+    def write(self, text):
+        self.text += text[: KEPT - len(self.text)]
+        return self.stream.write(text)
+
+    def __getattr__(self, name):  # reconfigure, flush, and the rest go to the real stream
+        return getattr(self.stream, name)
+
+
+def reason(text):
+    """Why a command failed: the first line of its standard error that says error:, else its first line, without
+    the values that can hold the user's words or search text."""
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    line = next((line[line.index("error:") :] for line in lines if "error:" in line), lines[0] if lines else "")
+    line = UNQUOTED.sub("…", QUOTED.sub("'…'", line))
+    return QUERY.sub("?…", LEFTOVER.sub(r"\1 …", line))
+
+
 def run(source, main, argv):
-    """Run a script's main, and record its command, exit code, and duration."""
+    """Run a script's main, and record its command, exit code, duration, and, if it failed, the reason."""
     NOTES.clear()
     started = time.monotonic()
+    kept = Kept(sys.stderr)
+    sys.stderr = kept
     try:
         code = main(argv)
+    except SystemExit as stop:  # argparse exits this way on a usage error, after printing it
+        code = stop.code or 0
+        if not isinstance(code, int):  # sys.exit("message") prints its message only after this
+            kept.text, code = str(code), 1
+        finished(source, started, code, kept.text)
+        raise
     except Exception as err:
         event(source, "command", exit="error", error=type(err).__name__, **timing(started), **NOTES)
         raise
-    event(source, "command", exit=code, **timing(started), **NOTES)
+    finally:
+        sys.stderr = kept.stream
+    finished(source, started, code, kept.text)
     return code
+
+
+def finished(source, started, code, text):
+    """Record a command that ended with an exit code, and, if it failed, its reason."""
+    why = reason(text) if code else ""
+    event(source, "command", exit=code, **timing(started), **({"reason": why} if why else {}), **NOTES)
 
 
 def timing(started):
@@ -196,7 +259,7 @@ def log_size(research):
 def cmd_status(research):
     print(f"debug is {'on' if is_on(research) else 'off'}")
     print(f"log: {log_size(research)} bytes of at most {2 * MAX_BYTES}, in {research / LOG}")
-    print(f"export: {otlp_url() or 'none (OTEL_EXPORTER_OTLP_ENDPOINT is not set to a local address)'}")
+    print(f"export: {otlp_url() or 'none (PAPER_RESEARCH_OTLP_ENDPOINT is not set to a local address)'}")
     return 0
 
 
@@ -214,8 +277,17 @@ def cmd_clear(research):
     return 0
 
 
+class Parser(argparse.ArgumentParser):
+    """A parser that takes whole flags only. A shortened flag is refused rather than guessed, and argparse's message
+    for an ambiguous one repeats its value, which the debug log would record. Subcommand parsers are made from the
+    parser's own class, so they refuse them too."""
+
+    def __init__(self, **kwargs):
+        super().__init__(allow_abbrev=False, **kwargs)
+
+
 def build_parser():
-    parser = argparse.ArgumentParser(description="Turn the plugin's debug log on or off, and read it.")
+    parser = Parser(description="Turn the plugin's debug log on or off, and read it.")
     parser.add_argument("--workspace", type=Path, default=Path("."), help="workspace root (default: here)")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("on", help="start recording events")
@@ -232,7 +304,7 @@ def main(argv=None):
     args = build_parser().parse_args(argv)
     research = args.workspace / RESEARCH
     if not research.is_dir():
-        print(f"error: research folder not found: {research}", file=sys.stderr)
+        print(f"error: research folder not found: '{research}'", file=sys.stderr)
         return 2
     if args.command == "show":
         return cmd_show(research, args.lines)

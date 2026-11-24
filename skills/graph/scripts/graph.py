@@ -134,7 +134,7 @@ class GraphError(Exception):
 def read_jsonl(path):
     records = []
     if not path.exists():
-        raise GraphError(f"missing file: {path}")
+        raise GraphError(f"missing file: '{path}'")
     for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
         if not line.strip():
             continue
@@ -809,7 +809,8 @@ def cmd_path(args):
     start, end = resolve(entities, args.start), resolve(entities, args.end)
     steps = shortest_path(relations, start["id"], end["id"])
     if steps is None:
-        print(f"no path between {start['name']} and {end['name']}", file=sys.stderr)
+        # In quotes, so the debug log leaves the names out: an insight's name is the user's own words.
+        print(f"no path between {start['name']!r} and {end['name']!r}", file=sys.stderr)
         return 1
     print(start["name"])
     for direction, relation, other in steps:
@@ -904,7 +905,7 @@ def file_lock(path, wait, busy_message):
 def locked(directory):
     """Let one graph command at a time read and change the files, across windows and processes."""
     path = directory / LOCK_FILE
-    busy = f"another graph command is still running ({path}). Try again shortly"
+    busy = f"another graph command is still running ('{path}'). Try again shortly"
     with file_lock(path, LOCK_WAIT, busy):
         recover(directory)
         yield
@@ -1282,7 +1283,7 @@ def read_citations(file):
     try:
         record = json.loads(Path(file).read_text(encoding="utf-8"))
     except (OSError, ValueError) as err:
-        raise GraphError(f"can't read {file}: {err}") from None
+        raise GraphError(f"can't read '{file}': {err}") from None
     if not isinstance(record, dict) or ("references" not in record and "citations" not in record):
         raise GraphError("expected the output of: s2.py paper ID --references --citations")
     return record
@@ -1343,7 +1344,7 @@ def read_batch(file):
     try:
         records = json.loads(Path(file).read_text(encoding="utf-8"))
     except (OSError, ValueError) as err:
-        raise GraphError(f"can't read {file}: {err}") from None
+        raise GraphError(f"can't read '{file}': {err}") from None
     records = [records] if isinstance(records, dict) else records
     if not isinstance(records, list) or not all(isinstance(record, dict) for record in records):
         raise GraphError("expected the output of: s2.py batch ID...")
@@ -1475,7 +1476,7 @@ def checked_output(path):
     in_temp = any(temp in target.parents for temp in temp_folders()) and (root is None or root not in target.parents)
     if not (in_research or (in_temp and savable_in_temp(target))) or steers_claude(target):
         raise GraphError(
-            f"{path}: write the file inside research/ or in a temporary folder outside the workspace "
+            f"'{path}': write the file inside research/ or in a temporary folder outside the workspace "
             f"(a .json or .txt file there), {REFUSED}"
         )
     return target
@@ -1493,13 +1494,22 @@ def cmd_standing_due(args):
     try:
         target.write_text("".join(f"{paper_id}\n" for paper_id in due), encoding="utf-8")
     except OSError as err:
-        raise GraphError(f"can't write {args.file}: {err}") from None
+        raise GraphError(f"can't write '{args.file}': {err}") from None
     print(f"{count(len(due), 'paper')} due" if due else "no papers due")
     return 0
 
 
+class Parser(argparse.ArgumentParser):
+    """A parser that takes whole flags only. A shortened flag is refused rather than guessed, and argparse's message
+    for an ambiguous one repeats its value, which the debug log would record. Subcommand parsers are made from the
+    parser's own class, so they refuse them too."""
+
+    def __init__(self, **kwargs):
+        super().__init__(allow_abbrev=False, **kwargs)
+
+
 def build_parser():
-    parser = argparse.ArgumentParser(description="Query and change the knowledge graph.")
+    parser = Parser(description="Query and change the knowledge graph.")
     parser.add_argument(
         "--data",
         type=Path,
@@ -1621,7 +1631,7 @@ def main(argv=None):
     debuglog.note(command=args.command)
     try:
         if not args.data.is_dir():
-            raise GraphError(f"graph folder not found: {args.data}")
+            raise GraphError(f"graph folder not found: '{args.data}'")
         with locked(args.data):
             return args.func(args)
     except GraphError as err:
