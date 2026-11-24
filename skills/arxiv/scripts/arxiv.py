@@ -369,7 +369,7 @@ def cmd_paper(args):
     params = {"id_list": ",".join(ids), "max_results": len(ids)}
     papers, _ = parse_feed(get(f"{API}?{urllib.parse.urlencode(params)}"))
     found = {p["id"]: p for p in papers} | {p["version"]: p for p in papers}
-    return [found.get(i) or {"requestedId": i, "error": "not found"} for i in ids]
+    return {"papers": [found.get(i) or {"requestedId": i, "error": "not found"} for i in ids]}
 
 
 # Characters that render as nothing but still reach a model: Unicode tag characters (used to smuggle

@@ -8,6 +8,10 @@ All notable changes to the plugin are listed here, newest first. The format foll
 
 ### Added
 
+- `s2.py match TITLE` finds the paper whose title best matches. `graph.py standing` lists the papers it got no
+  citation data for, and the recap skill looks each one up by title, since Semantic Scholar sometimes knows a paper
+  under another id, such as ReAct (`ARXIV:2210.03629`). A paper it finds gets its Semantic Scholar id and counts, and
+  its citation links at the next refresh. Without an API key, `match` reports a rate limit at once, like `search`.
 - `plugin.json` declares the hosts the plugin's scripts contact under `network.hosts`: `arxiv.org`,
   `export.arxiv.org`, and `api.semanticscholar.org`. `claude plugin validate` lists them. The field doesn't allow or
   block anything, and a test keeps it equal to the hosts the scripts use.
@@ -16,6 +20,8 @@ All notable changes to the plugin are listed here, newest first. The format foll
 
 ### Changed
 
+- `arxiv.py paper` and `s2.py batch` print `{"papers": [...]}`, like `arxiv.py search`, instead of a bare list.
+  `graph.py standing` reads that form. `s2.py paper` still prints its one record, with its citations and references.
 - A failed command's debug event now says why: its `reason` is the first line of the error message, with quoted
   values, entity ids, paths, and query strings left out, as they can hold search text or your own words. A wrong
   flag is now recorded too, with its exit code 2. The debug dashboard lists failures by reason,
@@ -23,9 +29,24 @@ All notable changes to the plugin are listed here, newest first. The format foll
   calls, tokens, and cost.
 - Error messages put the paths they name in quotes, so a path with spaces reads as one.
 - The scripts take whole flags only: a shortened flag such as `--no` for `--note` is refused instead of guessed.
+- `graph add` no longer holds a paper for a similar title when both papers have arXiv ids and they differ: an arXiv
+  id names one work, so they are different papers. The same name, a shared id, or a different DOI still holds or
+  refuses as before. An arXiv id is compared without its version, so `2401.12345v2` and `2401.12345` are refused
+  as the same id. A graph that already holds one arXiv paper twice, with and without a version, now fails `validate`,
+  and every graph command refuses it until the two entries are merged by hand in `research/graph/`: keep one entity,
+  point the other's relations and any `distinct_from` mark that names it at the kept one, and drop a mark between
+  the two. [Troubleshooting](docs/troubleshooting.md#the-knowledge-graph) has the steps.
+- `graph add`'s debug event records how many possible duplicates it found and how many `--distinct` it was given, and
+  the debug dashboard lists those adds under **Duplicate decisions by graph add**, so marking candidates in bulk
+  can be seen.
 
 ### Fixed
 
+- `graph.py standing` and `cites` no longer stop with a traceback on a record whose `externalIds` isn't an object, or
+  whose references or citations hold something other than papers, and a paper id or external id that isn't text is
+  skipped, so one such record can't cost every other record in the file its counts. `s2.py match` says
+  `unexpected response from the match endpoint` for an answer it can't read, and `match` with a blank title exits
+  with a usage error.
 - The debug log now reaches a local telemetry stack from a Claude Code session. Claude Code removes every `OTEL_`
   variable from the commands and hooks it runs, so the plugin reads its own `PAPER_RESEARCH_OTLP_ENDPOINT`, set in
   the `env` block of `~/.claude/settings.json`; `OTEL_EXPORTER_OTLP_ENDPOINT` still works for scripts run in a

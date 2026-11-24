@@ -70,11 +70,12 @@ Adding an entity is refused or held back when it matches an existing one of the 
 
 | Situation | Result |
 |---|---|
-| Same external id | Refused, pointing to the existing entity |
+| Same external id (an arXiv id without its version, so `2401.12345v2` is `2401.12345`) | Refused, pointing to the existing entity |
 | Same name, ignoring case and any space, dash, or underscore (`GPT-4` and `gpt 4`) | Refused |
 | Same name, but both have an external id of the same kind with different values | Held back for a decision, exit code 3 |
 | The new name is the other's alias, or the other way round | Held back |
 | A similar name | Held back |
+| A similar name, but two papers with different arXiv ids | Added: an arXiv id names one work, so they are different papers. A different DOI doesn't count, as a preprint and its published version often have one each |
 
 **Similar** means the two names share at least half of the shorter one's three-letter sequences, once accents, punctuation, and symbols are ignored. That one measure catches versions (`Terminal-Bench 2.0` and `2.1`), accents (`Jürgen` and `Jurgen`), initials (`J. Smith` and `John Smith`), reordered names (`Chang Ming-Wei`), and one name inside another (`MMLU` and `MMLU-Pro`). It also holds some names that are different, such as `C` and `C++`, which Claude then marks as distinct. If `add` holds too often or too rarely, the threshold is `SIMILARITY` in `graph.py`.
 

@@ -170,6 +170,8 @@ rule can't tell whether the section says what the link claims. The recap page's 
   not `GPT4`.
 - Within a type, no two entities share an external id of the same kind, from any of its
   [sources](#external-ids): two papers can clash through an `ARXIV:` alias or an arXiv-id slug with no `ids` at all.
+  Ids are compared without case or surrounding spaces, and an arXiv id without its version: `2401.12345v2` is
+  `2401.12345`.
 - `ids` uses only the kinds above. `distinct_from` names only other entities that exist. `url` is a web link.
 - Only papers have a `standing`, and it follows its table.
 - Every relation has all five fields, a known `rel` and `status`, a `source`, and existing entities at both ends,

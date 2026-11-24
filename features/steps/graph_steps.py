@@ -71,7 +71,21 @@ def graph_verified_relation(context, start, rel, end, source):
 @given('Semantic Scholar\'s batch output in "{name}" gives ARXIV:{number} {count:d} citations')
 def batch_output(context, name, number, count):
     record = {"requestedId": f"ARXIV:{number}", "paperId": "S2", "externalIds": {"ArXiv": number}}
-    (context.workspace / name).write_text(json.dumps([{**record, "citationCount": count}]), encoding="utf-8")
+    batch = {"papers": [{**record, "citationCount": count}]}
+    (context.workspace / name).write_text(json.dumps(batch), encoding="utf-8")
+
+
+@given('Semantic Scholar\'s batch output in "{name}" has no record of ARXIV:{number}')
+def batch_output_without_record(context, name, number):
+    batch = {"papers": [{"requestedId": f"ARXIV:{number}", "error": "not found"}]}
+    (context.workspace / name).write_text(json.dumps(batch), encoding="utf-8")
+
+
+@given('Semantic Scholar\'s title match in "{name}" is the paper {paper_id} with {count:d} citations')
+def title_match_output(context, name, paper_id, count):
+    # What s2.py match prints: no requestedId, as the title is all it was given.
+    match = {"papers": [{"paperId": paper_id, "title": "ReAct", "citationCount": count}]}
+    (context.workspace / name).write_text(json.dumps(match), encoding="utf-8")
 
 
 @then('the paper "{ident}" has {count:d} citations checked today')

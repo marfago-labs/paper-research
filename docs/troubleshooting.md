@@ -56,6 +56,14 @@ The message lists what's wrong, such as an unknown entity or a missing source. C
 **`graph`: `invalid graph:` followed by errors, on every command.**
 Something edited the graph files by hand and broke them. Read the listed errors and fix those lines, or restore the files from git. Don't delete `research/graph/`.
 
+**`graph`: `invalid graph:` with `arxiv id '...' is already used by paper:...`, on every command.**
+The graph holds one arXiv paper twice, such as `paper:2401.12345` and another paper whose `ids.arxiv` is `2401.12345v2`. An older version of the plugin didn't compare an arXiv id without its version, so it let both in. They are the same paper, so merge them by hand in `research/graph/`, or restore the files from git. Claude doesn't edit these files itself.
+
+1. In `entities.jsonl`, pick the entity to keep. Copy to it any `ids` and `aliases` the other has and it lacks, then delete the other's line.
+2. In `relations.jsonl`, point every relation of the deleted entity at the kept one. Then delete a relation between the two, which would now connect the kept entity to itself, and delete any relation that has the same start, relation, and end as another, keeping the one with the stronger status (`verified`, then `reported`, then `inferred`).
+3. In `entities.jsonl`, point every `distinct_from` that names the deleted entity at the kept one, and drop a mark between the two, since an entity can't be distinct from itself.
+4. Run `graph.py validate`. It must say `OK`. No new pair can be made: `add` refuses it.
+
 **`add` exits with 3 and says `possible duplicates`.**
 Not an error. The new entity looks like an existing one, and Claude decides whether to reuse the old one or confirm they're different. If it can't tell, it asks you. See [Knowledge graph](knowledge-graph.md#duplicates).
 

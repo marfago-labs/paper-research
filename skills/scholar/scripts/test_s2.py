@@ -11,6 +11,7 @@ import tempfile
 import unicodedata
 import unittest
 import urllib.error
+import urllib.parse
 from pathlib import Path
 from unittest import mock
 
@@ -127,6 +128,19 @@ class RequestBehaviour(unittest.TestCase):
                 s2.request("GET", "/x")
         self.assertEqual(opened.call_count, 1)
 
+    def test_only_not_found_is_reported_as_not_found(self):
+        for code, kind in (
+            (404, s2.NotFound),
+            (400, s2.ApiError),
+            (403, s2.ApiError),
+            (410, s2.ApiError),
+            (501, s2.ApiError),
+        ):
+            with mock.patch.object(s2.OPENER, "open", side_effect=[http_error(code)]):
+                with self.assertRaises(s2.ApiError) as caught:
+                    s2.request("GET", "/x")
+            self.assertIs(type(caught.exception), kind, code)
+
     def test_gives_up_after_max_attempts(self):
         errors = [http_error(503) for _ in range(s2.MAX_ATTEMPTS)]
         with mock.patch.object(s2.OPENER, "open", side_effect=errors) as opened:
@@ -214,7 +228,7 @@ class Links(unittest.TestCase):
                 {"recommendedPapers": [paper]},
                 lambda out: out["recommendedPapers"][0],
             ),
-            (["batch", "2401.00001"], [paper], lambda out: out[0]),
+            (["batch", "2401.00001"], [paper], lambda out: out["papers"][0]),
             (["paper", "2401.00001"], paper, lambda out: out),
         )
         for argv, answer, pick in cases:
@@ -244,7 +258,7 @@ class Links(unittest.TestCase):
     def test_papers_without_an_id_or_page_and_missing_papers_get_no_link(self):
         args = s2.build_parser().parse_args(["batch", "2401.00001", "2401.00002"])
         with mock.patch.object(s2, "request", return_value=[{"title": "A"}, None]):
-            result = args.func(args)
+            result = args.func(args)["papers"]
         self.assertNotIn("link", result[0])
         self.assertEqual(result[1], {"requestedId": "ARXIV:2401.00002", "error": "not found"})
         search = s2.build_parser().parse_args(["search", "agents"])
@@ -253,10 +267,111 @@ class Links(unittest.TestCase):
 
 
 class Commands(unittest.TestCase):
+    def test_match_refuses_an_answer_that_is_not_an_object_with_a_list_of_papers(self):
+        args = s2.build_parser().parse_args(["match", "ReAct"])
+        answers = {
+            "a list": [],
+            "a string": "oops",
+            "null": None,
+            "a number": 7,
+            "data is an object": {"data": {"paperId": "1"}},
+            "data is a string": {"data": "abc"},
+            "data is a number": {"data": 5},
+            "data holds a string": {"data": ["x"]},
+            "data holds null": {"data": [None]},
+            "data holds a list": {"data": [[{"paperId": "1"}]]},
+        }
+        for label, answer in answers.items():
+            with self.subTest(label), mock.patch.object(s2, "request", return_value=answer):
+                with self.assertRaisesRegex(s2.ApiError, "unexpected response from the match endpoint"):
+                    args.func(args)
+
+    def test_match_keeps_the_first_paper_and_takes_no_data_as_no_match(self):
+        args = s2.build_parser().parse_args(["match", "ReAct"])
+        first = {"paperId": "1", "title": "ReAct", "url": "https://www.semanticscholar.org/paper/1"}
+        with mock.patch.object(s2, "request", return_value={"data": [first, "junk", None, {"paperId": "2"}]}):
+            self.assertEqual(args.func(args), {"papers": [{**first, "link": first["url"]}]})  # only the first is read
+        for answer in ({"data": None}, {"data": []}, {"data": ""}, {}):
+            with self.subTest(answer), mock.patch.object(s2, "request", return_value=answer):
+                self.assertEqual(args.func(args), {"papers": []})
+
+    def test_a_hostile_title_stays_inside_the_query_it_is_sent_in(self):
+        titles = (
+            "x&fields=authors.name&limit=1000",  # more parameters
+            'A & B # "C"\nD\r\n',  # characters a URL gives meaning to, and line breaks
+            "100% done?q=1;limit=2",
+            "t​i\U000e0041tle é中文",  # invisible, accented, and CJK characters
+            "x" * 5000,  # very long
+        )
+        for title in titles:
+            with self.subTest(title=title[:30]):
+                params = {"query": title, "fields": s2.PAPER_FIELDS}
+                url = s2.build_request("GET", f"{s2.GRAPH}/paper/search/match", params, None).full_url
+                sent = urllib.parse.parse_qs(urllib.parse.urlsplit(url).query, keep_blank_values=True)
+                self.assertEqual(sent, {"query": [title], "fields": [s2.PAPER_FIELDS]})
+                self.assertNotIn("\n", url)
+                self.assertNotIn(" ", url)
+
+    def test_match_gives_the_best_title_match_with_its_link(self):
+        args = s2.build_parser().parse_args(["match", "ReAct: Synergizing Reasoning and Acting"])
+        paper = {
+            "paperId": "99",
+            "title": "ReAct",
+            "url": "https://www.semanticscholar.org/paper/99",
+            "matchScore": 1.5,
+        }
+        found = {"data": [paper, {"paperId": "98"}]}
+        with mock.patch.object(s2, "request", return_value=found) as sent:
+            result = args.func(args)
+        method, route, params = sent.call_args.args
+        self.assertEqual((method, route), ("GET", "/graph/v1/paper/search/match"))
+        self.assertEqual(params, {"query": "ReAct: Synergizing Reasoning and Acting", "fields": s2.PAPER_FIELDS})
+        self.assertEqual(result, {"papers": [{**paper, "link": paper["url"]}]})
+
+    def test_match_retries_a_rate_limit_only_with_an_api_key_and_says_so_in_its_own_words(self):
+        match = s2.build_parser().parse_args(["match", "ReAct"])
+        for key, retried in (("", False), ("secret", True)):
+            with mock.patch.dict(os.environ, {"SEMANTIC_SCHOLAR_API_KEY": key}):
+                with mock.patch.object(s2, "request", return_value={}) as sent:
+                    match.func(match)
+            self.assertIs(sent.call_args.kwargs["retry_rate_limit"], retried, key)
+            self.assertEqual(sent.call_args.kwargs["advice"], s2.NO_KEY_MATCH)
+        with mock.patch.dict(os.environ, {}, clear=True):
+            # Without a key, one 429 is the answer: no second request, and no advice about arXiv search.
+            with mock.patch.object(s2.OPENER, "open", side_effect=[http_error(429), fake_response({})]) as opened:
+                with mock.patch.object(s2, "pace"):
+                    with self.assertRaises(s2.ApiError) as caught:
+                        match.func(match)
+        self.assertEqual(opened.call_count, 1)
+        self.assertIn(s2.NO_KEY_MATCH, str(caught.exception))
+        self.assertNotIn("arxiv", str(caught.exception))
+        with mock.patch.dict(os.environ, {"SEMANTIC_SCHOLAR_API_KEY": "secret"}):
+            # With a key, a 429 is retried as for every other command.
+            with mock.patch.object(s2.OPENER, "open", side_effect=[http_error(429), fake_response({"data": []})]):
+                with mock.patch.object(s2.time, "sleep"), mock.patch.object(s2, "pace"):
+                    self.assertEqual(match.func(match), {"papers": []})
+
+    def test_a_rate_limit_that_is_not_retried_says_what_the_caller_asks(self):
+        with mock.patch.object(s2.OPENER, "open", side_effect=[http_error(429)]):
+            with self.assertRaisesRegex(s2.ApiError, "HTTP 429 from /x: custom advice"):
+                s2.request("GET", "/x", retry_rate_limit=False, advice="custom advice")
+        with mock.patch.object(s2.OPENER, "open", side_effect=[http_error(429)]):
+            with self.assertRaisesRegex(s2.ApiError, "use the arxiv skill's search instead"):
+                s2.request("GET", "/x", retry_rate_limit=False)  # the default advice is still search's
+
+    def test_match_with_no_close_title_finds_nothing(self):
+        args = s2.build_parser().parse_args(["match", "No such paper"])
+        for answer in (s2.NotFound("HTTP 404 from /x: Title match not found"), {"data": []}, {}):
+            with mock.patch.object(s2, "request", side_effect=[answer]):
+                self.assertEqual(args.func(args), {"papers": []}, answer)
+        with mock.patch.object(s2, "request", side_effect=s2.ApiError("HTTP 400 from /x: bad")):
+            with self.assertRaises(s2.ApiError):
+                args.func(args)
+
     def test_batch_keeps_requested_id_and_marks_missing(self):
         args = s2.build_parser().parse_args(["batch", "2303.11366", "2210.03629"])
         with mock.patch.object(s2, "request", return_value=[{"title": "A"}, None]):
-            result = args.func(args)
+            result = args.func(args)["papers"]
         self.assertEqual(result[0], {"requestedId": "ARXIV:2303.11366", "title": "A"})
         self.assertEqual(result[1], {"requestedId": "ARXIV:2210.03629", "error": "not found"})
 
@@ -364,7 +479,7 @@ class Commands(unittest.TestCase):
     def test_batch_takes_exactly_500_ids_on_the_command_line(self):
         args = s2.build_parser().parse_args(["batch", *[f"2401.{n:05d}" for n in range(1, 501)]])
         with mock.patch.object(s2, "request", return_value=[None] * 500) as sent:
-            self.assertEqual(len(args.func(args)), 500)
+            self.assertEqual(len(args.func(args)["papers"]), 500)
         self.assertEqual(sent.call_count, 1)
 
     def test_the_documented_defaults(self):
@@ -407,7 +522,7 @@ class Commands(unittest.TestCase):
                 return [None if requested == "ARXIV:2303.11366" else {} for requested in body["ids"]]
 
             with mock.patch.object(s2, "request", side_effect=answer) as sent:
-                result = args.func(args)
+                result = args.func(args)["papers"]
         sizes = [len(call.args[3]["ids"]) for call in sent.call_args_list]
         self.assertEqual(sizes, [500, 500, 202])
         self.assertEqual([paper["requestedId"] for paper in result], ["ARXIV:2303.11366", *ids])
@@ -445,7 +560,7 @@ class Commands(unittest.TestCase):
             with mock.patch.object(s2, "request", side_effect=failures):
                 with self.assertRaisesRegex(s2.PartialBatch, "500 of 501 papers") as caught:
                     args.func(args)
-            self.assertEqual(len(caught.exception.results), 500)
+            self.assertEqual(len(caught.exception.results["papers"]), 500)
             with mock.patch.object(s2, "request", side_effect=failures[1]):
                 with self.assertRaises(s2.ApiError) as first:
                     args.func(args)
@@ -736,6 +851,7 @@ class CommandLine(unittest.TestCase):
                 {"recommendedPapers": [{"paperId": "a", **dirty}]},
             ),
             "authors": (["authors", "1"], [{"authorId": "1", "name": "An\u2060n\U000e0042"}]),
+            "match": (["match", "ReAct"], {"data": [{"paperId": "a", **dirty}]}),
             "batch": (["batch", "ARXIV:2401.00001"], [{"paperId": "a", **dirty}]),
             "batch with references": (
                 ["batch", "ARXIV:2401.00001", "--with-references"],
@@ -749,6 +865,20 @@ class CommandLine(unittest.TestCase):
             self.assertEqual(hidden_characters(out), [], name)
             self.assertIn("invisible character(s) from the text.", err, name)
             self.assertIn("tag characters or variation selectors", err, name)
+
+    def test_a_malformed_match_answer_is_an_error_line_not_a_crash(self):
+        for answer in ([], "oops", None, {"data": {"paperId": "1"}}, {"data": ["x"]}):
+            with self.subTest(answer), mock.patch.object(s2, "request", return_value=answer):
+                code, out, err = self.run_main(["match", "ReAct"])
+            self.assertEqual((code, out), (1, ""))
+            self.assertEqual(err, "error: unexpected response from the match endpoint\n")
+
+    def test_match_needs_a_title(self):
+        for title in ("", "   ", "\t\n"):
+            with self.subTest(repr(title)), mock.patch.object(s2, "request") as sent:
+                code, out, err = self.run_main(["match", title])
+            self.assertEqual((code, out, err), (2, "", "error: give the title to look up\n"))
+            sent.assert_not_called()
 
     def test_paper_cleans_its_citations_and_references_too(self):
         dirty = {"paperId": "b", "title": "T\u200bitle", "abstract": "A\U000e0041"}
@@ -774,7 +904,7 @@ class CommandLine(unittest.TestCase):
             with mock.patch.object(s2, "request", side_effect=[first, s2.ApiError("HTTP 503")]):
                 code, out, err = self.run_main(["batch", "--ids-file", str(path)])
         self.assertEqual(code, 1)
-        self.assertEqual(len(json.loads(out)), 500)
+        self.assertEqual(len(json.loads(out)["papers"]), 500)
         self.assertEqual(hidden_characters(out), [])
         self.assertIn("500 of 501 papers", err)
         self.assertIn("note: removed 500 invisible character(s)", err)
@@ -817,7 +947,7 @@ class CommandLine(unittest.TestCase):
         with mock.patch.object(s2, "request", return_value=papers):
             code, out, err = self.run_main(["batch", "ARXIV:2401.00001", "ARXIV:2401.00002", "ARXIV:2401.00003"])
         self.assertEqual(code, 0)
-        results = json.loads(out)
+        results = json.loads(out)["papers"]
         self.assertEqual([p.get("title") for p in results], ["One", None, "Two"])
         self.assertEqual(results[1]["error"], "not found")
         self.assertIn("note: removed 2 invisible character(s)", err)
@@ -850,7 +980,7 @@ class CommandLine(unittest.TestCase):
             with mock.patch.object(s2, "request", side_effect=[[{}] * 500, s2.ApiError("HTTP 503")]):
                 code, out, err = self.run_main(["batch", "--ids-file", str(path)])
         self.assertEqual(code, 1)
-        self.assertEqual(len(json.loads(out)), 500)
+        self.assertEqual(len(json.loads(out)["papers"]), 500)
         self.assertIn("500 of 501 papers", err)
 
     def test_a_keyless_search_that_is_refused_says_what_to_use_instead(self):
@@ -880,7 +1010,7 @@ class CommandLine(unittest.TestCase):
             ids.write_text("\n".join(f"ARXIV:2401.{n:05d}" for n in range(1, 502)), encoding="utf-8")
             with mock.patch.object(s2, "request", side_effect=[[{}] * 500, s2.ApiError("HTTP 503")]):
                 code, out, err = self.run_main(["batch", "--ids-file", str(ids), "--out", str(path)])
-            saved = json.loads(path.read_text(encoding="utf-8"))
+            saved = json.loads(path.read_text(encoding="utf-8"))["papers"]
         self.assertEqual((code, out), (1, f"{path}\n"))
         self.assertEqual(len(saved), 500)
         self.assertIn("500 of 501 papers", err)
@@ -1095,7 +1225,7 @@ class CommandLine(unittest.TestCase):
             code, out, _ = self.run_main(["batch", *[f"2401.{n:05d}" for n in range(1, 501)], "--with-references"])
         self.assertEqual(code, 1)
         fetched = [{"requestedId": f"ARXIV:2401.{n:05d}", "title": "τ²"} for n in range(1, 101)]
-        self.assertEqual(out, json.dumps(fetched, ensure_ascii=False, indent=2) + "\n")
+        self.assertEqual(out, json.dumps({"papers": fetched}, ensure_ascii=False, indent=2) + "\n")
 
     def test_invalid_input_exits_2(self):
         code, _, err = self.run_main(["paper", "a b"])
@@ -1217,7 +1347,7 @@ class Flags(unittest.TestCase):
             for action in parser._actions:
                 if isinstance(action, argparse._SubParsersAction):
                     parsers.extend(action.choices.values())
-        self.assertEqual(len(parsers), 6)
+        self.assertEqual(len(parsers), 7)
 
 
 if __name__ == "__main__":

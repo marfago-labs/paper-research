@@ -456,6 +456,77 @@ class Matching(unittest.TestCase):
         pair[1]["distinct_from"] = []  # validation needs the mark, dupes doesn't look at an empty one
         self.assertEqual([reasons for _, _, reasons in graph.dupes(pair)], [["same name", "but a different s2 id"]])
 
+    def test_papers_with_different_arxiv_ids_are_not_held_for_a_similar_name(self):
+        survey = entity("paper:2411.00001", "A Survey on Query Planning")
+        judging = entity("paper:x", "Judging Query Planning", ids={"arxiv": "2306.00002"})
+        self.assertEqual(graph.judged(survey, judging), ([], False))
+        self.assertEqual(graph.dupes([survey, judging]), [])
+        # Still held: one arXiv id is missing, only the DOIs differ, or not papers.
+        held = (
+            (survey, entity("paper:y", "Judging Query Planning")),
+            (
+                entity("paper:a", "Judging Query Planning", ids={"doi": "10.1/a"}),
+                entity("paper:b", "Judging Query Plannings", ids={"doi": "10.1/b"}),
+            ),
+            (
+                entity("tool:a", "Judge Kit", ids={"arxiv": "2411.00001"}),
+                entity("tool:b", "Judge Kits", ids={"arxiv": "2306.00002"}),
+            ),
+        )
+        for a, b in held:
+            with self.subTest(a=a["name"], b=b["name"]):
+                reasons, strong = graph.judged(a, b)
+                self.assertTrue(reasons, (a, b))
+                self.assertFalse(strong)
+        # The same name still holds, as the graph allows two papers one name only when marked distinct.
+        same = entity("paper:x", "A Survey on Query Planning", ids={"arxiv": "2306.00002"})
+        self.assertEqual(
+            graph.judged({**survey, "ids": {"arxiv": "2411.00001"}}, same),
+            (["same name", "but a different arxiv id"], False),
+        )
+        # So does a name that is the other's alias.
+        alias = entity("paper:x", "Query Planners", aliases=["A Survey on Query Planning"], ids={"arxiv": "2306.00002"})
+        self.assertEqual(
+            graph.judged({**survey, "ids": {"arxiv": "2411.00001"}}, alias),
+            (["same name as an alias", "but a different arxiv id"], False),
+        )
+        # The same arXiv id with and without a version is one work, so it is refused as the same id.
+        for versioned in (
+            entity("paper:y", "Survey on Query Planning (v2)", ids={"arxiv": "2411.00001v2"}),
+            entity("paper:y", "Survey on Query Planning (v2)", aliases=["ARXIV:2411.00001V3"]),
+        ):
+            with self.subTest(versioned=versioned):
+                reasons, strong = graph.judged(survey, versioned)
+                self.assertEqual((reasons[0], strong), ("same id (arxiv)", True))
+        # A shared id still refuses, even beside different arXiv ids.
+        shared = entity("paper:2306.00002", "A Survey of Query Planning", ids={"doi": "10.1/s"})
+        reasons, strong = graph.judged({**survey, "ids": {"doi": "10.1/s"}}, shared)
+        self.assertEqual((reasons[0], strong), ("same id (doi)", True))
+
+    def test_arxiv_ids_come_from_every_source_without_a_version(self):
+        paper = entity("paper:2401.00001", "P", aliases=["ARXIV:2402.00002v3"], ids={"arxiv": "2403.00003v1"})
+        self.assertEqual(graph.arxiv_ids(paper), {"2401.00001", "2402.00002", "2403.00003"})
+        self.assertEqual(graph.arxiv_ids(entity("paper:x", "P", ids={"doi": "10.1/v2"})), set())
+        # Only an arXiv id loses its version; a kind that sorts before arxiv keeps it.
+        self.assertEqual(graph.arxiv_ids(entity("paper:x", "P", ids={"acl": "2401.00001v2"})), set())
+        self.assertEqual(graph.id_key(" 2401.00001V2 ", "arxiv"), "2401.00001")
+        for kind in ("", "acl", "doi", "s2"):
+            self.assertEqual(graph.id_key("10.1/V2", kind), "10.1/v2", kind)
+
+    def test_validate_reports_one_arxiv_paper_held_with_and_without_a_version(self):
+        twice = [entity("paper:2401.12345", "P"), entity("paper:x", "P again", ids={"arxiv": "2401.12345v2"})]
+        errors = graph.validate(twice, [])
+        self.assertEqual(len(errors), 1)
+        self.assertIn("arxiv", errors[0])
+
+    def test_semantic_scholar_records_are_keyed_as_graph_ids_are(self):
+        record = {"paperId": " AbC ", "externalIds": {"ArXiv": " 2401.00001V2 ", "DOI": " 10.1/X "}}
+        keys = {("s2", "abc"), ("arxiv", "2401.00001"), ("doi", "10.1/x")}
+        self.assertEqual(graph.s2_keys(record), keys)
+        # So a record with a versioned arXiv id finds the paper the graph holds without it.
+        paper = entity("paper:2401.00001", "P")
+        self.assertEqual(graph.find_paper({key: paper for key in graph.external_keys(paper)}, record), paper)
+
     def test_identifiers(self):
         paper = entity("paper:2401.00001", "P", aliases=["ARXIV:2401.00001", "DOI:10.1/X", "Short"], ids={"s2": "AbC"})
         self.assertEqual(graph.labels(paper), ["P", "Short"])
@@ -1055,6 +1126,85 @@ class Citations(CommandLineBase):
         self.assertNotIn("standing", out)
         self.assertNotIn("standing", self.papers()["paper:2401.00002"])
 
+    def test_a_record_that_is_not_what_semantic_scholar_sends_never_crashes_standing(self):
+        # The file can come from anywhere, and a server's answer can hold anything: nothing may raise.
+        asked = {"requestedId": "ARXIV:2401.00001"}
+        junk = ["x", None, 3, [], {"paperId": ["a"], "externalIds": "z"}, {"externalIds": {"ArXiv": ["2401.00002"]}}]
+        cases = {
+            "the requested id is a number": ({"requestedId": 123, "citationCount": 5}, "unmatched"),
+            "the requested id is a list": ({"requestedId": ["a"], "citationCount": 5}, "unmatched"),
+            "the requested id is an object": ({"requestedId": {"a": 1}}, "unmatched"),
+            "the paper id is a list": ({"paperId": ["x"], "citationCount": 1}, "unmatched"),
+            "the paper id is an object": ({"paperId": {"x": 1}}, "unmatched"),
+            "the paper id is a number": ({"paperId": 7, "citationCount": 1}, "unmatched"),
+            "the external ids are text": ({"externalIds": "x", "citationCount": 1}, "unmatched"),
+            "the external ids are a list": ({"externalIds": ["ArXiv"], "citationCount": 1}, "unmatched"),
+            "an arXiv id is a list": ({"externalIds": {"ArXiv": ["2401.00001"]}, "citationCount": 1}, "unmatched"),
+            "an arXiv id is a number": ({"externalIds": {"ArXiv": 2401}, "citationCount": 1}, "unmatched"),
+            "bad external ids, but the id asked for": ({**asked, "externalIds": "x", "citationCount": 1}, "updated"),
+            "references are text": ({**asked, "references": "x", "citationCount": 1}, "updated"),
+            "references hold junk": ({**asked, "references": junk, "citationCount": 1}, "updated"),
+            "a huge count": ({**asked, "citationCount": 10**30}, "updated"),
+            "a count that is a float": ({**asked, "citationCount": 1.5}, "no counts"),
+            "a venue that is a list": ({**asked, "citationCount": 1, "venue": ["x"]}, "updated"),
+        }
+        for label, (record, outcome) in cases.items():
+            with self.subTest(label):
+                paper = entity("paper:2401.00001", "P")
+                results, _ = graph.apply_standing([paper], [], [record])
+                self.assertEqual(results[outcome], 1, results)
+                self.assertEqual(sum(results[kind] for kind in ("updated", "no counts", "unmatched")), 1, results)
+        self.assertEqual(graph.s2_keys({"paperId": "A", "externalIds": "x"}), {("s2", "a")})
+        for not_a_record in ("x", None, [], 5, ["ArXiv"]):
+            self.assertEqual(graph.s2_keys(not_a_record), set(), not_a_record)
+
+    def test_an_id_is_a_key_only_when_it_is_text_with_something_in_it(self):
+        for bad in (123, 0, True, 1.5, ["a"], {"a": 1}, "", "   ", "\t\n", None):
+            with self.subTest(bad=bad):
+                self.assertFalse(graph.is_text(bad))
+                record = {"paperId": bad, "externalIds": {"ArXiv": bad, "DOI": bad}}
+                self.assertEqual(graph.s2_keys(record), set())
+        for good in ("A", " a ", "10.1/x", "中文"):
+            self.assertTrue(graph.is_text(good), good)
+        record = {"paperId": " AbC ", "externalIds": {"ArXiv": " 2401.00001V2 ", "DOI": " 10.1/X ", "Other": "y"}}
+        self.assertEqual(graph.s2_keys(record), {("s2", "abc"), ("arxiv", "2401.00001"), ("doi", "10.1/x")})
+
+    def test_an_id_that_is_not_text_costs_no_other_record_its_counts(self):
+        # Adopting such an id would make the save refuse the whole file, so no paper in it would get its counts.
+        for bad in (123, 0, True, 1.5, ["a"], {"a": 1}, "", "   ", "\t\n", None):
+            with self.subTest(paper_id=bad):
+                self.write([entity("paper:2401.00001", "Main"), entity("paper:2401.00002", "Cited")], [])
+                batch = {
+                    "papers": [
+                        {"requestedId": "ARXIV:2401.00001", "paperId": bad, "citationCount": 5},
+                        {"requestedId": "ARXIV:2401.00002", "paperId": "GOOD", "citationCount": 9},
+                    ]
+                }
+                with mock.patch.object(graph, "today", return_value="2026-11-11"):
+                    code, out, err = self.run_main("standing", self.record(batch))
+                self.assertEqual((code, err), (0, ""))
+                self.assertIn("2 papers updated", out)
+                papers = self.papers()
+                self.assertEqual(papers["paper:2401.00001"]["standing"]["citations"], 5)  # found by the id asked for
+                self.assertNotIn("ids", papers["paper:2401.00001"])  # but the bad id was not adopted
+                self.assertEqual(papers["paper:2401.00002"]["ids"], {"s2": "GOOD"})
+                self.assertEqual(graph.validate(*graph.load(self.folder)), [])
+
+    def test_cites_does_not_adopt_an_id_that_is_not_text_either(self):
+        for bad in (123, ["a"], True, "   "):
+            with self.subTest(paper_id=bad):
+                code, out, _ = self.run_main("cites", "Main", self.record({"paperId": bad, "references": []}))
+                self.assertEqual(code, 0)
+                self.assertNotIn("ids", self.papers()["paper:2401.00001"])
+
+    def test_cites_survives_references_and_citations_that_are_not_lists_of_papers(self):
+        for references in (5, "x", {"a": 1}, True, [None, "x", 3, [], {"paperId": ["a"], "externalIds": "z"}]):
+            with self.subTest(references=references):
+                code, out, _ = self.run_main("cites", "Main", self.record({"references": references, "citations": 5}))
+                self.assertEqual(code, 0)
+                self.assertIn("0 citation links added", out)
+        self.assertEqual(graph.read_jsonl(self.folder / "relations.jsonl"), [])
+
     def test_standing_updates_every_matched_paper_from_a_batch(self):
         batch = [
             {"requestedId": "ARXIV:2401.00002", "paperId": "C2", "externalIds": {"ArXiv": "2401.00002"},
@@ -1064,10 +1214,12 @@ class Citations(CommandLineBase):
             {"paperId": "known", "citationCount": "many"},
         ]  # fmt: skip
         with mock.patch.object(graph, "today", return_value="2026-11-11"):
-            code, out, _ = self.run_main("standing", self.record(batch))
+            code, out, _ = self.run_main("standing", self.record({"papers": batch}))
         self.assertEqual(code, 0)
         self.assertEqual(
-            out.strip(), "2 papers updated, 1 without citation data, 1 record matched no paper in the graph"
+            out,
+            "2 papers updated, 1 without citation data, 1 record matched no paper in the graph\n"
+            "without citation data:\n  paper:y  Known\n",
         )
         papers = self.papers()
         cited, known = papers["paper:2401.00002"], papers["paper:y"]
@@ -1077,7 +1229,7 @@ class Citations(CommandLineBase):
         code, out, _ = self.run_main("standing", self.record({"paperId": "known", "citationCount": 1}))
         self.assertEqual((code, out.strip()), (0, "1 paper updated, 0 records matched no paper in the graph"))
         self.assertEqual(self.papers()["paper:y"]["standing"]["citations"], 1)
-        for bad in ([1], "text"):
+        for bad in ([{"paperId": "known"}], {"papers": [1]}, {"papers": "x"}, "text"):
             code, _, err = self.run_main("standing", self.record(bad))
             self.assertEqual(code, 1)
             self.assertIn("expected the output of: s2.py batch", err)
@@ -1172,7 +1324,7 @@ class Citations(CommandLineBase):
             {"requestedId": "ARXIV:2499.00001", "error": "not found"},
         ]
         with mock.patch.object(graph, "today", return_value="2026-11-11"):
-            code, out, _ = self.run_main("standing", self.record(batch))
+            code, out, _ = self.run_main("standing", self.record({"papers": batch}))
         self.assertEqual(code, 0)
         self.assertEqual(
             out.strip(), "2 papers updated, 2 citation links added, 1 record matched no paper in the graph"
@@ -1186,7 +1338,7 @@ class Citations(CommandLineBase):
             ],
         )
         self.assertEqual(self.papers()["paper:2401.00001"]["standing"]["citations"], 4)
-        code, out, _ = self.run_main("standing", self.record(batch))
+        code, out, _ = self.run_main("standing", self.record({"papers": batch}))
         self.assertEqual(code, 0)
         self.assertIn("0 citation links added", out)
 
@@ -1198,11 +1350,13 @@ class Citations(CommandLineBase):
                 "references": [{"paperId": "r1", "externalIds": {"ArXiv": "2401.00002"}}],
             }
         ]
-        code, out, _ = self.run_main("standing", self.record(batch))
+        code, out, _ = self.run_main("standing", self.record({"papers": batch}))
         self.assertEqual(code, 0)
         self.assertEqual(
-            out.strip(),
-            "0 papers updated, 1 without citation data, 1 citation link added, 0 records matched no paper in the graph",
+            out,
+            "0 papers updated, 1 without citation data, 1 citation link added, "
+            "0 records matched no paper in the graph\n"
+            "without citation data:\n  paper:2401.00001  Main\n",
         )
         self.assertEqual(len(graph.read_jsonl(self.folder / "relations.jsonl")), 1)
 
@@ -1225,10 +1379,13 @@ class Citations(CommandLineBase):
             {"requestedId": "ARXIV:2499.00001", "error": "not found"},
         ]
         with mock.patch.object(graph, "today", return_value="2026-11-11"):
-            code, out, _ = self.run_main("standing", self.record(batch))
+            code, out, _ = self.run_main("standing", self.record({"papers": batch}))
         self.assertEqual(code, 0)
         self.assertEqual(
-            out.strip(), "1 paper updated, 3 without citation data, 1 record matched no paper in the graph"
+            out,
+            "1 paper updated, 3 without citation data, 1 record matched no paper in the graph\n"
+            "without citation data:\n  paper:2401.00001  New arXiv paper\n  paper:y  Known before\n"
+            "  paper:x  No count\n",
         )
         papers = self.papers()
         self.assertEqual(papers["paper:2401.00001"]["standing"], {"checked": "2026-11-11"})
@@ -1559,11 +1716,11 @@ class CommandEdges(CommandLineBase):
             {"requestedId": f"ARXIV:2401.0000{n}", "paperId": f"s{n}", "citationCount": 1, "references": []}
             for n in (1, 2)
         ] + [{"requestedId": "ARXIV:2401.00003", "paperId": "s3", "citationCount": 1}]
-        results = graph.apply_standing(papers, [], records)
+        results, _ = graph.apply_standing(papers, [], records)
         self.assertEqual((results["with references"], results["updated"], results["links"]), (2, 3, 0))
         records = [{"requestedId": "ARXIV:2401.00001", "paperId": "s1", "citationCount": 1, "references": []}]
         self.write(papers, [])
-        (self.folder / "batch.json").write_text(json.dumps(records), encoding="utf-8")
+        (self.folder / "batch.json").write_text(json.dumps({"papers": records}), encoding="utf-8")
         out = self.run_main("standing", str(self.folder / "batch.json"))[1]
         self.assertIn("0 citation links added", out)
 
@@ -1892,6 +2049,43 @@ class FirstLink(CommandLineBase):
         self.assertIn(
             relation("model:model-m", "uses", "tool:b", source="Paper A", status="inferred"), self.relations()
         )
+
+    def test_a_paper_with_another_arxiv_id_is_added_beside_a_similar_title(self):
+        self.write([*ENTITIES, entity("paper:2411.00001", "A Survey on Query Planning")], RELATIONS)
+        add = ("add", "--type", "paper", "--name", "Judging Query Planning")
+        self.assertEqual(self.run_main(*add)[0], 3)  # no arXiv id: still held
+        code, out, _ = self.run_main(*add, "--slug", "2306.00002")
+        self.assertEqual((code, out), (0, "added paper:2306.00002\n"))
+        self.assertEqual(self.run_main("dupes")[1], "no likely duplicates\n")
+
+    def files(self):
+        return [(self.folder / name).read_bytes() for name in ("entities.jsonl", "relations.jsonl")]
+
+    def test_a_graph_that_holds_one_arxiv_paper_twice_is_refused_by_every_command_and_left_alone(self):
+        # Written by an older version, which didn't compare an arXiv id without its version.
+        pair = [entity("paper:2401.12345", "Sparse Retrieval Study"), entity("paper:x", "Dense Index")]
+        pair[1]["ids"] = {"arxiv": "2401.12345v2"}
+        self.write(pair, [])
+        before = self.files()
+        for argv in (("stats",), ("validate",), ("merge", "paper:x", "paper:2401.12345"), ("remove", "paper:x")):
+            with self.subTest(command=argv[0]):
+                code, _, err = self.run_main(*argv)
+                self.assertEqual(code, 1)
+                self.assertIn("invalid graph", err)
+                self.assertIn("arxiv id '2401.12345' is already used by paper:2401.12345", err)
+        self.assertEqual(self.files(), before)
+
+    def test_the_pair_cant_be_made_by_add_even_with_distinct(self):
+        self.write([entity("paper:2401.12345", "Sparse Retrieval Study")], [])
+        before = self.files()
+        add = ("add", "--type", "paper", "--name", "Dense Index", "--id", "arxiv=2401.12345v2", "--no-authors", "t")
+        code, _, err = self.run_main(*add)
+        self.assertEqual((code, "already in the graph" in err), (1, True))  # refused for the id, not just the name
+        code, _, err = self.run_main(*add, "--distinct", "paper:2401.12345")
+        self.assertEqual(code, 1)  # a --distinct mark skips the check of ids, so only validation stops it
+        self.assertIn("change refused, the graph would be invalid", err)
+        self.assertIn("arxiv id '2401.12345' is already used by paper:2401.12345", err)
+        self.assertEqual(self.files(), before)
 
     def test_only_a_paper_may_be_added_with_no_link(self):
         code, out, _ = self.run_main("add", "--type", "paper", "--name", "Quantum Study")
@@ -2381,6 +2575,16 @@ class DebugEvents(CommandLineBase):
                 self.assertEqual((event["exit"], event["reason"]), (2, "error: unrecognized arguments: …"))
                 self.assertNotIn("private", json.dumps(event))
         self.assertEqual(len(self.events()), 2)
+
+    def test_add_records_how_many_candidates_it_held_and_how_many_were_marked_distinct(self):
+        self.write([*ENTITIES, entity("author:z", "Ann Lee"), entity("author:y", "Ann Lea")], RELATIONS)
+        add = ("--data", str(self.folder), "add", "--type", "author", "--name", "Ann Lee Jr")
+        link = ("--link-from", "paper:a", "authored-by", "--source", "Semantic Scholar", "--status", "verified")
+        self.assertEqual(self.run_script(*add, *link), 3)
+        self.assertEqual(self.run_script(*add, *link, "--distinct", "author:z", "--distinct", "author:y"), 0)
+        held, added = self.events()
+        self.assertEqual((held["exit"], held["candidates"], held["distinct"]), (3, 2, 0))
+        self.assertEqual((added["exit"], added["candidates"], added["distinct"]), (0, 0, 2))
 
     def test_a_missing_graph_folder_stays_out_of_the_reason(self):
         self.assertEqual(self.run_script("--data", "my notes", "stats"), 1)

@@ -264,6 +264,18 @@ class Commands(unittest.TestCase):
                 run = {"event_name": "command", "source": source, "exit": code}
                 self.assertEqual((keeps(failed, run), keeps(asked, run)), expected)
 
+    def test_duplicate_decisions_list_the_adds_that_held_or_were_given_distinct(self):
+        panel = by_title(load("paper-research-debug.json"), "Duplicate decisions by graph add", "logs")
+        expr = panel["targets"][0]["expr"]
+        self.assertIn('source="graph" | command="add"', expr)
+        counts = re.compile(r"[1-9][0-9]*")
+        self.assertEqual(pattern_after(expr, "candidates").pattern, counts.pattern)
+        self.assertEqual(pattern_after(expr, "distinct").pattern, counts.pattern)
+        # Counts of 0 and a missing count (an add from before the counts) are left out; any other count is kept.
+        for value, kept in (("0", False), ("", False), ("1", True), ("13", True), ("10", True)):
+            with self.subTest(value=value):
+                self.assertEqual(bool(counts.fullmatch(value)), kept)
+
     def test_failures_are_listed_with_their_reason(self):
         panel = by_title(load("paper-research-debug.json"), "Failures by reason", "table")
         self.assertIn("sum by (source, command, exit, reason, error)", panel["targets"][0]["expr"])
