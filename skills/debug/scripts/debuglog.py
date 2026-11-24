@@ -10,7 +10,7 @@ The log holds at most 2 MB: when it is full it moves to research/.debug.log.1, w
 Two scripts that write at the same moment can lose an event; that is accepted for a debug log.
 An event holds names, hosts, statuses, counts, and timings, never notes or search text. A failed command's event
 also holds its reason: the first line of its error message, with quoted values, entity ids, paths, the words after
-"unrecognized arguments", and query strings left out.
+"unrecognized arguments" or "ambiguous option", and query strings left out.
 
 Commands: on, off, status, show [--lines N], clear.
 Exit codes: 0 success, 2 usage error.
