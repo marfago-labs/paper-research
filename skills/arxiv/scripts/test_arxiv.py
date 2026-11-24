@@ -505,7 +505,7 @@ class Commands(unittest.TestCase):
 
     def test_paper(self):
         with mock.patch.object(arxiv, "get", return_value=FEED.format(total=2).encode()):
-            result = arxiv.cmd_paper(mock.Mock(ids=["2401.00001", "hep-th/9901001v1", "2401.99999"]))
+            result = arxiv.cmd_paper(mock.Mock(ids=["2401.00001", "hep-th/9901001v1", "2401.99999"]))["papers"]
         self.assertEqual([r.get("id") for r in result], ["2401.00001", "hep-th/9901001", None])
         self.assertEqual(result[2], {"requestedId": "2401.99999", "error": "not found"})
 
@@ -1033,7 +1033,7 @@ class Cli(unittest.TestCase):
     def test_exit_codes(self):
         with mock.patch.object(arxiv, "get", return_value=FEED.format(total=2).encode()):
             code, out, _ = self.run_main(["paper", "2401.00001"])
-        self.assertEqual((code, json.loads(out)[0]["id"]), (0, "2401.00001"))
+        self.assertEqual((code, json.loads(out)["papers"][0]["id"]), (0, "2401.00001"))
         self.assertEqual(self.run_main(["paper", "nonsense"])[0], 2)
         with mock.patch.object(arxiv, "get") as get:
             code, _, err = self.run_main(["fetch", "../../etc/passwd", "--dir", tempfile.gettempdir()])
@@ -1065,7 +1065,7 @@ class Cli(unittest.TestCase):
         feed = self.poisoned_feed("Real\u200b abstract.").replace(b"A  Paper", "A \u202e Paper".encode())
         with mock.patch.object(arxiv, "get", return_value=feed):
             code, out, err = self.run_main(["paper", "2401.00001"])
-        paper = json.loads(out)[0]
+        paper = json.loads(out)["papers"][0]
         self.assertEqual((code, paper["abstract"], paper["title"]), (0, "Real abstract.", "A  Paper Title"))
         self.assertIn("note: removed 2 invisible character(s)", err)
 

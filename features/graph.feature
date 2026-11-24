@@ -20,6 +20,19 @@ Feature: A knowledge graph that stays trustworthy as it grows
     When I run graph dupes
     Then the output mentions "no likely duplicates"
 
+  Scenario: Papers with different arXiv ids are added without asking, a similar title with none is still held, and the same id with a version is refused
+    Given the graph holds a paper "A Survey on Query Planning" with id "paper:2411.00001"
+    When I run graph add --type paper --name "Judging Query Planning" --slug 2306.00002 --no-authors "test"
+    Then the command succeeds
+    When I run graph dupes
+    Then the output mentions "no likely duplicates"
+    When I run graph add --type paper --name "A Survey on Query Plannings" --no-authors "test"
+    Then the command exits with code 3
+    And the error mentions "paper:2411.00001"
+    When I run graph add --type paper --name "Survey of Query Planning" --id arxiv=2411.00001v2 --no-authors "test"
+    Then the command exits with code 1
+    And the error mentions "same id (arxiv)"
+
   Scenario: Validation lists a link that needs fixing without blocking the graph, and passes once it is fixed
     Given the graph holds a paper "Paper X" with id "paper:2401.00003"
     And the graph holds a paper "Paper N" with id "paper:2401.00004"
@@ -66,6 +79,22 @@ Feature: A knowledge graph that stays trustworthy as it grows
     Then the output mentions "42 citations, checked"
     When I run graph standing-due research/due.txt
     Then the output mentions "no papers due"
+
+  Scenario: A paper Semantic Scholar knows under another id gets its counts only once its Semantic Scholar id is set
+    Given the graph holds a paper "ReAct" with id "paper:2210.03629"
+    And Semantic Scholar's batch output in "s2.json" has no record of ARXIV:2210.03629
+    When I run graph standing s2.json
+    Then the command succeeds
+    And the output mentions "1 without citation data"
+    And the output mentions "paper:2210.03629  ReAct"
+    Given Semantic Scholar's title match in "match.json" is the paper S2REACT with 1500 citations
+    When I run graph standing match.json
+    Then the output mentions "0 papers updated"
+    And the output mentions "1 record matched no paper in the graph"
+    When I run graph update paper:2210.03629 --id s2=S2REACT
+    And I run graph standing match.json
+    Then the output mentions "1 paper updated"
+    And the paper "paper:2210.03629" has 1500 citations checked today
 
   Scenario: A paper with no author to record says why, and then passes validation
     Given the graph holds a paper "Anonymous submission" with id "paper:2401.00005"

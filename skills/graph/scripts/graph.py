@@ -117,6 +117,7 @@ UNCAPPED_KEYS = {"ext", "name"}  # block key kinds always compared, however many
 # a problem, weight each trigram by how rare it is in the graph (IDF) rather than adding rules: still one score.
 SIMILARITY = 0.5
 ID_ALIAS = re.compile(r"(ARXIV|DOI):(.+)", re.I)
+ARXIV_VERSION = re.compile(r"v\d+$")  # 2401.12345v2 and 2401.12345 are one work
 # Verified and reported mean checked against a source, so the source must start with a document someone can look up:
 # an arXiv or DOI id, a link, a place in a paper of the graph (paper:<id>, <section>), or Semantic Scholar's data. Only
 # the start counts, because a reason that merely mentions an id ("same group as paper:x") is an inference, not a source.
@@ -230,9 +231,11 @@ def labels(entity):
     return [entity["name"], *(a for a in entity.get("aliases", []) if not ID_ALIAS.fullmatch(a.strip()))]
 
 
-def id_key(value):
-    """How external id values compare: without surrounding spaces or case. Every comparison of ids uses it."""
-    return str(value).strip().casefold()
+def id_key(value, kind=""):
+    """How external id values compare: without surrounding spaces or case, and an arXiv id without its version, as
+    2401.12345v2 and 2401.12345 are one work. Every comparison of ids uses it."""
+    key = str(value).strip().casefold()
+    return ARXIV_VERSION.sub("", key) if kind == "arxiv" else key
 
 
 def external_keys(entity):
@@ -240,11 +243,12 @@ def external_keys(entity):
     keys: set[tuple[str, ...]] = set()
     ids = entity.get("ids")
     if isinstance(ids, dict):
-        keys.update((kind, id_key(value)) for kind, value in ids.items())
+        keys.update((kind, id_key(value, kind)) for kind, value in ids.items())
     for alias in entity.get("aliases", []):
         match = ID_ALIAS.fullmatch(alias.strip())
         if match:
-            keys.add((match.group(1).lower(), id_key(match.group(2))))
+            kind = match.group(1).lower()
+            keys.add((kind, id_key(match.group(2), kind)))
     slug = str(entity.get("id", "")).partition(":")[2]
     if is_paper(entity) and re.fullmatch(r"\d{4}\.\d{4,5}", slug):
         keys.add(("arxiv", slug))
@@ -276,7 +280,21 @@ def conflicting_ids(a, b):
     ids_a, ids_b = a.get("ids"), b.get("ids")
     if not (isinstance(ids_a, dict) and isinstance(ids_b, dict)):
         return []
-    return sorted(kind for kind in ids_a.keys() & ids_b.keys() if id_key(ids_a[kind]) != id_key(ids_b[kind]))
+    return sorted(
+        kind for kind in ids_a.keys() & ids_b.keys() if id_key(ids_a[kind], kind) != id_key(ids_b[kind], kind)
+    )
+
+
+def arxiv_ids(entity):
+    """The entity's arXiv ids, from any source, without a version: 2401.12345v2 is 2401.12345."""
+    return {value for kind, value in external_keys(entity) if kind == "arxiv"}
+
+
+def different_papers(a, b):
+    """Whether two papers have arXiv ids and share none. An arXiv id names one work across its versions, so they are
+    two works. A different DOI is no such evidence: a preprint and its published version often have one each."""
+    ids_a, ids_b = arxiv_ids(a), arxiv_ids(b)
+    return is_paper(a) and is_paper(b) and bool(ids_a) and bool(ids_b) and not ids_a & ids_b
 
 
 def judged(entity, new):
@@ -284,9 +302,12 @@ def judged(entity, new):
 
     A shared external id is the strongest evidence there is, so it is always strong. A conflicting id only weakens
     a match on the name, so two people named 'Wei Zhang' with different Semantic Scholar ids are held for a
-    decision, not refused.
+    decision, not refused. Two papers with different arXiv ids are different works, so a similar name alone is no
+    reason to hold them. The same name or alias still is, as the graph allows a shared name only when marked distinct.
     """
     reasons = match_reasons(new, entity)
+    if reasons and all(r.startswith("similar name") for r in reasons) and different_papers(entity, new):
+        return [], False
     conflicts = conflicting_ids(entity, new)
     strong = any(r.startswith("same id") for r in reasons) or ("same name" in reasons and not conflicts)
     if reasons and conflicts:
@@ -924,7 +945,7 @@ def parse_ids(pairs):
 def merge_ids(entity, ids):
     current = entity.setdefault("ids", {})
     for kind, value in ids.items():
-        if kind in current and id_key(current[kind]) != id_key(value):
+        if kind in current and id_key(current[kind], kind) != id_key(value, kind):
             raise GraphError(f"{entity['id']} already has {kind} id {current[kind]!r}, not {value!r}")
         current[kind] = value
     if not current:
@@ -1028,6 +1049,8 @@ def cmd_add(args):
     if args.no_authors and first and first[:2] == (new["id"], "authored-by"):
         raise GraphError("a paper added with its author needs no --no-authors; leave it out")
     found = candidates(entities, new)
+    # Counts only, for the debug log: many --distinct right after a hold can mean candidates marked in bulk.
+    debuglog.note(candidates=len(found), distinct=len(args.distinct))
     strong = [describe_candidate(entity, reasons) for entity, reasons, is_strong in found if is_strong]
     if strong:
         raise GraphError(
@@ -1235,15 +1258,25 @@ def cmd_islands(args):
     return 0
 
 
+def is_text(value):
+    """Whether an id from a server's answer is usable: text with something in it. Anything else would be refused
+    when it is saved, and one such record would then cost every other record in the file its counts."""
+    return isinstance(value, str) and bool(value.strip())
+
+
 def s2_keys(paper):
-    """Identifier keys for a paper record from the scholar client."""
+    """Identifier keys for a paper record from the scholar client. A record that isn't an object, or whose
+    externalIds isn't one, has none, as the answer of a server can hold anything."""
     keys: set[tuple[str, ...]] = set()
-    if paper.get("paperId"):
-        keys.add(("s2", str(paper["paperId"]).casefold()))
+    if not isinstance(paper, dict):
+        return keys
+    if is_text(paper.get("paperId")):
+        keys.add(("s2", id_key(paper["paperId"], "s2")))
+    external = paper.get("externalIds")
     for name, kind in (("ArXiv", "arxiv"), ("DOI", "doi")):
-        value = (paper.get("externalIds") or {}).get(name)
-        if value:
-            keys.add((kind, str(value).casefold()))
+        value = external.get(name) if isinstance(external, dict) else None
+        if is_text(value):
+            keys.add((kind, id_key(value, kind)))
     return keys
 
 
@@ -1272,7 +1305,7 @@ def citation_edge(edge, paper_id, match):
 
 def papers_in_graph(index, papers):
     """The graph id of each Semantic Scholar paper record that matches a paper in the graph."""
-    for paper in papers:
+    for paper in papers if isinstance(papers, list) else []:
         match = next((index[key] for key in s2_keys(paper) if key in index), None)
         if match:
             yield match
@@ -1340,12 +1373,14 @@ def cmd_cites(args):
 
 
 def read_batch(file):
-    """The saved output of s2.py batch, or of s2.py paper, as a list of paper records."""
+    """The saved output of s2.py batch, {"papers": [...]}, or of s2.py paper, one record, as a list of records."""
     try:
         records = json.loads(Path(file).read_text(encoding="utf-8"))
     except (OSError, ValueError) as err:
         raise GraphError(f"can't read '{file}': {err}") from None
-    records = [records] if isinstance(records, dict) else records
+    if not isinstance(records, dict):
+        raise GraphError("expected the output of: s2.py batch ID...")
+    records = records.get("papers", [records])
     if not isinstance(records, list) or not all(isinstance(record, dict) for record in records):
         raise GraphError("expected the output of: s2.py batch ID...")
     return records
@@ -1360,7 +1395,7 @@ def requested_keys(record):
     asked = str(record.get("requestedId") or "")
     kind, _, value = asked.partition(":")
     if kind in ("ARXIV", "DOI") and value:
-        return {(kind.lower(), id_key(value))}
+        return {(kind.lower(), id_key(value, kind.lower()))}
     return {("s2", id_key(asked))} if asked else set()
 
 
@@ -1377,30 +1412,34 @@ def find_paper(index, record):
 
 
 def save_counts(paper, record):
-    """Save the record's counts on the paper. Returns "updated", or "no counts" if the record had none."""
+    """Save the record's counts on the paper. Returns False if the record had none."""
     if set_standing(paper, record):
         adopt_s2_id(paper, record)
-        return "updated"
+        return True
     mark_checked(paper)
-    return "no counts"
+    return False
 
 
 def apply_standing(entities, relations, records):
     """Save each record's counts, and link the paper to the graph papers in its reference list. Returns how many
     papers were updated, had no counts, or matched no paper in the graph, how many records came with a reference
-    list, and how many citation links they added."""
+    list, and how many citation links they added; and the papers that had no counts."""
     index = {key: e for e in entities if is_paper(e) for key in external_keys(e)}
     results: Counter[str] = Counter()
+    without = []
     for record in records:
         paper = find_paper(index, record)
         if paper is None:
             results["unmatched"] += 1
             continue
-        results[save_counts(paper, record)] += 1
+        counted = save_counts(paper, record)
+        results["updated" if counted else "no counts"] += 1
+        if not counted:
+            without.append(paper)
         if isinstance(record.get("references"), list):
             results["with references"] += 1
             results["links"] += len(cites(entities, relations, paper["id"], record))
-    return results
+    return results, without
 
 
 def standing_summary(results):
@@ -1415,9 +1454,13 @@ def standing_summary(results):
 
 def cmd_standing(args):
     entities, relations = checked_load(args.data)
-    results = apply_standing(entities, relations, read_batch(args.file))
+    results, without = apply_standing(entities, relations, read_batch(args.file))
     save(args.data, entities, relations)
     print(standing_summary(results))
+    if without:  # Semantic Scholar may know them under another id: the recap skill looks them up by title
+        print("without citation data:")
+        for paper in without:
+            print(f"  {paper['id']}  {paper['name']}")
     return 0
 
 

@@ -56,6 +56,9 @@ NO_KEY_SEARCH = (
     "search is heavily rate-limited without SEMANTIC_SCHOLAR_API_KEY, so it was not retried; use the arxiv"
     " skill's search instead"
 )
+NO_KEY_MATCH = (
+    "title lookup is heavily rate-limited without SEMANTIC_SCHOLAR_API_KEY, so it was not retried; try again later"
+)
 CACHE_DIR = None  # the workspace's .cache, found from the current folder when None
 STATE_NAME = "s2-last-request"
 LOCK_WAIT = 60  # pragma: no mutate
@@ -63,6 +66,10 @@ LOCK_WAIT = 60  # pragma: no mutate
 
 class ApiError(Exception):
     pass
+
+
+class NotFound(ApiError):
+    """Semantic Scholar answered 404: it has no such paper, or no paper with that title."""
 
 
 class PartialBatch(ApiError):
@@ -250,7 +257,7 @@ def read_json(req, path, started):
         raise ApiError(f"response from {path} was not valid JSON") from None
 
 
-def delay_before_retry(err, path, attempt, retry_rate_limit):
+def delay_before_retry(err, path, attempt, retry_rate_limit, advice=NO_KEY_SEARCH):
     """How long to wait before retrying after err. Raises if it shouldn't be retried, or if it is a rate limit
     and retry_rate_limit is False."""
     debuglog.fetch_failed("s2", API_ROOT + path, err)
@@ -265,13 +272,13 @@ def delay_before_retry(err, path, attempt, retry_rate_limit):
     retry_after = err.headers.get("Retry-After") if err.headers else None
     err.close()
     if err.code == 429 and not retry_rate_limit:
-        raise ApiError(f"HTTP 429 from {path}: {NO_KEY_SEARCH}") from None
+        raise ApiError(f"HTTP 429 from {path}: {advice}") from None
     if err.code not in RETRYABLE or last_attempt:
-        raise ApiError(f"HTTP {err.code} from {path}: {detail}") from None
+        raise (NotFound if err.code == 404 else ApiError)(f"HTTP {err.code} from {path}: {detail}") from None
     return retry_delay(retry_after, attempt)
 
 
-def request(method, path, params=None, body=None, retry_rate_limit=True):
+def request(method, path, params=None, body=None, retry_rate_limit=True, advice=NO_KEY_SEARCH):
     req = build_request(method, path, params, body)
     started = time.monotonic()
     attempt = -1
@@ -284,7 +291,7 @@ def request(method, path, params=None, body=None, retry_rate_limit=True):
         try:
             return read_json(req, path, started)
         except (urllib.error.URLError, TimeoutError) as err:
-            delay = delay_before_retry(err, path, attempt, retry_rate_limit)
+            delay = delay_before_retry(err, path, attempt, retry_rate_limit, advice)
         if time.monotonic() - started + delay > DEADLINE:
             raise ApiError(f"gave up on {path} after about {DEADLINE} seconds of retries")
         time.sleep(delay)
@@ -334,8 +341,11 @@ def cmd_search(args):
     if args.min_citations is not None:
         params["minCitationCount"] = args.min_citations
     # Without a key, search is throttled hardest, and retrying only delays the arXiv search the skill falls back to.
-    keyed = bool(os.environ.get("SEMANTIC_SCHOLAR_API_KEY"))
-    return with_links(request("GET", f"{GRAPH}/paper/search", params, retry_rate_limit=keyed), "data")
+    return with_links(request("GET", f"{GRAPH}/paper/search", params, retry_rate_limit=has_key()), "data")
+
+
+def has_key():
+    return bool(os.environ.get("SEMANTIC_SCHOLAR_API_KEY"))
 
 
 def linked_papers(paper_id, edge, key, limit):
@@ -393,8 +403,27 @@ def cmd_batch(args):
         except ApiError as err:
             if not papers:
                 raise
-            raise PartialBatch(f"{err} ({len(papers)} of {len(ids)} papers were fetched first)", papers) from None
-    return papers
+            raise PartialBatch(
+                f"{err} ({len(papers)} of {len(ids)} papers were fetched first)", {"papers": papers}
+            ) from None
+    return {"papers": papers}
+
+
+def cmd_match(args):
+    """The paper whose title best matches, for a paper the batch endpoint doesn't know by its id. Semantic Scholar
+    answers 404 when no title is close enough, which is no match, not an error. Like search, it is throttled hardest
+    without a key, and retrying only delays the answer."""
+    if not args.title.strip():
+        raise ValueError("give the title to look up")
+    params = {"query": args.title, "fields": PAPER_FIELDS}
+    try:
+        found = request("GET", f"{GRAPH}/paper/search/match", params, retry_rate_limit=has_key(), advice=NO_KEY_MATCH)
+    except NotFound:
+        return {"papers": []}
+    papers = (found.get("data") or []) if isinstance(found, dict) else None
+    if not isinstance(papers, list) or not all(isinstance(paper, dict) for paper in papers[:1]):
+        raise ApiError("unexpected response from the match endpoint")
+    return {"papers": [with_link(paper) for paper in papers[:1]]}
 
 
 def cmd_recommend(args):
@@ -465,6 +494,10 @@ def build_parser():
         help=f"also fetch each paper's reference list, {REFERENCE_BATCH} papers to a request",
     )
     batch.set_defaults(func=cmd_batch)
+
+    match = commands.add_parser("match", help="the paper whose title best matches", parents=[output])
+    match.add_argument("title")
+    match.set_defaults(func=cmd_match)
 
     recommend = commands.add_parser("recommend", help="recommendations from example papers", parents=[output])
     recommend.add_argument("--like", nargs="+", required=True)

@@ -75,7 +75,7 @@ class Arxiv(Workspace):
         with mock.patch.object(arxiv, "get", return_value=feed):
             code, out, _ = run(arxiv.main, ["paper", PAPER, CITED])
         self.assertEqual(code, 0)
-        papers = {paper["id"]: paper for paper in json.loads(out)}
+        papers = {paper["id"]: paper for paper in json.loads(out)["papers"]}
         self.assertEqual(set(papers), {PAPER, CITED})
         self.assertEqual(papers[PAPER]["title"], TITLE)
         self.assertEqual(papers[PAPER]["link"], f"[ARXIV:{PAPER}](https://arxiv.org/abs/{PAPER})")

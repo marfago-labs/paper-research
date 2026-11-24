@@ -758,6 +758,45 @@
       ]
     },
     {
+      "id": 92,
+      "type": "logs",
+      "title": "Duplicate decisions by graph add",
+      "description": "Each graph add that held possible duplicates (candidates) or was given --distinct (distinct), newest first. A hold followed seconds later by an add marking every candidate distinct, again and again, can mean candidates were marked in bulk instead of judged one by one. Many --distinct on one add can also be right, so read the pattern; this is not an alert.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 23,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{service_name=\"paper-research\"} | event_name=\"command\" | source=\"graph\" | command=\"add\" | candidates=~`[1-9][0-9]*` or distinct=~`[1-9][0-9]*`",
+          "legendFormat": "",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data. This needs the debug log on: run /paper-research:debug on, then use the plugin"
+        },
+        "overrides": []
+      },
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending"
+      }
+    },
+    {
       "id": 83,
       "type": "table",
       "title": "Hosts the plugin contacted",
@@ -768,7 +807,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 23,
+        "y": 31,
         "w": 12,
         "h": 8
       },
@@ -868,7 +907,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 23,
+        "y": 31,
         "w": 12,
         "h": 8
       },
@@ -904,7 +943,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 31,
+        "y": 39,
         "w": 12,
         "h": 8
       },
@@ -1052,7 +1091,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 31,
+        "y": 39,
         "w": 12,
         "h": 8
       },
@@ -1186,7 +1225,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 39,
+        "y": 47,
         "w": 12,
         "h": 8
       },
@@ -1221,7 +1260,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 39,
+        "y": 47,
         "w": 12,
         "h": 8
       },
