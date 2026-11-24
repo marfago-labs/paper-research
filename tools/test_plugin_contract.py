@@ -11,13 +11,18 @@ import re
 import subprocess
 import sys
 import unittest
+import urllib.parse
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILLS = ROOT / "skills"
 sys.path.insert(0, str(SKILLS / "graph" / "scripts"))
+sys.path.insert(0, str(SKILLS / "arxiv" / "scripts"))
+sys.path.insert(0, str(SKILLS / "scholar" / "scripts"))
 
+import arxiv  # noqa: E402
 import graph  # noqa: E402
+import s2  # noqa: E402
 
 SKILL_FOLDERS = sorted(path for path in SKILLS.iterdir() if path.is_dir())
 SCRIPTS = [path for path in SKILLS.glob("*/scripts/*.py") if not path.name.startswith("test_")]
@@ -155,6 +160,14 @@ class Manifests(unittest.TestCase):
         self.assertEqual(market["plugins"][0]["name"], plugin["name"])
         self.assertRegex(plugin["version"], r"^\d+\.\d+\.\d+$")
         self.assertEqual(plugin["license"], "Apache-2.0")
+
+    def test_the_manifest_declares_the_hosts_the_scripts_contact(self):
+        # Only the scripts' hosts: Claude reaches GitHub and Hugging Face with its own fetch tool, and the security
+        # page's sandbox denies them to shell commands on purpose.
+        scripts = arxiv.ALLOWED_HOSTS | {urllib.parse.urlsplit(s2.API_ROOT).hostname}
+        hosts = json.loads(read(ROOT / ".claude-plugin" / "plugin.json"))["network"]["hosts"]
+        self.assertEqual(set(hosts), scripts)
+        self.assertEqual(len(hosts), len(scripts))
 
 
 class Scripts(unittest.TestCase):

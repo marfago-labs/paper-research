@@ -6,6 +6,14 @@ All notable changes to the plugin are listed here, newest first. The format foll
 
 ## [Unreleased]
 
+### Added
+
+- `plugin.json` declares the hosts the plugin's scripts contact under `network.hosts`: `arxiv.org`,
+  `export.arxiv.org`, and `api.semanticscholar.org`. `claude plugin validate` lists them. The field doesn't allow or
+  block anything, and a test keeps it equal to the hosts the scripts use.
+- `SECURITY.md`, which says how to report a vulnerability privately and which versions get fixes. The security and
+  troubleshooting pages link to it.
+
 ## [0.4.0] - 2026-11-22
 
 To update a workspace set up with 0.3.0 or earlier, delete the block between the `paper-research:begin` and

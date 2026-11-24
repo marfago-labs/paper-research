@@ -98,4 +98,4 @@ The graph files are invalid. The rest of the page still works. See the graph ent
 
 Ask Claude to turn on the debug log (the `debug` skill), repeat what failed, and show you the log. It records each command, each request to arXiv or Semantic Scholar with its status, and each decision of the approval hook with its reason. To watch it live in Grafana, see [Telemetry](telemetry.md).
 
-Run the failing command yourself with `--help` or `--dry-run`, and read the message. Every script says what's wrong in words and exits with a code described in the [command reference](reference.md). If it looks like a bug, open an issue with the full message, the command, and your operating system. Remove anything private from it first.
+Run the failing command yourself with `--help` or `--dry-run`, and read the message. Every script says what's wrong in words and exits with a code described in the [command reference](reference.md). If it looks like a bug, open an issue with the full message, the command, and your operating system. Remove anything private from it first. For a security problem, follow the [security policy](../SECURITY.md) instead.
