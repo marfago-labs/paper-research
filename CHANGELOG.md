@@ -59,6 +59,10 @@ All notable changes to the plugin are listed here, newest first. The format foll
   skipped, so one such record can't cost every other record in the file its counts. `s2.py match` says
   `unexpected response from the match endpoint` for an answer it can't read, and `match` with a blank title exits
   with a usage error.
+- The debug dashboard's **Failed requests** no longer counts the two 404s that are answers: a title with no match
+  (`s2.py match`) and a paper with no HTML version (`arxiv.py fetch`). Any other 404 still counts, as it more likely
+  means a broken address. The **Hosts the plugin contacted** table lists every status. The telemetry page lists
+  `graph add`'s `candidates` and `distinct` fields and the panel that shows them.
 - The debug log now reaches a local telemetry stack from a Claude Code session. Claude Code removes every `OTEL_`
   variable from the commands and hooks it runs, so the plugin reads its own `PAPER_RESEARCH_OTLP_ENDPOINT`, set in
   the `env` block of `~/.claude/settings.json`; `OTEL_EXPORTER_OTLP_ENDPOINT` still works for scripts run in a
