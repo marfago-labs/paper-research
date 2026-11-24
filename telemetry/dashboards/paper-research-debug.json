@@ -312,7 +312,7 @@
       "id": 80,
       "type": "stat",
       "title": "Failed requests",
-      "description": "Requests that got neither 200 nor 429: a server error, or network error when there was no answer.",
+      "description": "Requests that got none of 200 or 429, and were not one of the two 404s that are answers: a title with no match (s2.py match) and a paper with no HTML version (arxiv.py fetch). Any other 404 counts here, as it more likely means a broken address. The Hosts table lists every status.",
       "datasource": {
         "type": "loki",
         "uid": "loki"
@@ -329,7 +329,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "sum(count_over_time({service_name=\"paper-research\"} | event_name=\"http\" | status!=\"200\" | status!=\"429\" [$__range])) or vector(0)",
+          "expr": "sum(count_over_time({service_name=\"paper-research\"} | event_name=\"http\" | status!=\"200\" | status!=\"429\" | status!=\"404\" or (path!=\"/graph/v1/paper/search/match\" and path!~\"/html/.*\") [$__range])) or vector(0)",
           "legendFormat": "",
           "refId": "A",
           "queryType": "instant"
