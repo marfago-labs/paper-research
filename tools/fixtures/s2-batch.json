@@ -2,8 +2,8 @@
  {
   "paperId": "0671fd553dd670a4e820553a974bc48040ba0819",
   "externalIds": {
-   "ArXiv": "2303.11366",
    "DBLP": "conf/nips/ShinnCGNY23",
+   "ArXiv": "2303.11366",
    "DOI": "10.52202/075280-0377",
    "CorpusId": 258833055
   },
@@ -11,12 +11,12 @@
   "title": "Reflexion: language agents with verbal reinforcement learning",
   "venue": "Neural Information Processing Systems",
   "year": 2023,
-  "citationCount": 6889,
-  "influentialCitationCount": 474,
+  "citationCount": 6911,
+  "influentialCitationCount": 475,
   "openAccessPdf": {
-   "url": "https://arxiv.org/pdf/2303.11366",
-   "status": "GREEN",
-   "license": "CCBY",
+   "url": "https://doi.org/10.52202/075280-0377",
+   "status": "GOLD",
+   "license": null,
    "disclaimer": "Notice: Paper or abstract available at https://arxiv.org/abs/2303.11366, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
   },
   "publicationDate": "2023-03-20",
@@ -88,8 +88,8 @@
   "title": "Evaluating Large Language Models Trained on Code",
   "venue": "arXiv.org",
   "year": 2021,
-  "citationCount": 12943,
-  "influentialCitationCount": 1918,
+  "citationCount": 12962,
+  "influentialCitationCount": 1921,
   "openAccessPdf": {
    "url": "http://arxiv.org/pdf/2107.03374",
    "status": "GREEN",

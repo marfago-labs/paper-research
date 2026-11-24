@@ -6,6 +6,13 @@ All notable changes to the plugin are listed here, newest first. The format foll
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-24
+
+To update from 0.4.0: `arxiv.py paper` and `s2.py batch` now print `{"papers": [...]}`, so a `batch` file saved in
+the old list form is refused by `graph.py standing`: run the batch again. A graph that holds one arXiv paper twice,
+with and without a version, fails `validate` until the two entries are merged by hand; the
+[troubleshooting page](docs/troubleshooting.md#the-knowledge-graph) has the steps.
+
 ### Added
 
 - A paper status `partial`, for a paper read only in part, such as the abstract or a few sections, with the summary
@@ -261,7 +268,8 @@ added to `.claude/settings.json`. Otherwise the old rules load as well.
 First release: the `arxiv`, `scholar`, `read`, `add`, `next`, `pin`, `insight`, `graph`, `recap`, and `init`
 skills, with plain-file notes in the workspace, a knowledge graph with duplicate checks, and the recap page.
 
-[Unreleased]: https://github.com/marfago-labs/paper-research/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/marfago-labs/paper-research/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/marfago-labs/paper-research/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/marfago-labs/paper-research/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/marfago-labs/paper-research/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/marfago-labs/paper-research/compare/v0.1.0...v0.2.0
