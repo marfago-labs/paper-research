@@ -108,7 +108,8 @@ Read each relation as `from rel to`, such as `paper:2401.00007 evaluates-on data
 | `related-to` | any type | any type | Connected in a way no other relation says. |
 
 The relations other than `authored-by`, `cites`, and `derived-from` are the ones extracted by reading a paper. A
-paper with none of them hasn't been extracted yet: `graph.py islands` lists it.
+paper with none of them hasn't been extracted yet: `graph.py islands` lists it. Only links that start from the paper
+count. A link that points at it doesn't: when paper A builds on paper B, B may never have been opened.
 
 The table is exact. This shows its shape: the relations whose ends are narrowed.
 

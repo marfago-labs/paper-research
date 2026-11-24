@@ -181,6 +181,67 @@ class Data(unittest.TestCase):
         )
         self.assertEqual(["standing" in p for p in papers], [True, False, False, False])
 
+    def test_a_status_never_changes_what_the_graph_says_about_a_paper(self):
+        # The page decides what a status means. The data says only whether something was extracted from the paper, and
+        # passes the status on as written, whatever it is.
+        statuses = ["read", "skim", "partial", "done", "archive", "dropped", "unread-link", ""]
+        statuses += ["PARTIAL", "partial ", "<b>x</b>", "x" * 500]
+        rows = [
+            f"| 2026-01-02 | Paper {n} | ARXIV:2601.0000{n} | {s} | - | t | s |" for s in statuses for n in (1, 2, 3)
+        ]
+        header = "| Added | Title | ID | Status | Rating | Tags | Summary |\n|---|---|---|---|---|---|---|\n"
+        entities = [
+            {"id": "paper:2601.00001", "type": "paper", "name": "Paper 1", "aliases": []},  # something is extracted
+            {"id": "paper:2601.00002", "type": "paper", "name": "Paper 2", "aliases": []},  # nothing is
+            {"id": "tool:b", "type": "tool", "name": "Tool B", "aliases": []},
+        ]
+        link = {"from": "paper:2601.00001", "rel": "uses", "to": "tool:b", "source": "s", "status": "verified"}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_research(root, entities=entities)
+            (root / "papers.md").write_text("# Papers\n\n" + header + "\n".join(rows) + "\n", encoding="utf-8")
+            (root / "graph" / "relations.jsonl").write_text(json.dumps(link), encoding="utf-8")
+            papers = recap.build_data(root)["papers"]
+        self.assertEqual(len(papers), 3 * len(statuses))
+        expected = {"1": "extracted", "2": "unextracted", "3": "missing"}
+        for paper, status in zip(papers, [s.strip() for s in statuses for _ in range(3)]):
+            self.assertEqual((paper["status"], paper["graph"]), (status, expected[paper["id"][-1]]), paper["id"])
+
+    def test_a_paper_read_in_part_is_unextracted_until_something_is_extracted_from_it(self):
+        row = "| 2026-01-02 | Paper 1 | ARXIV:2601.00001 | partial | - | t | Abstract and §3 only. |"
+        header = "| Added | Title | ID | Status | Rating | Tags | Summary |\n|---|---|---|---|---|---|---|\n"
+        entities = [ENTITIES[0], ENTITIES[3]]
+        link = {"from": "paper:2601.00001", "rel": "uses", "to": "tool:b", "source": "s", "status": "verified"}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_research(root, entities=entities)
+            (root / "papers.md").write_text("# Papers\n\n" + header + row + "\n", encoding="utf-8")
+            (root / "graph" / "relations.jsonl").write_text("", encoding="utf-8")
+            before = recap.build_data(root)["papers"][0]
+            (root / "graph" / "relations.jsonl").write_text(json.dumps(link), encoding="utf-8")
+            after = recap.build_data(root)["papers"][0]
+        self.assertEqual((before["status"], before["graph"]), ("partial", "unextracted"))
+        self.assertEqual((after["status"], after["graph"]), ("partial", "extracted"))
+
+    def test_a_paper_another_one_builds_on_is_unextracted_until_something_starts_from_it(self):
+        # Reading paper 1 and recording that it builds on paper 2 says nothing about paper 2, which may be unread.
+        header = "| Added | Title | ID | Status | Rating | Tags | Summary |\n|---|---|---|---|---|---|---|\n"
+        rows = "".join(f"| 2026-01-02 | Paper {n} | ARXIV:2601.0000{n} | done | - | t | s |\n" for n in (1, 2))
+        paper = lambda n: {"id": f"paper:2601.0000{n}", "type": "paper", "name": f"Paper {n}", "aliases": []}  # noqa: E731
+        tool = {"id": "tool:b", "type": "tool", "name": "Tool B", "aliases": []}
+        link = lambda start, rel, end: {"from": start, "rel": rel, "to": end, "source": "s", "status": "verified"}  # noqa: E731
+        links = [link("paper:2601.00001", "builds-on", "paper:2601.00002"), link("paper:2601.00001", "uses", "tool:b")]
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_research(root, entities=[paper(1), paper(2), tool])
+            (root / "papers.md").write_text("# Papers\n\n" + header + rows, encoding="utf-8")
+            (root / "graph" / "relations.jsonl").write_text("\n".join(json.dumps(r) for r in links), encoding="utf-8")
+            before = [p["graph"] for p in recap.build_data(root)["papers"]]
+            links.append(link("paper:2601.00002", "uses", "tool:b"))
+            (root / "graph" / "relations.jsonl").write_text("\n".join(json.dumps(r) for r in links), encoding="utf-8")
+            after = [p["graph"] for p in recap.build_data(root)["papers"]]
+        self.assertEqual((before, after), (["extracted", "unextracted"], ["extracted", "extracted"]))
+
     def test_only_papers_in_the_graph_match_a_row(self):
         # An author or a tool with the row's link is not the paper, whatever its type sorts before or after.
         for kind in ("author", "tool"):

@@ -49,7 +49,7 @@ One table row per link. Escape a `|` in a title as `\|`.
 | Added | `YYYY-MM-DD` |
 | Title | The paper's title |
 | ID | `ARXIV:2303.11366`, `DOI:10.1234/abc`, or the link for anything else |
-| Status | `read` (to read), `skim` (to skim), `archive` (kept, not to read), `done` (read or skimmed), `dropped`, or `unread-link` |
+| Status | `read` (to read), `skim` (to skim), `partial` (read in part, such as the abstract or a few sections: the summary says which), `archive` (kept, not to read), `done` (read or skimmed in full), `dropped`, or `unread-link` |
 | Rating | 1 to 5 after reading, otherwise `-` |
 | Tags | Comma-separated topics |
 | Summary | One or two sentences, and whether it comes from the abstract or the full text |

@@ -22,7 +22,7 @@ python <skills>/graph/scripts/graph.py [--data FOLDER] COMMAND ...
 | `neighbours ENTITY [--depth N]` | Lists connections within N steps (default 1), with their sources and status. |
 | `path A B` | Shows the shortest chain of connections between two entities, ignoring direction. |
 | `dupes` | Lists pairs of entities that might be duplicates. |
-| `islands` | Lists papers with only author, citation, or insight connections. |
+| `islands` | Lists papers with only author, citation, or insight connections, and none that start from the paper: a link that points at it, such as another paper building on it, doesn't extract it. |
 | `add --type TYPE --name NAME [options]` | Adds an entity after checking for duplicates, with its first link. Every type but a paper needs one: `--link-from` or `--link-to`, with `--source` and `--status`. |
 | `update ENTITY [options]` | Adds aliases, ids, a url, a note, a reason it has no authors, or a distinct mark to an entity. |
 | `link START REL END --source TEXT --status STATUS` | Adds a relation. If it already exists with a weaker status, it takes the new status and source, such as a `reported` link once the original study is checked; otherwise nothing changes, so a link is never downgraded. It refuses a relation between entity types it can't join, such as a concept `authored-by` an author; the types each relation joins are listed in the [graph schema](graph-schema.md#relation-types). |

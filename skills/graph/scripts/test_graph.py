@@ -584,6 +584,28 @@ class Matching(unittest.TestCase):
         compared = [*relations, relation("paper:q", "compared-with", "dataset:e")]
         self.assertEqual(graph.islands(entities, compared), [], "a baseline is something read from the paper")
 
+    def test_a_link_that_points_at_a_paper_doesnt_extract_it(self):
+        # Reading A and recording that it builds on B says nothing about B, which may never have been opened.
+        papers = [entity("paper:a", "A"), entity("paper:b", "B"), entity("concept:c", "C")]
+        for rel in ("uses", "builds-on", "contradicts", "compared-with", "related-to"):
+            with self.subTest(rel=rel):
+                links = [relation("paper:a", rel, "paper:b")]
+                self.assertEqual([e["id"] for e in graph.islands(papers, links)], ["paper:b"])
+                # B is extracted once something starts from it, and a link between the two both ways extracts both.
+                own = [*links, relation("paper:b", "proposes", "concept:c")]
+                self.assertEqual(graph.islands(papers, own), [])
+                both = [*links, relation("paper:b", rel, "paper:a")]
+                self.assertEqual(graph.islands(papers, both), [])
+        # Something that isn't a paper pointing at it doesn't extract it either, and links that aren't about extraction
+        # don't, whichever way they run.
+        self.assertEqual(
+            [e["id"] for e in graph.islands(papers, [relation("concept:c", "related-to", "paper:b")])],
+            ["paper:a", "paper:b"],
+        )
+        for rel in ("authored-by", "cites", "derived-from", "supports"):
+            links = [relation("paper:a", rel, "paper:b")]
+            self.assertEqual([e["id"] for e in graph.islands(papers, links)], ["paper:a", "paper:b"], rel)
+
     def test_dupes_skips_crowded_trigrams(self):
         import hashlib
 
@@ -902,6 +924,12 @@ class Writing(CommandLineBase):
             code, _, err = self.run_main("merge", keep, drop)
             self.assertEqual(code, 1)
             self.assertIn("two different entities of the same type", err)
+
+    def test_islands_lists_a_paper_only_built_on_by_another(self):
+        papers = [entity("paper:a", "Paper A"), entity("paper:b", "Paper B"), entity("concept:c", "Concept C")]
+        self.write(papers, [relation("paper:a", "builds-on", "paper:b"), relation("paper:a", "proposes", "concept:c")])
+        code, out, _ = self.run_main("islands")
+        self.assertEqual((code, out), (0, "paper:b  Paper B\n"))
 
     def test_dupes_and_islands_commands(self):
         self.assertIn("no likely duplicates", self.run_main("dupes")[1])

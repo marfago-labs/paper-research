@@ -365,11 +365,11 @@ def dupes(entities):
 
 
 def islands(entities, relations):
-    """Papers with nothing extracted from them yet: only author, citation, or insight links."""
-    extracted: set[str] = set()
-    for relation in relations:
-        if relation["rel"] in EXTRACTED_RELATIONS:
-            extracted.update((relation["from"], relation["to"]))
+    """Papers with nothing extracted from them yet: only author, citation, or insight links.
+
+    A paper is extracted by the links that start from it, the ones made when it is read. A link that points at it
+    doesn't count: when paper A builds on paper B, B may never have been opened."""
+    extracted = {relation["from"] for relation in relations if relation["rel"] in EXTRACTED_RELATIONS}
     return [entity for entity in entities if is_paper(entity) and entity["id"] not in extracted]
 
 

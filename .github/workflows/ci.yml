@@ -185,6 +185,9 @@ jobs:
           cache: pip
           cache-dependency-path: requirements-dev.txt
       - run: pip install --require-hashes -r requirements-dev.txt
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22 # the recap scenario runs the page's library
       - run: behave --no-capture-stderr --format progress --junit --junit-directory scenario-numbers features
       - name: Keep the scenario numbers for the badges
         if: ${{ success() && matrix.os == 'ubuntu-latest' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}

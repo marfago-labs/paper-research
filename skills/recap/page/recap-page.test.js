@@ -62,6 +62,8 @@ function stubPage(hash, extra = {}) {
         scrollIntoView() {
           this.scrolled = true;
         },
+        value: "0",
+        append() {},
         addEventListener() {},
       });
     }
@@ -89,6 +91,8 @@ function stubPage(hash, extra = {}) {
     document: {
       getElementById: (id) => (id === "no-such-thing" ? null : element(id)),
       querySelectorAll: (selector) => (selector === "[data-view]" ? views : tabs),
+      createElement: () => ({ className: "", textContent: "", style: {}, append() {}, addEventListener() {} }),
+      createTextNode: (text) => ({ textContent: text }),
     },
     location: { hash },
     getComputedStyle: () => ({ getPropertyValue: () => "#000" }),
@@ -100,8 +104,14 @@ function stubPage(hash, extra = {}) {
 }
 
 function loadPage(hash, options = {}) {
-  const { data, withLibrary, withCytoscape } = { data: DATA, withLibrary: true, withCytoscape: false, ...options };
-  const page = stubPage(hash, withCytoscape ? { cytoscape: () => ({ resize() {} }) } : {});
+  const { data, withLibrary, withCytoscape, cytoscape } = {
+    data: DATA,
+    withLibrary: true,
+    withCytoscape: false,
+    ...options,
+  };
+  const stub = withCytoscape ? { cytoscape: () => ({ resize() {} }) } : {};
+  const page = stubPage(hash, cytoscape ? { cytoscape } : stub);
   vm.createContext(page.context);
   if (withLibrary) vm.runInContext(LIB, page.context, { filename: "recap-lib.js" });
   page.context.RecapLib = page.context.window.RecapLib;
@@ -175,4 +185,85 @@ test("the graph tab reports a broken or empty graph instead of drawing", () => {
     withCytoscape: true,
   });
   assert.match(empty.element("details").innerHTML, /No graph yet/);
+});
+
+// The graph is drawn by the real Cytoscape library, run without a screen, so styles and classes are the real ones.
+const cytoscapeLib = require("./cytoscape-3.30.4.min.js");
+const GRAPH = {
+  entities: [
+    { id: "paper:a", type: "paper", name: "Paper A", aliases: [] },
+    { id: "concept:b", type: "concept", name: "Concept B", aliases: [] },
+    { id: "method:c", type: "method", name: "Method C", aliases: [] },
+    { id: "tool:d", type: "tool", name: "Tool D", aliases: [] },
+  ],
+  relations: [
+    { from: "paper:a", rel: "proposes", to: "concept:b", source: "S", status: "verified" },
+    { from: "paper:a", rel: "uses", to: "method:c", source: "S", status: "verified" },
+  ],
+  error: "",
+};
+
+// The page runs in its own realm, whose arrays and objects Cytoscape doesn't recognise: rebuild them in this one.
+const inThisRealm = (value) => {
+  if (Array.isArray(value)) return value.map(inThisRealm);
+  if (value === null || typeof value !== "object") return value;
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, inThisRealm(item)]));
+};
+
+function drawGraph(t, graph = GRAPH) {
+  const drawn = [];
+  const cytoscape = (config) => {
+    const { elements, style, minZoom, maxZoom } = inThisRealm(config);
+    const cy = cytoscapeLib({ elements, style, minZoom, maxZoom, headless: true, styleEnabled: true });
+    drawn.push(cy);
+    return cy;
+  };
+  t.after(() => drawn.forEach((cy) => cy.destroy()));
+  loadPage("#graph", { data: { ...DATA, graph }, cytoscape });
+  return drawn[0];
+}
+
+const ids = (nodes) => nodes.map((node) => node.id()).sort();
+const alwaysLabelled = (cy) => ids(cy.nodes().filter((node) => node.style("min-zoomed-font-size") === "0px"));
+
+test("graph labels are drawn at 13px, and shown only where they would be at least 8px on screen", (t) => {
+  const cy = drawGraph(t);
+  assert.equal(cy.nodes().length, 4);
+  for (const node of cy.nodes()) {
+    assert.equal(node.style("font-size"), "13px", node.id());
+    assert.equal(node.style("min-zoomed-font-size"), "8px", node.id());
+  }
+});
+
+test("the selected entity and its neighbours keep their labels at any zoom, and no other does", (t) => {
+  const cy = drawGraph(t);
+  assert.deepEqual(alwaysLabelled(cy), [], "nothing is selected yet");
+  cy.getElementById("paper:a").emit("tap");
+  assert.deepEqual(ids(cy.nodes(".selected")), ["paper:a"]);
+  assert.deepEqual(ids(cy.nodes(".near")), ["concept:b", "method:c"]);
+  assert.deepEqual(alwaysLabelled(cy), ["concept:b", "method:c", "paper:a"]);
+});
+
+test("selecting another entity moves the labels with it, and an entity with no links has no neighbours", (t) => {
+  const cy = drawGraph(t);
+  cy.getElementById("paper:a").emit("tap");
+  cy.getElementById("tool:d").emit("tap");
+  assert.deepEqual([ids(cy.nodes(".selected")), ids(cy.nodes(".near"))], [["tool:d"], []]);
+  assert.deepEqual(alwaysLabelled(cy), ["tool:d"]);
+  cy.getElementById("concept:b").emit("tap");
+  assert.deepEqual([ids(cy.nodes(".selected")), ids(cy.nodes(".near"))], [["concept:b"], ["paper:a"]]);
+  assert.deepEqual(alwaysLabelled(cy), ["concept:b", "paper:a"]);
+});
+
+test("a graph with hostile names is drawn, and each label is the name as text", (t) => {
+  const names = ["<img src=x onerror=alert(1)>", "__proto__", "x".repeat(5000), "‮evil​", 'A "quote" & <b>'];
+  const entities = names.map((name, n) => ({ id: `concept:n${n}`, type: "concept", name, aliases: [] }));
+  entities.push({ id: "paper:p", type: "paper", name: "P", aliases: ["<b>alias</b>"] }); // a paper shows its alias
+  entities.push({ id: "tool:x", type: "tool", name: "No aliases key" }); // a record with no aliases at all
+  const cy = drawGraph(t, { entities, relations: [], error: "" });
+  assert.equal(cy.nodes().length, names.length + 2);
+  names.forEach((name, n) => assert.equal(cy.getElementById(`concept:n${n}`).data("label"), name));
+  assert.equal(cy.getElementById("paper:p").data("label"), "<b>alias</b>");
+  cy.getElementById("concept:n0").emit("tap");
+  assert.deepEqual(alwaysLabelled(cy), ["concept:n0"]);
 });

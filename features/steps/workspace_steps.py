@@ -2,6 +2,9 @@
 
 import json
 import os
+import re
+import shutil
+import subprocess
 
 from behave import given, then, when
 
@@ -136,6 +139,61 @@ def asked_to_approve(context, text):
 @then("the tool call goes ahead without a prompt from the plugin")
 def no_prompt(context):
     assert (context.result.code, context.result.out, context.result.err) == (0, "", ""), context.result
+
+
+# --- what the recap page shows, made from the data recap.py wrote -------------------------------------------
+
+# Loads the data as the page does, and prints the HTML its own library makes of it for the Activity tab.
+RENDER = (
+    'const fs = require("fs"), vm = require("vm"); const window = {};'
+    ' vm.runInNewContext(fs.readFileSync(process.argv[1], "utf8"), { window });'
+    " process.stdout.write(require(process.argv[2]).buildRecap(window.RECAP_DATA).html);"
+)
+
+
+def recap_html(context):
+    node = shutil.which("node")
+    assert node, "these steps run the page's library, which needs Node"
+    page = research(context) / "recap"
+    done = subprocess.run(
+        [node, "-e", RENDER, str(page / "recap-data.js"), str(page / "recap-lib.js")],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=60,
+    )
+    assert done.returncode == 0, done.stderr
+    return done.stdout
+
+
+def papers_under(html, heading):
+    found = re.search(rf"<h3>{re.escape(heading)} \(\d+\)</h3><ul>(.*?)</ul>", html)
+    return found.group(1) if found else ""
+
+
+@given('the reading list holds "{title}" as {paper_id} with the status {status}')
+def reading_list_row(context, title, paper_id, status):
+    row = f"| 2026-11-23 | {title} | {paper_id} | {status} | - | test | A summary. |\n"
+    with open(research(context) / "papers.md", "a", encoding="utf-8") as handle:
+        handle.write(row)
+
+
+@then("the Activity tab counts {count:d} {label}")
+def activity_counts(context, count, label):
+    html = recap_html(context)
+    assert f"<b>{count}</b><span>{label}</span>" in html, html[:600]
+
+
+@then('the Activity tab lists "{title}" under "{heading}"')
+def activity_lists(context, title, heading):
+    listed = papers_under(recap_html(context), heading)
+    assert f">{title}</a>" in listed, f"{title!r} not under {heading!r}: {listed!r}"
+
+
+@then('the Activity tab does not list "{title}" under "{heading}"')
+def activity_does_not_list(context, title, heading):
+    listed = papers_under(recap_html(context), heading)
+    assert f">{title}</a>" not in listed, f"{title!r} is under {heading!r}: {listed!r}"
 
 
 # --- the plugin itself ---------------------------------------------------------------------------------------

@@ -80,7 +80,7 @@ Not an error in the graph, which still loads, though `validate` exits with 1 unt
 Two entities share that name. Claude uses an id. If you're running a command yourself, copy an id from the message.
 
 **A paper shows `nothing extracted yet` on the recap page.**
-Its status is `done`, but the graph holds only its authors and citation links, so it was finished without being extracted. Ask Claude to extract it, or discuss it with `read`. A paper still waiting to be read shows nothing: it is extracted when you read it.
+Its status is `done` or `partial`, but the graph holds only its authors, its citation links, and links that other papers make to it (a paper that builds on it says nothing about what it contains), so it was finished without being extracted. Ask Claude to extract it, or discuss it with `read`. A paper still waiting to be read shows nothing: it is extracted when you read it.
 
 ## The recap page
 

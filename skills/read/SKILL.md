@@ -12,6 +12,8 @@ Run commands from the workspace root. `<skills>` is the folder that contains thi
 
 When the papers came from a search or a ranking, such as "the top 5 by citations", and not from the user naming them, check each one before reading any of them. Use its title, abstract, and the page count in the `comment` field, which `arxiv` `paper` gives. For a paper found only through Semantic Scholar, there is no page count, so use its title, abstract, and `venue`, and open the full text before you commit to a long read. A citation count ranks candidates, but it doesn't say what a document is or whether it fits the question. Leave out or flag anything that is not a paper, such as a book or lecture notes, or that is from another field than the question, and tell the user which ones and why before you read the rest.
 
+When there are more papers than you can read in full in this session, such as "summarize all 15", say so before reading. Propose the few to read in full and how you will cover the rest (the abstract, or named sections), and go ahead once the user agrees. If the user asked for speed, state the plan and go ahead. How many fit depends on their length and the question, not a fixed number. In the reply, say which papers were read how. A paper you read only in part gets the status `partial` in `research/papers.md`, and its summary says which parts you read, such as "Abstract and §3 only". Extract it into the graph from what you read, and record no claim about the parts you didn't read: say in the reply, not in the graph, which claims would need them.
+
 ## Get the paper
 
 - **arXiv:** save it with the `arxiv` skill's `fetch` and read the Markdown by section. If there's no HTML version, use its `pdf` and the Read tool.
