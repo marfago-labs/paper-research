@@ -1,5 +1,6 @@
 """Offline tests for graph.py. Run: python paper-research/graph/test_graph.py"""
 
+import argparse
 import contextlib
 import io
 import json
@@ -387,7 +388,7 @@ class CommandLine(CommandLineBase):
         self.assertIn("-> uses -> Tool B", out)
         code, _, err = self.run_main("path", "Paper A", "Concept D")
         self.assertEqual(code, 1)
-        self.assertIn("no path", err)
+        self.assertEqual(err, "no path between 'Paper A' and 'Concept D'\n")
 
     def test_runs_as_a_script(self):
         out = io.TextIOWrapper(io.BytesIO(), encoding="utf-8")
@@ -2303,6 +2304,12 @@ class FirstLink(CommandLineBase):
 class DebugEvents(CommandLineBase):
     def setUp(self):
         super().setUp()
+        # No collector address, so a test run never sends events to a collector that runs on this machine.
+        no_export = mock.patch.dict(os.environ)
+        no_export.start()
+        self.addCleanup(no_export.stop)
+        for name in ("PAPER_RESEARCH_OTLP_ENDPOINT", "OTEL_EXPORTER_OTLP_ENDPOINT"):
+            os.environ.pop(name, None)
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
         self.root = Path(folder.name).resolve()
@@ -2339,10 +2346,64 @@ class DebugEvents(CommandLineBase):
         (event,) = self.events()
         self.assertEqual((event["command"], event["exit"]), ("validate", 1))
 
+    def test_a_refused_link_keeps_an_insight_id_out_of_its_reason(self):
+        insight = "insight:keep-the-review-agent-read-only"
+        self.write([*ENTITIES, entity(insight, "Keep the review agent read-only")], RELATIONS)
+        link = ("link", "paper:a", "authored-by", insight, "--source", "s", "--status", "inferred")
+        code = self.run_script("--data", str(self.folder), *link)
+        self.assertEqual(code, 1)
+        (event,) = self.events()
+        self.assertEqual((event["command"], event["exit"]), ("link", 1))
+        self.assertTrue(event["reason"].startswith("error: can't link … authored-by …"), event)
+        self.assertNotIn("review-agent", json.dumps(event))
+
+    def test_a_wrong_flag_records_its_exit_code_without_the_extra_words(self):
+        code = self.run_script("--data", str(self.folder), "stats", "--bogus", "private words")
+        self.assertEqual(code, 2)
+        (event,) = self.events()
+        self.assertEqual((event["exit"], event["reason"]), (2, "error: unrecognized arguments: …"))
+        self.assertNotIn("private", json.dumps(event))
+
+    def test_no_path_keeps_the_entity_names_out_of_the_reason(self):
+        insight = "insight:keep-the-review-agent-read-only"
+        self.write([*ENTITIES, entity(insight, "Keep the review agent read only")], RELATIONS)
+        self.assertEqual(self.run_script("--data", str(self.folder), "path", insight, "Paper A"), 1)
+        (event,) = self.events()
+        self.assertEqual((event["command"], event["reason"]), ("path", "no path between '…' and '…'"))
+        self.assertNotIn("review", json.dumps(event))
+
+    def test_a_shortened_flag_is_refused_and_its_value_stays_out_of_the_reason(self):
+        add = ("add", "--type", "concept", "--name", "x")
+        for flag in (["--no=my private note words"], ["--no", "my private note words"]):
+            with self.subTest(flag=flag):
+                self.assertEqual(self.run_script("--data", str(self.folder), *add, *flag), 2)
+                event = self.events()[-1]
+                self.assertEqual((event["exit"], event["reason"]), (2, "error: unrecognized arguments: …"))
+                self.assertNotIn("private", json.dumps(event))
+        self.assertEqual(len(self.events()), 2)
+
+    def test_a_missing_graph_folder_stays_out_of_the_reason(self):
+        self.assertEqual(self.run_script("--data", "my notes", "stats"), 1)
+        (event,) = self.events()
+        self.assertEqual(event["reason"], "error: graph folder not found: '…'")
+        self.assertNotIn("notes", json.dumps(event))
+
     def test_nothing_is_recorded_while_debug_is_off(self):
         (self.root / "research" / ".debug").unlink()
         self.run_script("--data", str(self.folder), "stats")
         self.assertEqual(self.events(), [])
+
+
+class Flags(unittest.TestCase):
+    def test_no_parser_accepts_a_shortened_flag(self):
+        # A shortened flag would be guessed, and argparse's message for an ambiguous one repeats its value.
+        parsers = [graph.build_parser()]
+        for parser in parsers:
+            self.assertFalse(parser.allow_abbrev, parser.prog)
+            for action in parser._actions:
+                if isinstance(action, argparse._SubParsersAction):
+                    parsers.extend(action.choices.values())
+        self.assertEqual(len(parsers), 17)
 
 
 if __name__ == "__main__":

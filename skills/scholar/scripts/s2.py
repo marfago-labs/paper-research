@@ -364,7 +364,7 @@ def read_ids(file):
     try:
         return Path(file).read_text(encoding="utf-8").split()
     except OSError as err:
-        raise ValueError(f"can't read {file}: {err}") from None
+        raise ValueError(f"can't read '{file}': {err}") from None
 
 
 def batch_request(ids, with_references):
@@ -427,8 +427,17 @@ def output_option():
     return parent
 
 
+class Parser(argparse.ArgumentParser):
+    """A parser that takes whole flags only. A shortened flag is refused rather than guessed, and argparse's message
+    for an ambiguous one repeats its value, which the debug log would record. Subcommand parsers are made from the
+    parser's own class, so they refuse them too."""
+
+    def __init__(self, **kwargs):
+        super().__init__(allow_abbrev=False, **kwargs)
+
+
 def build_parser():
-    parser = argparse.ArgumentParser(description="Read-only Semantic Scholar client.")
+    parser = Parser(description="Read-only Semantic Scholar client.")
     commands = parser.add_subparsers(dest="command", required=True)
     output = output_option()
 
@@ -516,7 +525,7 @@ def checked_out(out):
     in_temp = any(temp in target.parents for temp in temp_folders()) and root not in target.parents
     if not (research in target.parents or (in_temp and savable_in_temp(target))) or steers_claude(target):
         raise ValueError(
-            f"--out must name a file inside {research} or in a temporary folder outside the workspace "
+            f"--out must name a file inside '{research}' or in a temporary folder outside the workspace "
             f"(a .json or .txt file there), {REFUSED}"
         )
     return target

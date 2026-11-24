@@ -26,7 +26,7 @@
       },
       "options": {
         "mode": "markdown",
-        "content": "Events from the plugin's own scripts and hooks. They appear only while the debug log is on: run `/paper-research:debug on` in your workspace, with `OTEL_EXPORTER_OTLP_ENDPOINT` set to `http://localhost:4318`. They hold names, hosts, statuses, and timings, never notes or search text."
+        "content": "Events from the plugin's own scripts and hooks. They appear only while the debug log is on: run `/paper-research:debug on` in your workspace, with `PAPER_RESEARCH_OTLP_ENDPOINT` set to `http://127.0.0.1:4318` in the `env` block of `~/.claude/settings.json` (Claude Code doesn't pass `OTEL_` variables to the plugin). They hold names, hosts, statuses, and timings, never notes or search text. Model calls, tokens, and cost come from Claude Code, not the plugin: see *paper-research: usage and security* and *paper-research: service details*."
       }
     },
     {
@@ -41,7 +41,7 @@
       "gridPos": {
         "x": 0,
         "y": 3,
-        "w": 5,
+        "w": 4,
         "h": 4
       },
       "targets": [
@@ -88,15 +88,15 @@
       "id": 77,
       "type": "stat",
       "title": "Failed commands",
-      "description": "Runs that exited with an error code or crashed.",
+      "description": "Runs that exited with an error code or crashed. Exit 3 from graph is left out: graph add found possible duplicates and asked first, which Possible duplicates counts. See Failures by reason for why each one failed.",
       "datasource": {
         "type": "loki",
         "uid": "loki"
       },
       "gridPos": {
-        "x": 5,
+        "x": 4,
         "y": 3,
-        "w": 5,
+        "w": 4,
         "h": 4
       },
       "targets": [
@@ -105,7 +105,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "sum(count_over_time({service_name=\"paper-research\"} | event_name=\"command\" | exit!=\"0\" [$__range])) or vector(0)",
+          "expr": "sum(count_over_time({service_name=\"paper-research\"} | event_name=\"command\" | exit!=\"0\" | source!=\"graph\" or exit!=\"3\" [$__range])) or vector(0)",
           "legendFormat": "",
           "refId": "A",
           "queryType": "instant"
@@ -144,6 +144,61 @@
       }
     },
     {
+      "id": 89,
+      "type": "stat",
+      "title": "Possible duplicates",
+      "description": "Times graph add found possible duplicates (exit 3) and made no change, so Claude asks before adding. This is the duplicate check working, not a failure.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 3,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum(count_over_time({service_name=\"paper-research\"} | event_name=\"command\" | source=\"graph\" | exit=\"3\" [$__range])) or vector(0)",
+          "legendFormat": "",
+          "refId": "A",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data. This needs the debug log on: run /paper-research:debug on, then use the plugin",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
       "id": 78,
       "type": "stat",
       "title": "Requests",
@@ -153,7 +208,7 @@
         "uid": "loki"
       },
       "gridPos": {
-        "x": 10,
+        "x": 12,
         "y": 3,
         "w": 4,
         "h": 4
@@ -208,9 +263,9 @@
         "uid": "loki"
       },
       "gridPos": {
-        "x": 14,
+        "x": 16,
         "y": 3,
-        "w": 5,
+        "w": 4,
         "h": 4
       },
       "targets": [
@@ -263,9 +318,9 @@
         "uid": "loki"
       },
       "gridPos": {
-        "x": 19,
+        "x": 20,
         "y": 3,
-        "w": 5,
+        "w": 4,
         "h": 4
       },
       "targets": [
@@ -316,7 +371,7 @@
       "id": 81,
       "type": "table",
       "title": "Commands",
-      "description": "Each script and subcommand, by exit code. 0 is success; error means the script crashed.",
+      "description": "Each script and subcommand, by exit code. 0 is success, 3 from graph add means possible duplicates, and error means the script crashed. Failures by reason says why.",
       "datasource": {
         "type": "loki",
         "uid": "loki"
@@ -414,6 +469,11 @@
                         "color": "red",
                         "index": 3,
                         "text": "error"
+                      },
+                      "3": {
+                        "color": "orange",
+                        "index": 4,
+                        "text": "3"
                       }
                     }
                   }
@@ -507,6 +567,197 @@
       "options": {}
     },
     {
+      "id": 90,
+      "type": "table",
+      "title": "Failures by reason",
+      "description": "Each failed run and why: the first line of its error message, with quoted values, entity ids, paths, and query strings left out. Exit 3 from graph add means possible duplicates; error means the script crashed, with the exception's name.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 15,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (source, command, exit, reason, error) (count_over_time({service_name=\"paper-research\"} | event_name=\"command\" | exit!=\"0\" [$__range]))",
+          "legendFormat": "",
+          "refId": "A",
+          "queryType": "instant"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data. This needs the debug log on: run /paper-research:debug on, then use the plugin",
+          "custom": {
+            "minWidth": 70
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Script"
+            },
+            "properties": [
+              {
+                "id": "noValue",
+                "value": ""
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Command"
+            },
+            "properties": [
+              {
+                "id": "noValue",
+                "value": ""
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Exit"
+            },
+            "properties": [
+              {
+                "id": "noValue",
+                "value": ""
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Exit"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "color": "green",
+                        "index": 0,
+                        "text": "0"
+                      },
+                      "1": {
+                        "color": "red",
+                        "index": 1,
+                        "text": "1"
+                      },
+                      "2": {
+                        "color": "red",
+                        "index": 2,
+                        "text": "2"
+                      },
+                      "error": {
+                        "color": "red",
+                        "index": 3,
+                        "text": "error"
+                      },
+                      "3": {
+                        "color": "orange",
+                        "index": 4,
+                        "text": "3"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Reason"
+            },
+            "properties": [
+              {
+                "id": "noValue",
+                "value": ""
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Exception"
+            },
+            "properties": [
+              {
+                "id": "noValue",
+                "value": ""
+              }
+            ]
+          }
+        ]
+      },
+      "options": {},
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "renameByName": {
+              "Value #A": "Runs",
+              "source": "Script",
+              "command": "Command",
+              "exit": "Exit",
+              "reason": "Reason",
+              "error": "Exception"
+            },
+            "indexByName": {
+              "source": 0,
+              "command": 1,
+              "exit": 2,
+              "reason": 3,
+              "error": 4,
+              "Value #A": 5
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "field": "Runs",
+                "desc": true
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
       "id": 83,
       "type": "table",
       "title": "Hosts the plugin contacted",
@@ -517,7 +768,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 15,
+        "y": 23,
         "w": 12,
         "h": 8
       },
@@ -617,7 +868,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 15,
+        "y": 23,
         "w": 12,
         "h": 8
       },
@@ -653,7 +904,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 23,
+        "y": 31,
         "w": 12,
         "h": 8
       },
@@ -801,7 +1052,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 23,
+        "y": 31,
         "w": 12,
         "h": 8
       },
@@ -935,7 +1186,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 31,
+        "y": 39,
         "w": 12,
         "h": 8
       },
@@ -970,7 +1221,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 31,
+        "y": 39,
         "w": 12,
         "h": 8
       },
@@ -1025,5 +1276,5 @@
   "templating": {
     "list": []
   },
-  "description": "What the plugin's own scripts and hooks did: commands, requests to arXiv and Semantic Scholar, and the guard's decisions. Needs the plugin's debug log on."
+  "description": "What the plugin's own scripts and hooks did: commands, requests to arXiv and Semantic Scholar, and the guard's decisions. Needs the plugin's debug log on. Model calls, tokens, and cost are in the other two dashboards."
 }

@@ -41,6 +41,21 @@ def pattern_after(expr, label):
     return re.compile(found.group(1))
 
 
+def keeps(expr, labels):
+    """Whether a query's label filters, such as | a="1" | b!="2" or c="3", keep a line with these labels."""
+    stages = expr.split(" [", 1)[0].split(" | ")[1:]
+    for stage in stages:
+        kept = False
+        for test in stage.split(" or "):
+            found = re.fullmatch(r'(\w+)(!?=)"([^"]*)"', test.strip())
+            assert found, stage
+            name, sign, value = found.groups()
+            kept = kept or (labels.get(name) == value) == (sign == "=")
+        if not kept:
+            return False
+    return True
+
+
 def cells(panel):
     x, y, w, h = (panel["gridPos"][k] for k in ("x", "y", "w", "h"))
     return {(col, line) for col in range(x, x + w) for line in range(y, y + h)}
@@ -224,6 +239,42 @@ class Requests(unittest.TestCase):
         limited = by_title(debug, "Rate limited", "stat")["targets"][0]["expr"]
         self.assertIn('status!="429"', failed)
         self.assertIn('status="429"', limited)
+
+
+class Commands(unittest.TestCase):
+    def test_possible_duplicates_are_not_counted_as_failed_commands(self):
+        debug = load("paper-research-debug.json")
+        failed = by_title(debug, "Failed commands", "stat")["targets"][0]["expr"]
+        asked = by_title(debug, "Possible duplicates", "stat")["targets"][0]["expr"]
+        self.assertIn('exit!="0" | source!="graph" or exit!="3"', failed)
+        self.assertIn('source="graph" | exit="3"', asked)
+
+    def test_every_failed_run_is_counted_in_one_of_the_two_stats(self):
+        debug = load("paper-research-debug.json")
+        failed = by_title(debug, "Failed commands", "stat")["targets"][0]["expr"]
+        asked = by_title(debug, "Possible duplicates", "stat")["targets"][0]["expr"]
+        for source, code, expected in (
+            ("graph", "3", (False, True)),
+            ("arxiv", "3", (True, False)),
+            ("graph", "1", (True, False)),
+            ("init", "2", (True, False)),
+            ("graph", "0", (False, False)),
+        ):
+            with self.subTest(source=source, exit=code):
+                run = {"event_name": "command", "source": source, "exit": code}
+                self.assertEqual((keeps(failed, run), keeps(asked, run)), expected)
+
+    def test_failures_are_listed_with_their_reason(self):
+        panel = by_title(load("paper-research-debug.json"), "Failures by reason", "table")
+        self.assertIn("sum by (source, command, exit, reason, error)", panel["targets"][0]["expr"])
+        self.assertIn('exit!="0"', panel["targets"][0]["expr"])
+
+    def test_the_debug_dashboard_says_where_model_use_is(self):
+        text = next(p for p in panels(load("paper-research-debug.json")) if p["type"] == "text")
+        content = text["options"]["content"]
+        for title in ("paper-research: usage and security", "paper-research: service details"):
+            self.assertIn(title, content)
+            self.assertIn(title, [d["title"] for d in dashboards().values()])
 
 
 if __name__ == "__main__":

@@ -1,5 +1,6 @@
 """Offline tests for s2.py. Run: python .claude/skills/scholar/scripts/test_s2.py"""
 
+import argparse
 import contextlib
 import io
 import json
@@ -890,7 +891,7 @@ class CommandLine(unittest.TestCase):
             with mock.patch.object(s2, "request", return_value={"title": "x"}):
                 code, out, err = self.run_main(["search", "agents", "--out", str(path)])
         self.assertEqual((code, out), (1, ""))
-        self.assertIn(f"error: can't write {path}", err)
+        self.assertIn(f"error: can't write '{path}': ", err)
 
     def test_out_is_refused_outside_research_or_for_a_protected_file_before_any_request(self):
         with workspace(s2) as research:
@@ -910,7 +911,7 @@ class CommandLine(unittest.TestCase):
                 with mock.patch.object(s2, "request") as request:
                     code, out, err = self.run_main(["search", "agents", "--out", str(target)])
                 self.assertEqual((code, out), (2, ""), target)
-                self.assertIn(f"--out must name a file inside {research}", err)
+                self.assertIn(f"--out must name a file inside '{research}'", err)
                 request.assert_not_called()
             self.assertFalse((root / "CLAUDE.md").exists())
 
@@ -946,7 +947,7 @@ class CommandLine(unittest.TestCase):
                 with mock.patch.object(s2, "request") as called:
                     code, out, err = self.run_main(["search", "agents", "--out", str(target)])
                 self.assertEqual((code, out), (2, ""), target)
-                self.assertIn(f"--out must name a file inside {research} or in", err)
+                self.assertIn(f"--out must name a file inside '{research}' or in", err)
                 called.assert_not_called()
 
     def test_a_link_in_the_temporary_folder_does_not_lead_back_into_the_workspace(self):
@@ -1118,6 +1119,12 @@ class CommandLine(unittest.TestCase):
 
 class DebugEvents(unittest.TestCase):
     def setUp(self):
+        # No collector address, so a test run never sends events to a collector that runs on this machine.
+        no_export = mock.patch.dict(os.environ)
+        no_export.start()
+        self.addCleanup(no_export.stop)
+        for name in ("PAPER_RESEARCH_OTLP_ENDPOINT", "OTEL_EXPORTER_OTLP_ENDPOINT"):
+            os.environ.pop(name, None)
         for patcher in (mock.patch.object(s2.time, "sleep"), mock.patch.object(s2, "pace")):
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -1166,6 +1173,17 @@ class DebugEvents(unittest.TestCase):
                 s2.request("GET", "/x", retry_rate_limit=False)
         self.assertEqual([event["status"] for event in self.events()], [429])
 
+    def test_a_file_that_cant_be_read_stays_out_of_the_reason(self):
+        err = io.TextIOWrapper(io.BytesIO(), encoding="utf-8")
+        with contextlib.redirect_stderr(err):
+            code = s2.debuglog.run("s2", s2.main, ["batch", "--ids-file", "my notes"])
+        err.flush()
+        self.assertEqual(code, 2)
+        self.assertIn("my notes", err.buffer.getvalue().decode("utf-8"))  # the user still sees the path
+        (event,) = [event for event in self.events() if event["event"] == "command"]
+        self.assertEqual(event["reason"], "error: can't read '…': [Errno 2] No such file or directory: '…'")
+        self.assertNotIn("notes", json.dumps(event))
+
     def test_nothing_is_recorded_while_debug_is_off(self):
         (self.root / "research" / ".debug").unlink()
         with mock.patch.object(s2.OPENER, "open", return_value=fake_response({})):
@@ -1188,6 +1206,18 @@ class DebugEvents(unittest.TestCase):
             {"source": "s2", "event": "command", "command": "paper", "exit": 2},
         )
         self.assertIn("duration_ms", event)
+
+
+class Flags(unittest.TestCase):
+    def test_no_parser_accepts_a_shortened_flag(self):
+        # A shortened flag would be guessed, and argparse's message for an ambiguous one repeats its value.
+        parsers = [s2.build_parser()]
+        for parser in parsers:
+            self.assertFalse(parser.allow_abbrev, parser.prog)
+            for action in parser._actions:
+                if isinstance(action, argparse._SubParsersAction):
+                    parsers.extend(action.choices.values())
+        self.assertEqual(len(parsers), 6)
 
 
 if __name__ == "__main__":

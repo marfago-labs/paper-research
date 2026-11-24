@@ -81,9 +81,9 @@ It forbids running commands outside the sandbox, stops sandboxed commands from w
 
 ## The debug log
 
-The debug log is off unless you turn it on, and it is for you, not for Claude. While it is on, the plugin's scripts and hooks write the events described in the [command reference](reference.md#debug) to `research/.debug.log`, which `init` keeps out of git. The events hold names, hosts, statuses, counts, and timings. They never hold your notes, the text of a search, a query string, or your API key: a request is recorded as its host and path only. The file is limited to 4 MB in all.
+The debug log is off unless you turn it on, and it is for you, not for Claude. While it is on, the plugin's scripts and hooks write the events described in the [command reference](reference.md#debug) to `research/.debug.log`, which `init` keeps out of git. The events hold names, hosts, statuses, counts, and timings. They never hold your notes, the text of a search, a query string, or your API key: a request is recorded as its host and path only, and a failed command's error message is recorded with every quoted value, entity id (an insight's id is made from its words), path, query string, and the extra words of a wrong flag removed. The file is limited to 4 MB in all.
 
-If `OTEL_EXPORTER_OTLP_ENDPOINT` is set, the same events are also sent there, but only when it is an `http` address on this machine (`localhost`, `127.0.0.1`, or `[::1]`), without following redirects. An address anywhere else is ignored, so turning the log on can't send anything off your machine.
+If `PAPER_RESEARCH_OTLP_ENDPOINT` (or `OTEL_EXPORTER_OTLP_ENDPOINT`) is set, the same events are also sent there, but only when it is an `http` address on this machine (`localhost`, `127.0.0.1`, or `[::1]`), without following redirects. An address anywhere else is ignored, so turning the log on can't send anything off your machine. A project's `.claude/settings.json` can set `PAPER_RESEARCH_OTLP_ENDPOINT` too, so a repository can point the events at another port on this machine, but never elsewhere.
 
 ## Third-party code
 

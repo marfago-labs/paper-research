@@ -1,5 +1,6 @@
 """Offline tests for arxiv.py. Run: python .claude/skills/arxiv/scripts/test_arxiv.py"""
 
+import argparse
 import contextlib
 import io
 import json
@@ -1196,7 +1197,7 @@ class Cli(unittest.TestCase):
             with mock.patch.object(arxiv, "cmd_paper", return_value=[{"title": "x"}]):
                 code, out, err = self.run_main(["paper", "2401.00001", "--out", str(path)])
         self.assertEqual((code, out), (1, ""))
-        self.assertIn(f"error: can't write {path}", err)
+        self.assertIn(f"error: can't write '{path}': ", err)
 
     def test_out_is_refused_outside_research_or_for_a_protected_file_before_any_request(self):
         with workspace(arxiv) as research:
@@ -1216,7 +1217,7 @@ class Cli(unittest.TestCase):
                 with mock.patch.object(arxiv, "get") as get:
                     code, out, err = self.run_main(["search", "x", "--out", str(target)])
                 self.assertEqual((code, out), (2, ""), target)
-                self.assertIn(f"--out must name a file inside {research}", err)
+                self.assertIn(f"--out must name a file inside '{research}'", err)
                 get.assert_not_called()
             self.assertFalse((root / "CLAUDE.md").exists())
 
@@ -1253,7 +1254,7 @@ class Cli(unittest.TestCase):
                 with mock.patch.object(arxiv, "cmd_paper") as called:
                     code, out, err = self.run_main(["paper", "2401.00001", "--out", str(target)])
                 self.assertEqual((code, out), (2, ""), target)
-                self.assertIn(f"--out must name a file inside {research} or in", err)
+                self.assertIn(f"--out must name a file inside '{research}' or in", err)
                 called.assert_not_called()
 
     def test_a_link_in_the_temporary_folder_does_not_lead_back_into_the_workspace(self):
@@ -1409,6 +1410,12 @@ class Cli(unittest.TestCase):
 
 class DebugEvents(unittest.TestCase):
     def setUp(self):
+        # No collector address, so a test run never sends events to a collector that runs on this machine.
+        no_export = mock.patch.dict(os.environ)
+        no_export.start()
+        self.addCleanup(no_export.stop)
+        for name in ("PAPER_RESEARCH_OTLP_ENDPOINT", "OTEL_EXPORTER_OTLP_ENDPOINT"):
+            os.environ.pop(name, None)
         for patcher in (mock.patch.object(arxiv.time, "sleep"), mock.patch.object(arxiv, "pace")):
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -1454,6 +1461,19 @@ class DebugEvents(unittest.TestCase):
             arxiv.get("https://arxiv.org/html/2401.00001")
         self.assertEqual([event["status"] for event in self.events()], [404])
 
+    def test_a_path_that_cant_be_written_stays_out_of_the_reason(self):
+        err = io.TextIOWrapper(io.BytesIO(), encoding="utf-8")
+        with contextlib.redirect_stderr(err):
+            code = arxiv.debuglog.run(
+                "arxiv", lambda argv: arxiv.write_output({"title": "x"}, "missing/my notes", 0), []
+            )
+        err.flush()
+        self.assertEqual(code, 1)
+        self.assertIn("my notes", err.buffer.getvalue().decode("utf-8"))  # the user still sees the path
+        (event,) = [event for event in self.events() if event["event"] == "command"]
+        self.assertEqual(event["reason"], "error: can't write '…': [Errno 2] No such file or directory: '…'")
+        self.assertNotIn("notes", json.dumps(event))
+
     def test_nothing_is_recorded_while_debug_is_off(self):
         (self.root / "research" / ".debug").unlink()
         opener = mock.Mock()
@@ -1478,6 +1498,32 @@ class DebugEvents(unittest.TestCase):
             {"source": "arxiv", "event": "command", "command": "paper", "exit": 2},
         )
         self.assertIn("duration_ms", event)
+        self.assertEqual(event["reason"], "error: invalid arXiv ID: '…'")
+
+    def test_a_failed_search_gives_its_reason_without_the_search_text(self):
+        opener = mock.Mock()
+        opener.open.side_effect = http_error(404)
+        err = io.TextIOWrapper(io.BytesIO(), encoding="utf-8")
+        with mock.patch.object(arxiv, "OPENER", opener), contextlib.redirect_stderr(err):
+            code = arxiv.debuglog.run("arxiv", arxiv.main, ["search", "private topic"])
+        err.flush()
+        self.assertEqual(code, 1)
+        self.assertIn(b"private", err.buffer.getvalue())  # the user still sees the whole message
+        event = self.events()[-1]
+        self.assertTrue(event["reason"].startswith("error: "), event)
+        self.assertNotIn("private", json.dumps(self.events()))
+
+
+class Flags(unittest.TestCase):
+    def test_no_parser_accepts_a_shortened_flag(self):
+        # A shortened flag would be guessed, and argparse's message for an ambiguous one repeats its value.
+        parsers = [arxiv.build_parser()]
+        for parser in parsers:
+            self.assertFalse(parser.allow_abbrev, parser.prog)
+            for action in parser._actions:
+                if isinstance(action, argparse._SubParsersAction):
+                    parsers.extend(action.choices.values())
+        self.assertEqual(len(parsers), 5)
 
 
 if __name__ == "__main__":

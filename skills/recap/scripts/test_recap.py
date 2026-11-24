@@ -4,6 +4,7 @@ They cover turning the research files into page data and copying the page next t
 The page's rendering is tested with Node; its DOM wiring is checked by hand in a browser.
 """
 
+import argparse
 import contextlib
 import io
 import json
@@ -276,6 +277,12 @@ class Data(unittest.TestCase):
 
 class StopHook(unittest.TestCase):
     def setUp(self):
+        # No collector address, so a test run never sends events to a collector that runs on this machine.
+        no_export = mock.patch.dict(os.environ)
+        no_export.start()
+        self.addCleanup(no_export.stop)
+        for name in ("PAPER_RESEARCH_OTLP_ENDPOINT", "OTEL_EXPORTER_OTLP_ENDPOINT"):
+            os.environ.pop(name, None)
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
         self.root = Path(folder.name)
@@ -316,6 +323,27 @@ class StopHook(unittest.TestCase):
             return False
         self.assertEqual(json.loads(out), {"decision": "block", "reason": recap.STOP_REASON})
         return True
+
+    def events(self):
+        path = self.research / ".debug.log"
+        lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+        return [json.loads(line) for line in lines]
+
+    def test_a_missing_research_folder_stays_out_of_the_reason(self):
+        self.research.mkdir()
+        (self.research / ".debug").write_text("on", encoding="utf-8")
+        before = Path.cwd()
+        os.chdir(self.root)
+        self.addCleanup(os.chdir, before)
+        err = io.TextIOWrapper(io.BytesIO(), encoding="utf-8")
+        with contextlib.redirect_stderr(err):
+            code = recap.debuglog.run("recap", recap.main, ["--workspace", "my notes"])
+        err.flush()
+        self.assertEqual(code, 2)
+        self.assertIn("my notes", err.buffer.getvalue().decode("utf-8"))  # the user still sees the path
+        (event,) = [event for event in self.events() if event["event"] == "command"]
+        self.assertEqual(event["reason"], "error: research folder not found: '…'")
+        self.assertNotIn("notes", json.dumps(event))
 
     def test_a_fresh_workspace_is_left_alone(self):
         self.starters()
@@ -664,6 +692,18 @@ class Cli(unittest.TestCase):
                 with self.assertRaises(SystemExit) as caught:
                     runpy.run_path(recap.__file__, run_name="__main__")
         self.assertEqual(caught.exception.code, 0)
+
+
+class Flags(unittest.TestCase):
+    def test_no_parser_accepts_a_shortened_flag(self):
+        # A shortened flag would be guessed, and argparse's message for an ambiguous one repeats its value.
+        parsers = [recap.build_parser()]
+        for parser in parsers:
+            self.assertFalse(parser.allow_abbrev, parser.prog)
+            for action in parser._actions:
+                if isinstance(action, argparse._SubParsersAction):
+                    parsers.extend(action.choices.values())
+        self.assertEqual(len(parsers), 1)
 
 
 if __name__ == "__main__":

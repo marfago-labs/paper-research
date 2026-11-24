@@ -1,5 +1,6 @@
 """Offline tests for init.py. Run: python skills/init/scripts/test_init.py"""
 
+import argparse
 import contextlib
 import io
 import json
@@ -591,6 +592,12 @@ class RegisteredHooks(Guard):
 class DebugEvents(Folder):
     def setUp(self):
         super().setUp()
+        # No collector address, so a test run never sends events to a collector that runs on this machine.
+        no_export = mock.patch.dict(os.environ)
+        no_export.start()
+        self.addCleanup(no_export.stop)
+        for name in ("PAPER_RESEARCH_OTLP_ENDPOINT", "OTEL_EXPORTER_OTLP_ENDPOINT"):
+            os.environ.pop(name, None)
         self.run_main()
 
     def turn_on(self):
@@ -600,6 +607,21 @@ class DebugEvents(Folder):
         path = self.root / "research" / ".debug.log"
         lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
         return [{key: value for key, value in json.loads(line).items() if key != "time"} for line in lines]
+
+    def test_a_missing_workspace_stays_out_of_the_reason(self):
+        self.turn_on()
+        before = Path.cwd()
+        os.chdir(self.root)
+        self.addCleanup(os.chdir, before)
+        err = io.TextIOWrapper(io.BytesIO(), encoding="utf-8")
+        with contextlib.redirect_stderr(err):
+            code = init.debuglog.run("init", init.main, ["--workspace", "my notes"])
+        err.flush()
+        self.assertEqual(code, 2)
+        self.assertIn("my notes", err.buffer.getvalue().decode("utf-8"))  # the user still sees the path
+        (event,) = [event for event in self.events() if event["event"] == "command"]
+        self.assertEqual(event["reason"], "error: workspace not found: '…'")
+        self.assertNotIn("notes", json.dumps(event))
 
     def test_nothing_is_recorded_while_debug_is_off(self):
         self.hook("rules", {"cwd": str(self.root)})
@@ -667,6 +689,18 @@ class DebugEvents(Folder):
         (event,) = self.events()
         self.assertEqual((event["source"], event["event"], event["exit"]), ("init", "command", 0))
         self.assertIn("duration_ms", event)
+
+
+class Flags(unittest.TestCase):
+    def test_no_parser_accepts_a_shortened_flag(self):
+        # A shortened flag would be guessed, and argparse's message for an ambiguous one repeats its value.
+        parsers = [init.build_parser()]
+        for parser in parsers:
+            self.assertFalse(parser.allow_abbrev, parser.prog)
+            for action in parser._actions:
+                if isinstance(action, argparse._SubParsersAction):
+                    parsers.extend(action.choices.values())
+        self.assertEqual(len(parsers), 1)
 
 
 if __name__ == "__main__":

@@ -15,7 +15,7 @@ Run `python <skills>/debug/scripts/debuglog.py COMMAND`:
 - `show [--lines N]`: print the latest events, 50 by default.
 - `clear`: delete the log.
 
-While it is on, every script and hook adds one JSON line per event to `research/.debug.log`: each command with its exit code and duration, each request to arXiv or Semantic Scholar with its host, path, and status, each decision of the approval hook with its reason, and what the session-start hooks loaded. Each of the two log files holds at most 2 MB: when the log is full it moves to `.debug.log.1`, which replaces the older one, so the events never take more than 4 MB. If `OTEL_EXPORTER_OTLP_ENDPOINT` points at this machine, the same events also go there.
+While it is on, every script and hook adds one JSON line per event to `research/.debug.log`: each command with its exit code and duration, each request to arXiv or Semantic Scholar with its host, path, and status, each decision of the approval hook with its reason, and what the session-start hooks loaded. Each of the two log files holds at most 2 MB: when the log is full it moves to `.debug.log.1`, which replaces the older one, so the events never take more than 4 MB. If `PAPER_RESEARCH_OTLP_ENDPOINT` points at this machine, the same events also go there.
 
 To answer "why did that happen?", run `show`, read the events around it, and tell the user what you found. Say which events you read.
 

@@ -14,6 +14,24 @@ All notable changes to the plugin are listed here, newest first. The format foll
 - `SECURITY.md`, which says how to report a vulnerability privately and which versions get fixes. The security and
   troubleshooting pages link to it.
 
+### Changed
+
+- A failed command's debug event now says why: its `reason` is the first line of the error message, with quoted
+  values, entity ids, paths, and query strings left out, as they can hold search text or your own words. A wrong
+  flag is now recorded too, with its exit code 2. The debug dashboard lists failures by reason,
+  counts `graph add`'s possible duplicates (exit 3) apart from failures, and points to the dashboards that show model
+  calls, tokens, and cost.
+- Error messages put the paths they name in quotes, so a path with spaces reads as one.
+- The scripts take whole flags only: a shortened flag such as `--no` for `--note` is refused instead of guessed.
+
+### Fixed
+
+- The debug log now reaches a local telemetry stack from a Claude Code session. Claude Code removes every `OTEL_`
+  variable from the commands and hooks it runs, so the plugin reads its own `PAPER_RESEARCH_OTLP_ENDPOINT`, set in
+  the `env` block of `~/.claude/settings.json`; `OTEL_EXPORTER_OTLP_ENDPOINT` still works for scripts run in a
+  terminal. Events go to `127.0.0.1` instead of `localhost`: the stack listens on IPv4 only, and on
+  Windows `localhost` tried `::1` first and waited out the half-second timeout for each event.
+
 ## [0.4.0] - 2026-11-22
 
 To update a workspace set up with 0.3.0 or earlier, delete the block between the `paper-research:begin` and
