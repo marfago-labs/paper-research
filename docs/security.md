@@ -20,7 +20,7 @@ These are checks that Claude Code applies whatever Claude has been told to do. T
 
 The plugin's own scripts are enforced by their code:
 
-- They contact only fixed hosts: `arxiv.org`, `export.arxiv.org`, and `api.semanticscholar.org`. They refuse redirects to anywhere else, so an API key can never be sent to another host.
+- They contact only fixed hosts: `arxiv.org`, `export.arxiv.org`, and `api.semanticscholar.org`. They refuse redirects to anywhere else, so an API key can never be sent to another host. `plugin.json` declares the same three under `network.hosts`, which `claude plugin validate` lists; the field records them and doesn't allow or block anything.
 - They are read-only towards those services, and limit how long they wait and how much they download.
 - Paper and author IDs are checked before they become part of a URL or a file name, so a crafted ID can't write outside the workspace.
 - The arXiv response parser rejects documents that declare a type or entities, which closes the usual XML tricks.
@@ -115,4 +115,4 @@ The rules, the lessons hook, and the approval prompts come with the plugin, so a
 
 ## Reporting a problem
 
-If you find a way to get data out, or to make the plugin change something it shouldn't, please report it privately through the repository's security advisories, not in a public issue.
+If you find a way to get data out, or to make the plugin change something it shouldn't, report it privately, not in a public issue. See the [security policy](../SECURITY.md).
