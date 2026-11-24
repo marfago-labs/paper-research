@@ -1,4 +1,6 @@
-# paper-research
+<p align="center">
+  <img src="docs/images/banner.png" alt="Paper Research: read papers with Claude, keep what matters. A bee-shaped magnifying lens reads a stack of books." width="100%">
+</p>
 
 [![CI](https://github.com/marfago-labs/paper-research/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/marfago-labs/paper-research/actions/workflows/ci.yml)
 [![Unit coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fmarfago-labs%2Fpaper-research%2Fbadges%2Fcoverage.json)](CONTRIBUTING.md)
