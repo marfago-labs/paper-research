@@ -128,10 +128,54 @@ test("needsExtraction lists papers missing from the graph, and finished papers w
   const paper = (status, graph) => ({ status, graph });
   assert.equal(lib.needsExtraction(paper("read", "missing")), true);
   assert.equal(lib.needsExtraction(paper("done", "unextracted")), true);
+  assert.equal(lib.needsExtraction(paper("partial", "unextracted")), true);
   for (const status of ["read", "skim", "archive", "dropped", "unread-link", ""])
     assert.equal(lib.needsExtraction(paper(status, "unextracted")), false, status);
   assert.equal(lib.needsExtraction(paper("done", "extracted")), false);
   assert.equal(lib.needsExtraction(paper("done", undefined)), false);
+});
+
+test("staleStatus finds papers still to read or skim that already had things extracted", () => {
+  const paper = (status, graph) => ({ status, graph });
+  for (const status of ["read", "skim"]) {
+    assert.equal(lib.staleStatus(paper(status, "extracted")), true, status);
+    for (const graph of ["unextracted", "missing", undefined])
+      assert.equal(lib.staleStatus(paper(status, graph)), false, `${status} ${graph}`);
+  }
+  for (const status of ["partial", "done", "archive", "dropped", "unread-link", ""])
+    assert.equal(lib.staleStatus(paper(status, "extracted")), false, status);
+});
+
+test("the Activity tab counts papers to read, to skim, and read in part, and lists out-of-date statuses", () => {
+  const paper = (id, status, graph) => ({ id, title: id, status, graph, tags: "", summary: "" });
+  const data = {
+    papers: [
+      paper("a", "read", "extracted"),
+      paper("b", "skim", "unextracted"),
+      paper("c", "skim", "extracted"),
+      paper("d", "partial", "unextracted"),
+      paper("e", "partial", "extracted"),
+      paper("f", "partial", "extracted"),
+      paper("g", "PARTIAL", "extracted"), // a status counts only as written in the template
+      paper("h", "done", "extracted"),
+    ],
+    pins: [],
+    insights: [],
+    facts: [],
+    graph: { entities: [], relations: [] },
+  };
+  const { html } = lib.buildRecap(data);
+  assert.match(html, /<b>1<\/b><span>to read<\/span>/);
+  assert.match(html, /<b>2<\/b><span>to skim<\/span>/);
+  assert.match(html, /<b>3<\/b><span>read in part<\/span>/);
+  assert.match(html, /<b>8<\/b><span>papers<\/span>/);
+  assert.match(html, /Needs graph extraction \(1\)<\/h3><ul><li><a href="#p-d">d<\/a>/);
+  assert.match(
+    html,
+    /Status out of date \(2\)<\/h3><ul><li><a href="#p-a">a<\/a> <span class="tag warn">extracted, but still to read<\/span>/,
+  );
+  assert.match(html, /<li><a href="#p-c">c<\/a> <span class="tag warn">extracted, but still to skim<\/span>/);
+  assert.match(html, /set each to done, or to partial if it was read only in part/);
 });
 
 test("a paper card shows the graph gap only when the paper needs extraction", () => {
@@ -140,6 +184,56 @@ test("a paper card shows the graph gap only when the paper needs extraction", ()
   assert.match(card("done", "unextracted"), /<span class="tag warn">nothing extracted yet<\/span>/);
   assert.match(card("read", "missing"), /<span class="tag warn">not in graph<\/span>/);
   assert.ok(!card("read", "unextracted").includes("tag warn"));
+  assert.match(card("skim", "extracted"), /<span class="tag warn">extracted, but still to skim<\/span>/);
+});
+
+const EMPTY = { pins: [], insights: [], facts: [], graph: { entities: [], relations: [] } };
+const row = (id, status, graph, title = id) => ({ id, title, status, graph, tags: "", summary: "" });
+
+test("a status or graph state the template doesn't list never breaks the counts or the lists", () => {
+  const odd = [
+    undefined,
+    null,
+    "",
+    " partial",
+    "PARTIAL",
+    "__proto__",
+    "constructor",
+    "toString",
+    5,
+    ["partial"],
+    { x: 1 },
+  ];
+  odd.push("<script>alert(1)</script>", "partial\u0000", "x".repeat(10000));
+  for (const status of odd) {
+    for (const graph of ["extracted", "unextracted", "missing", undefined, null, "__proto__", 7]) {
+      const paper = row("a", status, graph);
+      assert.equal(lib.staleStatus(paper), false, `${String(status).slice(0, 12)} ${graph}`);
+      assert.equal(lib.needsExtraction(paper), graph === "missing");
+    }
+    const { html } = lib.buildRecap({ ...EMPTY, papers: [row("a", status, "extracted")] });
+    assert.ok(!html.includes("<script>"), "a status must be escaped");
+    assert.match(html, /<b>0<\/b><span>read in part<\/span>/);
+  }
+});
+
+test("titles and ids in the lists of papers to fix are escaped, and a row with only a status doesn't break them", () => {
+  const hostile = row('ARXIV:"><script>x</script>', "skim", "extracted", "<img src=x onerror=alert(1)>");
+  // recap.py always gives a row an id, an empty one if the table has no ID column; the other fields can be missing.
+  const sparse = { id: "", status: "read", graph: "extracted" };
+  const { html } = lib.buildRecap({ ...EMPTY, papers: [hostile, sparse] });
+  assert.ok(!html.includes("<img"), "a title must be escaped");
+  assert.ok(!html.includes("<script>x"), "an id must be escaped");
+  assert.match(html, /Status out of date \(2\)/);
+  for (const [, href] of html.matchAll(/href="(#p-[^"]*)"/g)) assert.match(href, /^#p-[A-Za-z0-9-]*$/);
+});
+
+test("each paper is counted once as to read, to skim, or read in part, and never twice", () => {
+  const statuses = ["read", "skim", "partial", "done", "archive", "dropped", "unread-link", ""];
+  const papers = Array.from({ length: 200 }, (_, n) => row(`p${n}`, statuses[n % statuses.length], "extracted"));
+  const { html } = lib.buildRecap({ ...EMPTY, papers });
+  const count = (label) => Number(new RegExp(`<b>(\\d+)</b><span>${label}</span>`).exec(html)[1]);
+  assert.deepEqual([count("papers"), count("to read"), count("to skim"), count("read in part")], [200, 25, 25, 25]);
 });
 
 test("gapLabel ignores object built-ins", () => {
@@ -276,4 +370,5 @@ test("buildRecap handles an empty research folder and a broken graph", () => {
     assert.ok(html.includes(text), text);
   assert.match(html, /The graph can't be shown: invalid &lt;graph&gt;/);
   assert.ok(!html.includes("Needs graph extraction"));
+  assert.ok(!html.includes("Status out of date"));
 });

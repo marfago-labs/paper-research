@@ -8,6 +8,12 @@ All notable changes to the plugin are listed here, newest first. The format foll
 
 ### Added
 
+- A paper status `partial`, for a paper read only in part, such as the abstract or a few sections, with the summary
+  saying which. The recap lists a partial paper with nothing extracted under **Needs graph extraction**, and a paper
+  still marked to read or skim, though things were extracted from it, under **Status out of date**.
+- The recap's Activity tab counts the papers to skim and those read in part beside those to read.
+- The `read` skill says what to do when there are more papers than a session can read in full: propose which to read
+  in full and how to cover the rest, then say which were read how.
 - `s2.py match TITLE` finds the paper whose title best matches. `graph.py standing` lists the papers it got no
   citation data for, and the recap skill looks each one up by title, since Semantic Scholar sometimes knows a paper
   under another id, such as ReAct (`ARXIV:2210.03629`). A paper it finds gets its Semantic Scholar id and counts, and
@@ -42,6 +48,12 @@ All notable changes to the plugin are listed here, newest first. The format foll
 
 ### Fixed
 
+- A paper no longer counts as extracted because another paper builds on it, uses it, compares with it, contradicts it,
+  or relates to it: only links that start from a paper extract it. `graph.py islands` and the recap's **Needs graph
+  extraction** list now show such a paper, and **Status out of date** no longer advises marking a paper nobody has
+  opened as done.
+- The recap's graph labels are larger and readable: they appear as you zoom in, instead of being drawn too small
+  to read, and the selected entity and its neighbours are always labelled.
 - `graph.py standing` and `cites` no longer stop with a traceback on a record whose `externalIds` isn't an object, or
   whose references or citations hold something other than papers, and a paper id or external id that isn't text is
   skipped, so one such record can't cost every other record in the file its counts. `s2.py match` says

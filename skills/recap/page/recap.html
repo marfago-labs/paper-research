@@ -210,16 +210,21 @@ function initGraph(GRAPH) {
       { selector: "node", style: {
         "background-color": node => COLOURS[node.data("type")] || "#888",
         "label": "data(label)", "color": css.getPropertyValue("--g-text").trim(),
-        "font-size": 10, "width": 18, "height": 18, "text-valign": "bottom", "text-margin-y": 3,
-        "text-wrap": "wrap", "text-max-width": 130
+        // Labels are drawn at 13px, and hidden while zoomed out so far that they would be smaller than 8px on
+        // screen and only overlap: they appear as you zoom in. The selected node and its neighbours always show.
+        "font-size": 13, "min-zoomed-font-size": 8, "width": 18, "height": 18, "text-valign": "bottom",
+        "text-margin-y": 3, "text-wrap": "wrap", "text-max-width": 150,
+        "text-background-color": css.getPropertyValue("--g-bg").trim(), "text-background-opacity": 0.7,
+        "text-background-padding": 1
       }},
+      { selector: "node.near", style: { "min-zoomed-font-size": 0 } },
       { selector: "edge", style: {
         "width": 1, "line-color": css.getPropertyValue("--g-edge").trim(),
         "target-arrow-color": css.getPropertyValue("--g-edge").trim(),
         "target-arrow-shape": "triangle", "arrow-scale": 0.7, "curve-style": "bezier"
       }},
       { selector: "node.selected", style: {
-        "width": 28, "height": 28, "border-width": 3,
+        "width": 28, "height": 28, "border-width": 3, "min-zoomed-font-size": 0,
         "border-color": css.getPropertyValue("--g-accent").trim(), "font-weight": "bold"
       }},
       { selector: "edge.active", style: {
@@ -278,12 +283,13 @@ function initGraph(GRAPH) {
     cy.elements().addClass("hidden");
     nodes.removeClass("hidden");
     nodes.edgesWith(nodes).removeClass("hidden");
-    cy.nodes().removeClass("selected");
+    cy.nodes().removeClass("selected near");
     cy.edges().removeClass("active");
     if (selected) {
       const node = cy.getElementById(selected);
       node.addClass("selected");
       node.connectedEdges().addClass("active");
+      node.neighborhood().nodes().addClass("near");
     }
     if (relayout) runLayout();
   }

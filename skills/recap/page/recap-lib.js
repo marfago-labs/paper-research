@@ -4,7 +4,7 @@
 (function (lib) {
   "use strict";
 
-  const STATUS_ORDER = ["read", "skim", "unread-link", "archive", "done", "dropped"];
+  const STATUS_ORDER = ["read", "skim", "partial", "unread-link", "archive", "done", "dropped"];
   const GRAPH_GAPS = new Map([
     ["missing", "not in graph"],
     ["unextracted", "nothing extracted yet"],
@@ -57,10 +57,24 @@
     return GRAPH_GAPS.get(status) || "";
   }
 
-  // Whether a paper belongs under "Needs graph extraction": one missing from the graph, or one finished (done) with
-  // nothing extracted. A paper still to read or skim is extracted when it is read, so it isn't listed.
+  // Whether a paper belongs under "Needs graph extraction": one missing from the graph, or one read in full (done) or
+  // in part (partial) with nothing extracted. A paper still to read or skim is extracted when it is read, so it isn't
+  // listed.
   function needsExtraction(paper) {
-    return paper.graph === "missing" || (paper.graph === "unextracted" && paper.status === "done");
+    return (
+      paper.graph === "missing" ||
+      (paper.graph === "unextracted" && (paper.status === "done" || paper.status === "partial"))
+    );
+  }
+
+  // Whether a paper's status says it is still to read or skim, though things were already extracted from it: it was
+  // read at least in part, so its status is out of date.
+  function staleStatus(paper) {
+    return (paper.status === "read" || paper.status === "skim") && paper.graph === "extracted";
+  }
+
+  function staleLabel(paper) {
+    return `extracted, but still to ${paper.status}`;
   }
 
   // The part of the address after #, decoded. A malformed address gives "" instead of an error.
@@ -118,8 +132,17 @@
   }
 
   function paperGap(p) {
-    const label = needsExtraction(p) ? gapLabel(p.graph) : "";
+    const label = needsExtraction(p) ? gapLabel(p.graph) : staleStatus(p) ? staleLabel(p) : "";
     return label ? ` <span class="tag warn">${label}</span>` : "";
+  }
+
+  // A list of papers with a warning each, under the Activity tab's counts; nothing when the list is empty.
+  function gapList(title, papers, label, note) {
+    if (!papers.length) return "";
+    const items = papers
+      .map((p) => `<li><a href="#${anchor(p.id)}">${esc(p.title)}</a> <span class="tag warn">${label(p)}</span></li>`)
+      .join("");
+    return `<div class="gaps"><h3>${title} (${papers.length})</h3><ul>${items}</ul><p class="meta">${note}</p></div>`;
   }
 
   function linkedInsights(insights) {
@@ -285,6 +308,8 @@
     const stats = [
       [data.papers.length, "papers", "papers"],
       [data.papers.filter((p) => p.status === "read").length, "to read", "papers"],
+      [data.papers.filter((p) => p.status === "skim").length, "to skim", "papers"],
+      [data.papers.filter((p) => p.status === "partial").length, "read in part", "papers"],
       [data.insights.length, "insights", "insights"],
       [data.pins.length, "pins", "pins"],
       [data.facts.length, "facts", "activity"],
@@ -295,17 +320,19 @@
     const graphNote = data.graph.error
       ? `<p class="warning">The graph can't be shown: ${esc(data.graph.error)}</p>`
       : "";
-    const waiting = data.papers.filter(needsExtraction);
-    const gaps = waiting.length
-      ? `<div class="gaps"><h3>Needs graph extraction (${waiting.length})</h3><ul>` +
-        waiting
-          .map(
-            (p) =>
-              `<li><a href="#${anchor(p.id)}">${esc(p.title)}</a> <span class="tag warn">${gapLabel(p.graph)}</span></li>`,
-          )
-          .join("") +
-        '</ul><p class="meta">Ask Claude to extract these into the graph, or discuss them with /read.</p></div>'
-      : "";
+    const gaps =
+      gapList(
+        "Needs graph extraction",
+        data.papers.filter(needsExtraction),
+        (p) => gapLabel(p.graph),
+        "Ask Claude to extract these into the graph, or discuss them with /read.",
+      ) +
+      gapList(
+        "Status out of date",
+        data.papers.filter(staleStatus),
+        staleLabel,
+        "Ask Claude to set each to done, or to partial if it was read only in part.",
+      );
     const view = (id, title, body) =>
       `<div class="recap view" data-view="${id}" id="${id}" hidden><h2>${title}</h2>${body}</div>`;
     return {
@@ -335,6 +362,7 @@
     evidenceClass,
     gapLabel,
     needsExtraction,
+    staleStatus,
     hashName,
     groupBy,
     buildRecap,
