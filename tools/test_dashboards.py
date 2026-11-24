@@ -5,6 +5,7 @@ commands would only show up in the browser. These tests catch them first.
 """
 
 import contextlib
+import importlib
 import io
 import json
 import os
@@ -15,6 +16,7 @@ import unittest
 import urllib.error
 from email.message import Message
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 from unittest import mock
 
@@ -22,9 +24,6 @@ ROOT = Path(__file__).resolve().parents[1]
 for folder in ("arxiv", "scholar"):
     sys.path.insert(0, str(ROOT / "skills" / folder / "scripts"))
 sys.path.insert(0, str(ROOT / "skills" / "debug" / "scripts"))
-
-import arxiv  # noqa: E402
-import s2  # noqa: E402
 
 FOLDER = ROOT / "telemetry" / "dashboards"
 DATASOURCES = {"loki", "tempo", "prometheus", "pyroscope"}  # the uids the grafana/otel-lgtm image provisions
@@ -57,6 +56,9 @@ def pattern_after(expr, label):
     return re.compile(found.group(1))
 
 
+# What Python's regex engine accepts and RE2 doesn't: lookahead and lookbehind, atomic groups, a named back-reference,
+# and possessive quantifiers.
+RE2_LACKS = re.compile(r"\(\?(?:=|!|<=|<!|>|P=)|[*+?]\+|\{\d+(?:,\d*)?\}\+")
 FILTER_PART = re.compile(r'\(|\)|\band\b|\bor\b|\w+(?:=~|!~|!=|=)"(?:[^"\\]|\\.)*"')
 
 
@@ -65,11 +67,15 @@ def part_holds(part, labels):
     label a line doesn't have is empty.
 
     A value is taken as written. Loki reads a backslash in a double-quoted value as an escape, such as \\" or \\\\,
-    and this doesn't, so a value with one is refused rather than read wrongly."""
+    and this doesn't, so a value with one is refused rather than read wrongly.
+
+    A regex is matched with Python's engine, and Loki uses RE2, which agrees on the patterns the dashboards use but not
+    on everything. A pattern with a feature RE2 lacks is refused, as it could pass here and behave differently there."""
     found = re.fullmatch(r'(\w+)(=~|!~|!=|=)"(.*)"', part)
     assert found, part
     name, sign, value = found.groups()
     assert "\\" not in value, f"{part}: the reader doesn't unescape a value, so it can't check this filter"
+    assert not ("~" in sign and RE2_LACKS.search(value)), f"{part}: RE2, Loki's engine, doesn't support this pattern"
     actual = labels.get(name, "")
     matched = re.fullmatch(value, actual) is not None if "~" in sign else actual == value
     return matched == (sign in ("=", "=~"))
@@ -377,6 +383,42 @@ class Requests(unittest.TestCase):
         for stage, labels, expected in (('a="xy"', {"a": "xy"}, True), ('a=~"x.+"', {"a": "xyz"}, True)):
             self.assertEqual(LabelFilter(stage, labels).holds(), expected)
 
+    def test_the_filter_reader_refuses_a_regex_feature_that_re2_lacks(self):
+        # Python's engine and Loki's RE2 agree on the patterns the dashboards use. A feature only Python has could pass
+        # here and behave differently in Loki, so the reader says so instead.
+        for pattern in (
+            "a(?=b)",
+            "(?!x).*",
+            "(?<=a)b",
+            "(?<!a)b",
+            "(?>a+)b",
+            "a*+",
+            "a++b",
+            "a?+",
+            "(a)(?P=n)",
+            "x{2}+",
+            "x{2,}+",
+        ):
+            with self.subTest(pattern=pattern), self.assertRaisesRegex(AssertionError, "RE2"):
+                LabelFilter(f'a=~"{pattern}"', {"a": "x"}).holds()
+        # What both engines have is read: groups, classes, lazy and greedy repeats, alternation, anchors, and a flag.
+        for pattern, text in (
+            ("(?:a|b)+c", "abc"),
+            ("(?i)ab", "AB"),
+            ("[.]x.*?", ".x"),
+            ("a+?b", "aab"),
+            ("x{2,3}", "xxx"),
+            ("(a|b)*", "abba"),
+            ("^a.*z$", "abcz"),
+            ("[^/]+/.*", "ab/cd"),
+            ("x}+", "x}}"),  # a closing brace with no repeat before it is only text
+        ):
+            with self.subTest(pattern=pattern):
+                self.assertTrue(LabelFilter(f'a=~"{pattern}"', {"a": text}).holds())
+        # An equality isn't a regex: a value that looks like a refused pattern is only text there.
+        self.assertTrue(LabelFilter('a="a(?=b)"', {"a": "a(?=b)"}).holds())
+        self.assertTrue(LabelFilter('a!="a++"', {"a": "x"}).holds())
+
     def test_the_stats_the_tests_evaluate_use_no_escape_the_reader_would_refuse(self):
         debug = load("paper-research-debug.json")
         for title in ("Failed commands", "Possible duplicates", "Failed requests", "Rate limited"):
@@ -449,7 +491,17 @@ class RecordedRequests(unittest.TestCase):
     dashboard's own filters. The dashboard names two paths, so this is what stops them drifting from the scripts'
     addresses: a path that changes in a script would make an answer count as a failure here."""
 
+    arxiv: ModuleType
+    s2: ModuleType
+
+    @classmethod
+    def setUpClass(cls):
+        # Imported here, so a script that fails to import fails these tests and not the dashboard tests above.
+        cls.arxiv = importlib.import_module("arxiv")
+        cls.s2 = importlib.import_module("s2")
+
     def setUp(self):
+        s2, arxiv = self.s2, self.arxiv
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
         self.root = Path(folder.name).resolve()
@@ -493,6 +545,7 @@ class RecordedRequests(unittest.TestCase):
         return self.labels()
 
     def test_what_the_scripts_record_is_counted_as_the_dashboard_says(self):
+        s2, arxiv = self.s2, self.arxiv
         too_many = s2.MAX_ATTEMPTS
         cases = (
             # name, script, command, answers, counted as failed, counted as rate limited
@@ -515,6 +568,7 @@ class RecordedRequests(unittest.TestCase):
                 self.assertEqual(any(keeps(self.limited, line) for line in labels), limited, labels)
 
     def test_the_two_paths_the_dashboard_names_are_the_addresses_the_scripts_ask_for(self):
+        s2, arxiv = self.s2, self.arxiv
         match = self.run_script(s2, ["match", "ReAct"], [http_error(404)])
         html = self.run_script(arxiv, ["fetch", "2401.00001"], [http_error(404)])
         self.assertEqual([line["path"] for line in match], ["/graph/v1/paper/search/match"])
