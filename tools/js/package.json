@@ -14,7 +14,7 @@
     "@anthropic-ai/claude-code": "2.1.330",
     "@eslint/js": "^10.0.1",
     "eslint": "^10.15.0",
-    "eslint-plugin-sonarjs": "4.2.2",
+    "eslint-plugin-sonarjs": "4.2.3",
     "prettier": "3.10.1"
   }
 }
